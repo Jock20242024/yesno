@@ -1,0 +1,156 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 枚举类型 (Enums)
+// ============================================
+
+enum MarketStatus {
+  OPEN      // 开放中 - 用户可以下注
+  CLOSED    // 已关闭 - 市场已关闭，等待结算
+  RESOLVED  // 已结算 - 市场已结算，结果已确定
+  CANCELED  // 已取消 - 市场被取消，不进行结算
+}
+
+enum Outcome {
+  YES      // 是/会/发生
+  NO       // 否/不会/不发生
+  CANCELED // 取消/无效
+}
+
+enum TransactionStatus {
+  PENDING   // 待处理
+  COMPLETED // 已完成
+  FAILED    // 失败
+}
+
+// ============================================
+// 核心模型 (Models)
+// ============================================
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  balance       Float    @default(0.0)
+  walletAddress String?  // 可空字段，无唯一性约束
+  isAdmin       Boolean  @default(false)
+  isBanned      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // 关联关系
+  orders      Order[]
+  deposits    Deposit[]
+  withdrawals Withdrawal[]
+  adminLogs   AdminLog[] @relation("AdminLogs")
+
+  @@map("users")
+}
+
+model Market {
+  id             String         @id @default(uuid())
+  title          String
+  description    String         @default("")
+  closingDate    DateTime
+  resolvedOutcome Outcome?
+  status         MarketStatus   @default(OPEN)
+  totalVolume    Float          @default(0.0)
+  totalYes       Float          @default(0.0)
+  totalNo        Float          @default(0.0)
+  feeRate        Float          @default(0.05)
+  category       String?        // 分类（中文名称，如 "加密货币"）
+  categorySlug   String?        // 分类 slug（如 "crypto"）
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // 关联关系
+  orders         Order[]
+
+  @@map("markets")
+}
+
+model Order {
+  id              String   @id @default(uuid())
+  userId          String
+  marketId        String
+  outcomeSelection Outcome
+  amount          Float
+  payout          Float?
+  feeDeducted     Float    @default(0.0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 外键关联
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market          Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([marketId])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model Deposit {
+  id        String            @id @default(uuid())
+  userId    String
+  amount    Float
+  txHash    String
+  status    TransactionStatus  @default(PENDING)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  // 外键关联
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("deposits")
+}
+
+model Withdrawal {
+  id            String            @id @default(uuid())
+  userId        String
+  amount        Float
+  targetAddress String
+  status        TransactionStatus  @default(PENDING)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // 外键关联
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("withdrawals")
+}
+
+model AdminLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  actionType String
+  details   String
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 外键关联
+  admin     User     @relation("AdminLogs", fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([actionType])
+  @@index([timestamp])
+  @@map("admin_logs")
+}
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Search, Trophy, Bell, CheckCircle, XCircle, Info, X } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -23,7 +23,47 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 export default function Navbar() {
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, currentUser, logout } = useAuth();
+  
+  // 统一余额显示：优先使用 currentUser.balance（从 API 获取的最新值），如果没有则使用 user.balance（格式化后的字符串）
+  // 状态绑定：确保这些字段不再使用本地或硬编码的 $0.00 值，而是使用从全局认证/用户状态中获取的最新 balance 值
+  const displayBalance = React.useMemo(() => {
+    // 优先级 1: 使用 currentUser.balance（从 /api/auth/me 获取的最新值）
+    if (currentUser?.balance !== undefined && currentUser.balance !== null) {
+      const balanceNum = Number(currentUser.balance);
+      if (!isNaN(balanceNum) && balanceNum >= 0) {
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(balanceNum);
+      }
+    }
+    
+    // 优先级 2: 使用 user.balance（格式化后的字符串，如 "$1000.00"）
+    if (user?.balance) {
+      const parsedBalance = parseFloat(user.balance.replace(/[$,]/g, ''));
+      if (!isNaN(parsedBalance) && parsedBalance >= 0) {
+        return user.balance; // 已经是格式化字符串，直接返回
+      }
+    }
+    
+    // 默认值：如果都没有，显示 $0.00
+    return "$0.00";
+  }, [currentUser?.balance, user?.balance]);
+  
+  // 调试日志：确认余额值
+  React.useEffect(() => {
+    if (isLoggedIn) {
+      console.log('💰 [Navbar] 余额显示调试:', {
+        currentUserBalance: currentUser?.balance,
+        userBalance: user?.balance,
+        displayBalance,
+        isLoggedIn,
+      });
+    }
+  }, [currentUser?.balance, user?.balance, displayBalance, isLoggedIn]);
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotification();
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -146,7 +186,7 @@ export default function Navbar() {
                       总资产
                     </span>
                     <span className="text-sm font-black text-white leading-none font-mono tracking-tight group-hover:text-primary transition-colors">
-                      {user?.balance || "$0.00"}
+                      {displayBalance}
                     </span>
                   </div>
                   <div className="flex flex-col items-end mr-2">
@@ -154,7 +194,7 @@ export default function Navbar() {
                       可用
                     </span>
                     <span className="text-sm font-black text-poly-green leading-none font-mono tracking-tight group-hover:text-primary transition-colors">
-                      {user?.balance || "$0.00"}
+                      {displayBalance}
                     </span>
                   </div>
                 </Link>
@@ -281,7 +321,7 @@ export default function Navbar() {
                   <Link
                     href="/profile"
                     className="flex items-center justify-center size-8 rounded-full bg-surface-dark border border-border-dark hover:border-text-secondary text-white transition-colors ml-1 overflow-hidden cursor-pointer group"
-                    title="账户"
+                    title="个人中心"
                   >
                     <img
                       alt="User"
@@ -289,6 +329,17 @@ export default function Navbar() {
                       src={user?.avatar || ""}
                     />
                   </Link>
+                  {/* 登出按钮 */}
+                  <button
+                    onClick={() => {
+                      logout();
+                      window.location.href = "/";
+                    }}
+                    className="flex items-center justify-center px-3 py-1.5 rounded-lg bg-surface-dark hover:bg-red-500/10 border border-border-dark hover:border-red-500/30 text-text-secondary hover:text-red-400 text-xs font-bold transition-colors ml-2"
+                    title="登出"
+                  >
+                    登出
+                  </button>
                 </div>
               </div>
             </>

@@ -42,19 +42,22 @@ export default function MarketCard({ event }: MarketCardProps) {
   const router = useRouter();
   const IconComponent = iconMap[event.icon] || Bitcoin;
 
+  // 使用原始市场 ID（如果可用），否则使用数字 ID
+  const marketId = (event as any).originalId || event.id.toString();
+
   const handleTradeClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!isLoggedIn) {
-      router.push(`/login?redirect=/markets/${event.id}`);
+      router.push(`/login?redirect=/markets/${marketId}`);
     } else {
-      router.push(`/markets/${event.id}`);
+      router.push(`/markets/${marketId}`);
     }
   };
 
   return (
     <Link
-      href={`/markets/${event.id}`}
+      href={`/markets/${marketId}`}
       className="flex flex-col p-4 rounded-lg border border-border-dark bg-surface-dark hover:border-primary/40 transition-all cursor-pointer group relative overflow-hidden h-full"
     >
       <div className="flex flex-col h-full">

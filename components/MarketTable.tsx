@@ -13,10 +13,12 @@ import {
   Activity,
   Film,
   LucideIcon,
+  Loader2,
 } from "lucide-react";
 import { MarketEvent } from "@/lib/data";
+import { Market } from "@/types/api";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 const iconMap: Record<string, LucideIcon> = {
   Bitcoin,
@@ -32,7 +34,7 @@ const iconMap: Record<string, LucideIcon> = {
 };
 
 interface MarketTableProps {
-  data: MarketEvent[];
+  data?: MarketEvent[]; // 可选，如果提供则使用静态数据，否则从 API 获取
 }
 
 // 将 volume 字符串转换为数字用于排序
@@ -55,15 +57,85 @@ function parseVolume(volume?: string): number {
   return num;
 }
 
-export default function MarketTable({ data }: MarketTableProps) {
+export default function MarketTable({ data: staticData }: MarketTableProps) {
+  const [marketData, setMarketData] = useState<Market[]>([]);
+  const [isLoading, setIsLoading] = useState(!staticData);
+  const [error, setError] = useState<string | null>(null);
+
+  // 获取市场数据
+  const fetchMarkets = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/markets?pageSize=10');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch markets');
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setMarketData(result.data);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching data.');
+      console.error('Error fetching markets:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 如果提供了静态数据，使用静态数据；否则从 API 获取
+  useEffect(() => {
+    if (!staticData) {
+      fetchMarkets();
+    }
+  }, [staticData]);
+
+  // 将 Market 类型转换为 MarketEvent 类型（用于兼容现有 UI）
+  const convertMarketToEvent = (market: Market, rank: number): MarketEvent => {
+    return {
+      id: parseInt(market.id),
+      rank,
+      title: market.title,
+      category: market.category,
+      categorySlug: market.categorySlug,
+      icon: 'Bitcoin', // 默认图标，可以根据 category 映射
+      iconColor: 'bg-[#f7931a]', // 默认颜色
+      yesPercent: market.yesPercent,
+      noPercent: market.noPercent,
+      deadline: new Date(market.endTime).toISOString().split('T')[0],
+      imageUrl: market.imageUrl,
+      volume: formatVolume(market.volume),
+      comments: market.commentsCount,
+    };
+  };
+
+  // 格式化交易量
+  const formatVolume = (volume: number): string => {
+    if (volume >= 1000000) {
+      return `$${(volume / 1000000).toFixed(1)}m`;
+    } else if (volume >= 1000) {
+      return `$${(volume / 1000).toFixed(1)}k`;
+    }
+    return `$${volume.toLocaleString()}`;
+  };
+
+  // 确定使用的数据源
+  const dataToUse = staticData || marketData.map((market, index) => convertMarketToEvent(market, index + 1));
+
   // 按交易量从高到低排序
   const sortedData = useMemo(() => {
-    return [...data].sort((a, b) => {
+    return [...dataToUse].sort((a, b) => {
       const volumeA = parseVolume(a.volume);
       const volumeB = parseVolume(b.volume);
       return volumeB - volumeA; // 从高到低
     });
-  }, [data]);
+  }, [dataToUse]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -75,8 +147,28 @@ export default function MarketTable({ data }: MarketTableProps) {
           <h2 className="text-white text-xl font-bold">全网热门事件 Top 10</h2>
         </div>
       </div>
+
+      {/* 加载状态 */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
+          <span className="text-text-secondary">Loading Markets...</span>
+        </div>
+      )}
+
+      {/* 错误状态 */}
+      {error && !isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <p className="text-red-500 font-medium mb-2">Error fetching data.</p>
+            <p className="text-text-secondary text-sm">{error}</p>
+          </div>
+        </div>
+      )}
+
       {/* 桌面端表格 */}
-      <div className="hidden md:block overflow-hidden rounded-xl border border-border-dark bg-surface-dark/50 backdrop-blur-sm shadow-xl">
+      {!isLoading && !error && (
+        <div className="hidden md:block overflow-hidden rounded-xl border border-border-dark bg-surface-dark/50 backdrop-blur-sm shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -176,6 +268,7 @@ export default function MarketTable({ data }: MarketTableProps) {
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 }

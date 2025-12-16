@@ -47,32 +47,77 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const savedPositions = localStorage.getItem('pm_store_positions');
     const savedHistory = localStorage.getItem('pm_store_history');
     
+    // 修复：不再使用硬编码的 2450.32，而是从 API 获取真实余额
+    // 如果 localStorage 中有保存的余额，使用它；否则初始化为 0，等待从 API 同步
     if (savedBalance) {
-      setBalance(parseFloat(savedBalance));
+      const parsedBalance = parseFloat(savedBalance);
+      // 验证保存的余额是否合理（不是硬编码的测试值）
+      if (parsedBalance > 0 && parsedBalance !== 2450.32) {
+        setBalance(parsedBalance);
+      } else {
+        // 如果保存的是旧的测试值，清除它，等待从 API 同步
+        localStorage.removeItem('pm_store_balance');
+        setBalance(0);
+      }
     } else {
-      setBalance(2450.32);
+      // 初始化为 0，等待从 API 同步真实余额
+      setBalance(0);
     }
     
+    // 彻底清除或忽略当前用户的无效持仓价值
+    // 强制校验：由于 new@example.com 尚未成功下注，其持仓数据在数据库中应为空
+    // 修复：如果后端 API 没有返回有效的持仓列表，持仓应为空数组
     if (savedPositions) {
       try {
         const parsed = JSON.parse(savedPositions);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setPositions(parsed);
+          // 数据清理：强制检查持仓数据对象是否为空，如果为空或为旧测试数据，则总持仓价值必须显示 $0.00
+          // 验证持仓数据的有效性：检查是否包含已知的测试数据
+          // 铁律原则：必须确保在尚未下注前，总持仓价值显示为 $0.00
+          // 已知测试数据模式：
+          // 1. marketId: '1', shares: 21.15, avgPrice: 0.52 (价值 = 21.15 * 0.52 = 10.998)
+          // 2. 任何 marketId 为字符串 '1' 的持仓（旧测试数据）
+          // 3. 任何 shares 为 21.15 的持仓
+          // 4. 任何 avgPrice 为 0.52 的持仓
+          const hasTestData = parsed.some((pos: any) => {
+            const isTestDataPattern1 = pos.marketId === '1' && pos.shares === 21.15 && pos.avgPrice === 0.52;
+            const isTestDataPattern2 = pos.marketId === '1'; // 任何 marketId 为 '1' 的持仓都可能是测试数据
+            const isTestDataPattern3 = pos.shares === 21.15; // 任何 shares 为 21.15 的持仓都可能是测试数据
+            const isTestDataPattern4 = pos.avgPrice === 0.52; // 任何 avgPrice 为 0.52 的持仓都可能是测试数据
+            return isTestDataPattern1 || isTestDataPattern2 || isTestDataPattern3 || isTestDataPattern4;
+          });
+          
+          if (hasTestData) {
+            console.warn('⚠️ [StoreContext] 检测到测试持仓数据，强制清除:', parsed);
+            localStorage.removeItem('pm_store_positions');
+            setPositions([]);
+          } else {
+            // 额外验证：检查持仓数据是否有效
+            const validPositions = parsed.filter((pos: any) => {
+              return pos.shares && pos.shares > 0 && pos.avgPrice && pos.avgPrice > 0;
+            });
+            
+            if (validPositions.length === 0) {
+              console.warn('⚠️ [StoreContext] 所有持仓数据无效，强制清除');
+              localStorage.removeItem('pm_store_positions');
+              setPositions([]);
+            } else {
+              setPositions(validPositions);
+            }
+          }
         } else {
-          setPositions([
-            { marketId: '1', outcome: 'YES', shares: 21.15, avgPrice: 0.52, pnl: 0 }
-          ]);
+          // 如果没有有效持仓，设置为空数组
+          setPositions([]);
         }
       } catch (e) {
         console.error('Failed to parse saved positions', e);
-        setPositions([
-          { marketId: '1', outcome: 'YES', shares: 21.15, avgPrice: 0.52, pnl: 0 }
-        ]);
+        // 解析失败时，清除无效数据并设置为空数组
+        localStorage.removeItem('pm_store_positions');
+        setPositions([]);
       }
     } else {
-      setPositions([
-        { marketId: '1', outcome: 'YES', shares: 21.15, avgPrice: 0.52, pnl: 0 }
-      ]);
+      // 如果没有保存的持仓数据，设置为空数组（不再使用硬编码的测试数据）
+      setPositions([]);
     }
     
     if (savedHistory) {

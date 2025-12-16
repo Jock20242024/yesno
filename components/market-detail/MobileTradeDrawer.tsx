@@ -15,7 +15,7 @@ interface MobileTradeDrawerProps {
   onClose: () => void;
   yesPercent: number;
   noPercent: number;
-  marketId: number;
+  marketId: string | number; // Market ID 修复：支持 UUID 字符串格式，兼容旧的数字格式
   userPosition: UserPosition | null;
   marketTitle: string;
   marketStatus: "OPEN" | "RESOLVED";
