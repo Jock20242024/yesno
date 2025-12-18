@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
-import { DBService } from '@/lib/dbService'; // 修复：使用正确的 DBService 确保数据隔离
+import { cookies } from 'next/headers';
+import { DBService } from '@/lib/dbService';
 import { TransactionStatus } from '@/types/data';
-import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离：使用统一的 userId 提取函数
+import { prisma } from '@/lib/prisma';
+import { getSession } from '@/lib/auth-core/sessionStore';
 
 /**
  * 充值 API
@@ -14,24 +16,27 @@ import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离�
  */
 export async function POST(request: Request) {
   try {
-    console.log('💰 [Deposit API] ========== 开始处理充值请求 ==========');
+    // 从 Cookie 读取 auth_core_session
+    const cookieStore = await cookies();
+    const sessionId = cookieStore.get('auth_core_session')?.value;
     
-    // 强制身份过滤：从 Auth Token 提取 current_user_id
-    const authResult = await extractUserIdFromToken();
-    
-    if (!authResult.success || !authResult.userId) {
-      console.error('❌ [Deposit API] 未认证或 Token 无效:', authResult.error);
+    if (!sessionId) {
       return NextResponse.json(
-        {
-          success: false,
-          error: authResult.error || 'Not authenticated',
-        },
+        { success: false, error: 'Not authenticated' },
         { status: 401 }
       );
     }
 
-    const userId = authResult.userId;
-    console.log(`✅ [Deposit API] Token 解析成功 - 用户ID: ${userId}`);
+    // 调用 sessionStore.getSession(sessionId)
+    const userId = await getSession(sessionId);
+    
+    // 若 session 不存在，返回 401
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Session expired or invalid' },
+        { status: 401 }
+      );
+    }
 
     // 解析请求体
     const body = await request.json();
@@ -113,93 +118,57 @@ export async function POST(request: Request) {
     // 注释掉外部支付渠道集成（如果有）
     // 注意：当前代码中没有外部支付渠道集成，直接进行余额更新
 
-    // 创建充值记录（状态为 COMPLETED，简化即时充值模型）
-    const depositId = `D-${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
-    console.log(`💰 [Deposit API] 创建充值记录:`, {
-      depositId,
-      userId,
-      amount: amountNum,
-      txHash,
-    });
-
-    const deposit = await DBService.addDeposit({
-      id: depositId,
-      userId: userId,
-      amount: amountNum,
-      txHash: txHash,
-      status: TransactionStatus.COMPLETED,
-      createdAt: new Date().toISOString(),
-    });
-
-    console.log(`💰 [Deposit API] 充值记录创建结果:`, {
-      depositId: deposit?.id,
-      success: !!deposit,
-    });
-
-    // 强制余额更新：直接调用 DBService.updateUser 更新余额
-    // 确保余额更新是原子性的，直接计算新余额并更新
-    const oldBalance = user.balance || 0; // 确保 oldBalance 是数字
-    const newBalance = oldBalance + amountNum;
+    // ========== 修复：使用数据库事务确保原子性 ==========
+    const oldBalance = user.balance || 0;
     
-    // 数据库调试：在调用 DBService.updateUser 之前添加日志
-    console.log(`💰 [Deposit API] ========== 准备更新数据库余额 ==========`);
-    console.log(`💰 [Deposit API] 准备为用户 [${userId}] 充值 [$${amountNum}]`);
-    console.log(`💰 [Deposit API] 当前余额: $${oldBalance}`);
-    console.log(`💰 [Deposit API] 预期新余额: $${newBalance}`);
-    console.log(`💰 [Deposit API] 调用 DBService.updateUser(${userId}, { balance: ${newBalance} })`);
-
-    // 强制余额更新：直接调用 DBService.updateUser 更新余额
-    // 不使用外部支付渠道，直接更新数据库
-    const updatedUser = await DBService.updateUser(userId, {
-      balance: newBalance,
-    });
-
-    // 数据库调试：在调用 DBService.updateUser 之后添加日志
-    console.log(`✅ [Deposit API] 数据库写入尝试完成`);
-    console.log(`💰 [Deposit API] DBService.updateUser 返回结果:`, {
-      success: !!updatedUser,
-      userId: updatedUser?.id,
-      email: updatedUser?.email,
-      updatedBalance: updatedUser?.balance,
-    });
-
-    console.log(`💰 [Deposit API] 余额更新结果:`, {
-      success: !!updatedUser,
-      updatedBalance: updatedUser?.balance,
-      expectedBalance: newBalance,
-      balanceMatch: updatedUser?.balance === newBalance,
-    });
-
-    if (!updatedUser) {
-      console.error('❌ [Deposit API] 余额更新失败 - DBService.updateUser 返回 null');
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Failed to update user balance',
-        },
-        { status: 500 }
-      );
-    }
-
-    // 验证余额是否正确更新
-    if (Math.abs(updatedUser.balance - newBalance) > 0.01) {
-      console.error('⚠️ [Deposit API] 余额不匹配:', {
-        expected: newBalance,
-        actual: updatedUser.balance,
-        difference: Math.abs(updatedUser.balance - newBalance),
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. 获取当前用户（带锁，防止并发）
+      const lockedUser = await tx.user.findUnique({
+        where: { id: userId },
       });
-      // 即使余额不匹配，也继续返回成功（可能是浮点数精度问题）
-    } else {
-      console.log('✅ [Deposit API] 余额更新验证通过');
-    }
 
-    // 强制打印成功日志
+      if (!lockedUser) {
+        throw new Error('User not found');
+      }
+
+      // 2. 计算新余额
+      const newBalance = lockedUser.balance + amountNum;
+
+      // 3. 更新用户余额
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: { balance: newBalance },
+      });
+
+      // 4. 创建充值记录（FundRecord）
+      const depositId = `D-${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
+      const deposit = await tx.deposit.create({
+        data: {
+          id: depositId,
+          userId: userId,
+          amount: amountNum,
+          txHash: txHash,
+          status: TransactionStatus.COMPLETED,
+        },
+      });
+
+      return {
+        updatedUser,
+        deposit,
+      };
+    });
+
+    const updatedUser = result.updatedUser;
+    const deposit = result.deposit;
+
+    // ========== 审计记录 ==========
     console.log(`✅ [Deposit API] ========== 充值成功 ==========`);
     console.log(`✅ [Deposit API] 用户ID: ${userId}`);
     console.log(`✅ [Deposit API] 充值金额: $${amountNum}`);
     console.log(`✅ [Deposit API] 旧余额: $${oldBalance}`);
     console.log(`✅ [Deposit API] 新余额: $${updatedUser.balance}`);
-    console.log(`✅ [Deposit API] 充值记录ID: ${depositId}`);
+    console.log(`✅ [Deposit API] 充值记录ID: ${deposit.id}`);
+    console.log(`✅ [Deposit API] 时间戳: ${new Date().toISOString()}`);
     console.log(`✅ [Deposit API] ===============================`);
 
     // 返回充值成功的记录和更新后的用户余额
@@ -207,7 +176,14 @@ export async function POST(request: Request) {
       success: true,
       message: 'Deposit successful',
       data: {
-        deposit,
+        deposit: {
+          id: deposit.id,
+          userId: deposit.userId,
+          amount: deposit.amount,
+          txHash: deposit.txHash,
+          status: deposit.status,
+          createdAt: deposit.createdAt.toISOString(),
+        },
         updatedBalance: updatedUser.balance,
       },
     });

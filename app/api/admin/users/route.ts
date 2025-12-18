@@ -1,59 +1,85 @@
-import { NextRequest, NextResponse } from "next/server";
-import { DBService } from "@/lib/mockData";
-import { User } from "@/types/data";
-import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
-
 /**
  * 管理后台 - 获取用户列表 API
  * GET /api/admin/users
- * 
- * 查询参数：
- * - search?: string      // 搜索关键词（用户名）
- * - page?: number         // 页码（默认 1）
- * - limit?: number        // 每页数量（默认 10）
  */
+
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { prisma } from '@/lib/prisma';
+
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
-    // 权限校验：使用统一的 Admin Token 验证函数（从 Cookie 读取）
-    const authResult = await verifyAdminToken(request);
-
-    if (!authResult.success) {
-      return createUnauthorizedResponse(
-        authResult.error || 'Unauthorized. Admin access required.',
-        authResult.statusCode || 401
+    // 1. 权限校验：必须是管理员
+    const session = await auth();
+    if (!session || !session.user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
       );
     }
 
-    // 获取查询参数
+    // @ts-ignore - session.user.isAdmin 在 NextAuth callback 中已设置
+    if (!session.user.isAdmin) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Admin access required" },
+        { status: 403 }
+      );
+    }
+
+    // 2. 获取查询参数
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "10", 10);
 
-    // 使用 DBService 获取所有用户（整个用户集合）
-    // 确保调用 getAllUsers() 获取完整的用户列表，包括新注册的用户
-    const allUsers = await DBService.getAllUsers();
-
-    // 搜索过滤（按邮箱）- 只有在指定搜索参数时才过滤
-    let filteredUsers = allUsers;
+    // 3. 构建查询条件（使用 Prisma 的 where 进行数据库级别搜索，更高效）
+    const where: any = {};
     if (search.trim()) {
       const searchLower = search.toLowerCase().trim();
-      filteredUsers = allUsers.filter((user) => {
-        return user.email.toLowerCase().includes(searchLower);
-      });
+      where.OR = [
+        { email: { contains: searchLower, mode: 'insensitive' } },
+        { id: { contains: searchLower, mode: 'insensitive' } },
+      ];
     }
-    // 如果没有搜索参数，filteredUsers 就是完整的用户列表，不会过滤掉任何用户
 
-    // 计算分页
-    const total = filteredUsers.length;
+    // 4. 查询总数和分页数据
+    const [total, dbUsers] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          email: true,
+          provider: true,
+          balance: true,
+          isAdmin: true,
+          isBanned: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
     const totalPages = Math.ceil(total / limit);
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+
+    // 5. 返回用户数据
+    const userData = dbUsers.map((user) => ({
+      id: user.id,
+      email: user.email,
+      provider: user.provider || 'email',
+      balance: user.balance,
+      isAdmin: user.isAdmin,
+      isBanned: user.isBanned,
+      createdAt: user.createdAt.toISOString(),
+    }));
 
     return NextResponse.json({
       success: true,
-      data: paginatedUsers,
+      data: userData,
       pagination: {
         page,
         limit,
@@ -72,4 +98,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

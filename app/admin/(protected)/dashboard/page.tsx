@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAdminMarkets } from "@/hooks/useAdminData";
 import { usePendingWithdrawals } from "@/hooks/useAdminData";
 import { MarketStatus } from "@/types/data";
-import { toast } from "sonner";
+// import { toast } from "sonner"; // 已移除 sonner 依赖
 import { Loader2 } from "lucide-react";
 
 const ADMIN_SECRET_TOKEN = "ADMIN_SECRET_TOKEN";

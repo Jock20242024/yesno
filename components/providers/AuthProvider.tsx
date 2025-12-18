@@ -16,6 +16,7 @@ interface AuthContextType {
   login: (token?: string, userData?: { id: string; email: string; role?: string; balance?: number; isAdmin?: boolean }) => void;
   logout: () => void;
   updateBalance: (newBalance: string) => void; // 更新余额
+  refreshUserState: () => Promise<void>; // 从 API 刷新用户状态
   isLoading: boolean; // 2. 新增加载状态，防止闪烁
 }
 
@@ -26,6 +27,7 @@ const AuthContext = createContext<AuthContextType>({
   login: () => {},
   logout: () => {},
   updateBalance: () => {},
+  refreshUserState: async () => {},
   isLoading: true,
 });
 
@@ -95,10 +97,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // 步骤 2: 通过 API 验证 Cookie 中的 Token（确保状态一致性）
       try {
-        console.log('🔍 [AuthProvider] 开始验证 Cookie 中的 authToken...');
+        console.log('🔍 [AuthProvider] 开始验证 NextAuth Session...');
         const response = await fetch('/api/auth/me', {
           method: 'GET',
-          credentials: 'include', // 重要：包含 Cookie
+          credentials: 'include', // 重要：包含 Cookie（NextAuth 的 session cookie）
+          cache: 'no-store', // 防止缓存
         });
 
         if (response.ok) {
@@ -106,38 +109,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (result.success && result.user) {
             const userData = result.user;
             
-            // 强制检查：确保 currentUser.id 是从有效的 Auth Token 中动态解析出来的唯一 ID
-            // 不是硬编码的 '1' 或默认值
+            // 🔥 鉴权逻辑保活：即使数据格式异常，也只在控制台记录错误，不清除用户状态
             if (!userData.id || typeof userData.id !== 'string' || userData.id.trim() === '') {
-              console.error('❌ [AuthProvider] API 返回的 user.id 为空或无效');
-              setCurrentUser(null);
-              setUser(null);
-              setIsLoggedIn(false);
-              localStorage.removeItem('pm_currentUser');
-              localStorage.removeItem('pm_user');
+              console.error('❌ [AuthProvider] API 返回的 user.id 为空或无效，但不清除状态（保活逻辑）');
+              // 不清除状态，保持用户停留在当前 URL
               return;
             }
             
             // 验证 userData.id 是有效的 UUID 格式（不是硬编码的 '1' 或默认值）
             const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             if (!uuidPattern.test(userData.id)) {
-              console.error('❌ [AuthProvider] API 返回的 user.id 格式无效，不是有效的 UUID:', userData.id);
-              setCurrentUser(null);
-              setUser(null);
-              setIsLoggedIn(false);
-              localStorage.removeItem('pm_currentUser');
-              localStorage.removeItem('pm_user');
+              console.error('❌ [AuthProvider] API 返回的 user.id 格式无效，不是有效的 UUID:', userData.id, '但不清除状态（保活逻辑）');
+              // 不清除状态，保持用户停留在当前 URL
               return;
             }
             
             // 防止使用默认 ID（如 '1'）
             if (userData.id === '1' || userData.id === 'default') {
-              console.error('❌ [AuthProvider] 检测到无效的 user.id（可能是硬编码的默认值）:', userData.id);
-              setCurrentUser(null);
-              setUser(null);
-              setIsLoggedIn(false);
-              localStorage.removeItem('pm_currentUser');
-              localStorage.removeItem('pm_user');
+              console.error('❌ [AuthProvider] 检测到无效的 user.id（可能是硬编码的默认值）:', userData.id, '但不清除状态（保活逻辑）');
+              // 不清除状态，保持用户停留在当前 URL
               return;
             }
             
@@ -204,32 +194,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             
             console.log('✅ [AuthProvider] API 验证成功，用户状态已更新');
           } else {
-            // API 返回失败，清除状态
-            console.warn('⚠️ [AuthProvider] API 验证失败，清除用户状态');
-            setCurrentUser(null);
-            setUser(null);
-            setIsLoggedIn(false);
-            localStorage.removeItem('pm_currentUser');
-            localStorage.removeItem('pm_user');
+            // 🔥 禁用自杀逻辑：API 返回失败，不清除状态（保持用户停留在当前 URL）
+            console.warn('⚠️ [AuthProvider] API 验证失败，但不清除用户状态（禁用自杀逻辑）');
+            // 注释掉所有执行 logout() 或清除用户状态的逻辑
+            // setCurrentUser(null);
+            // setUser(null);
+            // setIsLoggedIn(false);
+            // localStorage.removeItem('pm_currentUser');
+            // localStorage.removeItem('pm_user');
           }
         } else {
-          // Token 无效或过期，清除状态
-          console.warn('⚠️ [AuthProvider] Token 无效或过期，清除用户状态');
-          setCurrentUser(null);
-          setUser(null);
-          setIsLoggedIn(false);
-          localStorage.removeItem('pm_currentUser');
-          localStorage.removeItem('pm_user');
+          // 🔥 禁用自杀逻辑：API 返回非 200 状态码，不清除状态（保持用户停留在当前 URL）
+          const statusText = response.status === 401 ? 'Session 无效或过期' : `HTTP ${response.status}`;
+          console.warn(`⚠️ [AuthProvider] ${statusText}，但不清除用户状态（禁用自杀逻辑）`);
+          
+          // 注释掉所有执行 logout() 或清除用户状态的逻辑
+          // 刷新时即便 API 没响应，也必须让用户停留在当前 URL，不准跳回登录页
+          // if (response.status === 401) {
+          //   setCurrentUser(null);
+          //   setUser(null);
+          //   setIsLoggedIn(false);
+          //   localStorage.removeItem('pm_currentUser');
+          //   localStorage.removeItem('pm_user');
+          // }
         }
       } catch (error) {
         console.error('❌ [AuthProvider] Auth verification error:', error);
-        // 网络错误时，保留 localStorage 中的状态（可能是临时网络问题）
-        // 但如果之前没有 localStorage 数据，则清除状态
-        if (!localStorage.getItem('pm_currentUser')) {
-          setCurrentUser(null);
-          setUser(null);
-          setIsLoggedIn(false);
-        }
+        // 🔥 禁用自杀逻辑：网络错误时，保留 localStorage 中的状态（可能是临时网络问题）
+        // 刷新时即便 API 没响应，也必须让用户停留在当前 URL，不准跳回登录页
+        // 注释掉所有清除状态的逻辑
+        // if (!localStorage.getItem('pm_currentUser')) {
+        //   setCurrentUser(null);
+        //   setUser(null);
+        //   setIsLoggedIn(false);
+        // }
       } finally {
         setIsLoading(false);
       }
@@ -267,6 +265,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ...userData,
         role: userData.role || (userData.isAdmin ? 'admin' : 'user'),
       };
+      
+      // 清除旧用户的通知数据（强制数据隔离）
+      // 在设置新用户之前，先清除可能存在的旧通知
+      try {
+        // 清理旧的全局通知键（向后兼容）
+        localStorage.removeItem('pm_notifications');
+        // 清理匿名通知
+        localStorage.removeItem('pm_notifications_anonymous');
+      } catch (e) {
+        // 忽略错误
+      }
       
       // 存储用户信息到 localStorage（非敏感数据）
       localStorage.setItem('pm_currentUser', JSON.stringify(userDataWithRole));
@@ -327,6 +336,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    const userId = currentUser?.id;
+    
     setUser(null);
     setCurrentUser(null);
     setIsLoggedIn(false);
@@ -334,6 +345,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 清除本地存储的用户信息
     localStorage.removeItem('pm_currentUser');
     localStorage.removeItem('pm_user');
+    
+    // 清除当前用户的通知数据（强制数据隔离）
+    if (userId) {
+      try {
+        localStorage.removeItem(`pm_notifications_${userId}`);
+      } catch (e) {
+        // 忽略错误
+      }
+    }
+    
+    // 清理旧的全局通知键（向后兼容）
+    try {
+      localStorage.removeItem('pm_notifications');
+    } catch (e) {
+      // 忽略错误
+    }
     
     // 调用后端 API 清除 Cookie
     try {
@@ -354,8 +381,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  // 从 API 刷新用户状态（用于注册/登录后立即更新状态）
+  const refreshUserState = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.user) {
+          // 使用 login 方法更新状态（复用现有逻辑）
+          login(undefined, {
+            id: data.user.id,
+            email: data.user.email,
+            balance: data.user.balance || 0,
+            isAdmin: data.user.isAdmin || false,
+          });
+        } else {
+          // 🔥 禁用自杀逻辑：如果 API 返回失败，不清除状态（保持用户停留在当前 URL）
+          console.warn('⚠️ [AuthProvider] refreshUserState: API 返回失败，但不清除状态（禁用自杀逻辑）');
+          // 注释掉所有执行 logout() 或清除用户状态的逻辑
+          // setIsLoggedIn(false);
+          // setCurrentUser(null);
+          // setUser(null);
+          // localStorage.removeItem('pm_currentUser');
+          // localStorage.removeItem('pm_user');
+        }
+      } else {
+        // 🔥 禁用自杀逻辑：API 返回非 200，不清除状态（保持用户停留在当前 URL）
+        console.warn('⚠️ [AuthProvider] refreshUserState: API 返回非 200，但不清除状态（禁用自杀逻辑）');
+        // 注释掉所有执行 logout() 或清除用户状态的逻辑
+        // setIsLoggedIn(false);
+        // setCurrentUser(null);
+        // setUser(null);
+        // localStorage.removeItem('pm_currentUser');
+        // localStorage.removeItem('pm_user');
+      }
+    } catch (error) {
+      console.error('Failed to refresh user state:', error);
+      // 网络错误时不清除状态（可能是临时网络问题）
+    }
+  }, [login]);
+
   return (
-    <AuthContext.Provider value={{ isLoggedIn, user, currentUser, login, logout, updateBalance, isLoading }}>
+    <AuthContext.Provider value={{ isLoggedIn, user, currentUser, login, logout, updateBalance, refreshUserState, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

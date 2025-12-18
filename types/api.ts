@@ -14,6 +14,16 @@ export type MarketStatus = "OPEN" | "RESOLVED" | "CLOSED";
 export type MarketResult = "YES" | "NO" | null;
 
 /**
+ * 用户持仓接口（用于市场详情页）
+ */
+export interface UserPosition {
+  yesShares: number;
+  noShares: number;
+  yesAvgPrice: number;
+  noAvgPrice: number;
+}
+
+/**
  * 市场数据接口
  */
 export interface Market {
@@ -34,6 +44,8 @@ export interface Market {
   description?: string; // 市场描述
   sourceUrl?: string; // 信息来源链接
   resolutionCriteria?: string; // 结算规则说明
+  userPosition?: UserPosition | null; // ✅ 修复：添加用户持仓字段（API 返回）
+  userOrders?: any[]; // ✅ 修复：添加用户订单列表字段（API 返回）
 }
 
 /**

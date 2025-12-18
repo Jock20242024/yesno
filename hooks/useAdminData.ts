@@ -488,7 +488,8 @@ export function useAdminMarkets(queryParams?: {
 // 用户数据类型
 export interface AdminUser {
   id: string;
-  username: string;
+  email: string; // ✅ 修复：添加 email 字段（API 实际返回 User 类型包含 email）
+  username?: string; // 可选字段，向后兼容
   balance: number;
   isAdmin: boolean;
   isBanned: boolean;

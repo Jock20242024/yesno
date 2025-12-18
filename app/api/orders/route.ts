@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { DBService } from '@/lib/dbService';
-import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离：使用统一的 userId 提取函数
 import { MarketStatus, Outcome } from '@/types/data';
+import { getSession } from '@/lib/auth-core/sessionStore';
 
 /**
  * 创建订单 API
@@ -16,30 +16,24 @@ import { MarketStatus, Outcome } from '@/types/data';
  */
 export async function POST(request: Request) {
   try {
-    // 强制身份过滤：从 Auth Token 提取 current_user_id
-    // API 路由校验：确认 API 路由在调用 DBService 前，已经从 Auth Token 中正确提取了 user_id
-    const authResult = await extractUserIdFromToken();
+    // 从 Cookie 读取 auth_core_session
+    const cookieStore = await cookies();
+    const sessionId = cookieStore.get('auth_core_session')?.value;
     
-    if (!authResult.success || !authResult.userId) {
+    if (!sessionId) {
       return NextResponse.json(
-        {
-          success: false,
-          error: authResult.error || 'Not authenticated',
-        },
+        { success: false, error: 'Not authenticated' },
         { status: 401 }
       );
     }
 
-    const userId = authResult.userId;
+    // 调用 sessionStore.getSession(sessionId)
+    const userId = await getSession(sessionId);
     
-    // 硬编码检查：验证 userId 不是硬编码值，必须从 Auth Token 提取
-    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
-      console.error('❌ [Orders API] userId 验证失败：userId 为空或无效');
+    // 若 session 不存在，返回 401
+    if (!userId) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Invalid user ID',
-        },
+        { success: false, error: 'Session expired or invalid' },
         { status: 401 }
       );
     }
@@ -233,8 +227,58 @@ export async function POST(request: Request) {
             outcomeSelection: outcomeSelection as Outcome,
             amount: amountNum,
             feeDeducted: feeDeducted,
+            type: 'BUY', // ========== 修复：添加type字段 ==========
           },
         });
+        
+        // ========== 修复：创建或更新Position ==========
+        // 计算当前市场价格
+        const totalVolume = newTotalYes + newTotalNo;
+        const currentPrice = outcomeSelection === Outcome.YES
+          ? (newTotalYes / totalVolume)
+          : (newTotalNo / totalVolume);
+        
+        // 计算获得的份额
+        const calculatedShares = netAmount / currentPrice;
+        
+        // 查询是否已存在OPEN Position
+        const existingPosition = await tx.position.findFirst({
+          where: {
+            userId,
+            marketId,
+            outcome: outcomeSelection as Outcome,
+            status: 'OPEN',
+          },
+        });
+        
+        let updatedPosition;
+        if (existingPosition) {
+          // 更新现有Position（加权平均价格）
+          const newShares = existingPosition.shares + calculatedShares;
+          const newAvgPrice = (existingPosition.shares * existingPosition.avgPrice + calculatedShares * currentPrice) / newShares;
+          
+          updatedPosition = await tx.position.update({
+            where: { id: existingPosition.id },
+            data: {
+              shares: newShares,
+              avgPrice: newAvgPrice,
+            },
+          });
+        } else {
+          // 创建新Position
+          const positionId = `P-${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
+          updatedPosition = await tx.position.create({
+            data: {
+              id: positionId,
+              userId,
+              marketId,
+              outcome: outcomeSelection as Outcome,
+              shares: calculatedShares,
+              avgPrice: currentPrice,
+              status: 'OPEN',
+            },
+          });
+        }
         
         return {
           updatedUser,
@@ -248,6 +292,12 @@ export async function POST(request: Request) {
             payout: newOrder.payout ?? undefined,
             feeDeducted: newOrder.feeDeducted,
             createdAt: newOrder.createdAt.toISOString(),
+          },
+          updatedPosition: {
+            id: updatedPosition.id,
+            shares: updatedPosition.shares,
+            avgPrice: updatedPosition.avgPrice,
+            status: updatedPosition.status,
           },
         };
       });

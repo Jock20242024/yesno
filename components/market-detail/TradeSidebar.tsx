@@ -40,9 +40,6 @@ export interface TradeSidebarRef {
   switchToSell: () => void;
 }
 
-// 滑点常量（0.1%）
-const SLIPPAGE = 0.001;
-
 const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   marketStatus,
   winningOutcome,
@@ -65,19 +62,8 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTrading, setIsTrading] = useState(false);
   const [tradeMessage, setTradeMessage] = useState<string | null>(null);
-  const [tradeType, setTradeType] = useState<"YES" | "NO">("YES");
   const [selectedOutcome, setSelectedOutcome] = useState<"yes" | "no">("yes");
-  const [internalAmount, setInternalAmount] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  
-  // 使用内部状态或外部传入的 amount
-  const displayAmount = amount || internalAmount;
-  const handleAmountChange = (val: string) => {
-    setInternalAmount(val);
-    if (onAmountChange) {
-      onAmountChange(val);
-    }
-  };
   const hasInitialized = useRef(false);
   const lastBalanceRef = useRef<number>(0);
 
@@ -86,18 +72,11 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     if (activeTab === "sell" && userPosition) {
       if (userPosition.yesShares > 0) {
         setSelectedOutcome("yes");
-        setTradeType("YES");
       } else if (userPosition.noShares > 0) {
         setSelectedOutcome("no");
-        setTradeType("NO");
       }
     }
   }, [activeTab, userPosition]);
-  
-  // 同步 selectedOutcome 和 tradeType
-  useEffect(() => {
-    setTradeType(selectedOutcome === "yes" ? "YES" : "NO");
-  }, [selectedOutcome]);
 
   // 同步 Store 余额到 AuthContext（当 Store 余额变化时）
   // 使用 useRef 防止无限循环 - 仅在组件 Mount 时执行一次，之后只在余额真正变化时更新
@@ -146,18 +125,26 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   // 处理兑换奖金
   const handleRedeem = async () => {
     if (!isLoggedIn) {
-      toast.error("请先登录", {
-        description: "您需要登录才能兑换奖金",
-        duration: 3000,
-      });
+      try {
+        toast.error("请先登录", {
+          description: "您需要登录才能兑换奖金",
+          duration: 3000,
+        });
+      } catch (e) {
+        console.error("toast failed", e);
+      }
       return;
     }
 
     if (!userPosition || !winningOutcome) {
-      toast.error("错误", {
-        description: "您没有可兑换的持仓",
-        duration: 3000,
-      });
+      try {
+        toast.error("错误", {
+          description: "您没有可兑换的持仓",
+          duration: 3000,
+        });
+      } catch (e) {
+        console.error("toast failed", e);
+      }
       return;
     }
 
@@ -166,10 +153,14 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       : (userPosition.noShares || 0);
 
     if (winAmount <= 0) {
-      toast.error("错误", {
-        description: "您没有可兑换的持仓",
-        duration: 3000,
-      });
+      try {
+        toast.error("错误", {
+          description: "您没有可兑换的持仓",
+          duration: 3000,
+        });
+      } catch (e) {
+        console.error("toast failed", e);
+      }
       return;
     }
 
@@ -192,10 +183,14 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     // 持仓会自动从 Store 更新，不需要手动设置
 
     // 显示成功提示
-    toast.success("奖金已到账！", {
-      description: `已成功兑换 ${formatUSD(winAmount)}`,
-      duration: 5000,
-    });
+    try {
+      toast.success("奖金已到账！", {
+        description: `已成功兑换 ${formatUSD(winAmount)}`,
+        duration: 5000,
+      });
+    } catch (e) {
+      console.error("toast failed", e);
+    }
 
     addNotification({
       title: "奖金已到账",
@@ -261,6 +256,10 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   const noPrice = noPercent / 100;
   const selectedPrice = selectedOutcome === "yes" ? yesPrice : noPrice;
   const amountNum = parseFloat(amount) || 0;
+  
+  // 检查价格是否达到 $1.00（100%），如果达到则禁用买入
+  const isPriceAtMax = (selectedOutcome === "yes" && yesPrice >= 0.999) || 
+                       (selectedOutcome === "no" && noPrice >= 0.999);
 
   // 手续费常量（与 StoreContext 保持一致）
   const FEE_RATE = 0.02; // 2%
@@ -433,28 +432,40 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
 
   const handleTrade = async () => {
     if (!isLoggedIn) {
-      toast.error("请先登录", {
-        description: "您需要登录才能进行交易",
-        duration: 3000,
-      });
+      try {
+        toast.error("请先登录", {
+          description: "您需要登录才能进行交易",
+          duration: 3000,
+        });
+      } catch (e) {
+        console.error("toast failed", e);
+      }
       return;
     }
 
     if (amountNum <= 0) {
-      toast.error("请输入" + (activeTab === "buy" ? "金额" : "份额"), {
-        description: `请输入大于 0 的${activeTab === "buy" ? "金额" : "份额"}`,
-        duration: 3000,
-      });
+      try {
+        toast.error("请输入" + (activeTab === "buy" ? "金额" : "份额"), {
+          description: `请输入大于 0 的${activeTab === "buy" ? "金额" : "份额"}`,
+          duration: 3000,
+        });
+      } catch (e) {
+        console.error("toast failed", e);
+      }
       return;
     }
 
     if (isInsufficientBalance) {
-      toast.error(activeTab === "buy" ? "余额不足" : "份额不足", {
-        description: activeTab === "buy"
-          ? `您的余额不足，当前余额: ${formatUSD(availableBalance)}`
-          : `您持有的 ${selectedOutcome === "yes" ? "Yes" : "No"} 份额不足，当前持有 ${availableShares.toFixed(2)} 份额`,
-        duration: 3000,
-      });
+      try {
+        toast.error(activeTab === "buy" ? "余额不足" : "份额不足", {
+          description: activeTab === "buy"
+            ? `您的余额不足，当前余额: ${formatUSD(availableBalance)}`
+            : `您持有的 ${selectedOutcome === "yes" ? "Yes" : "No"} 份额不足，当前持有 ${availableShares.toFixed(2)} 份额`,
+          duration: 3000,
+        });
+      } catch (e) {
+        console.error("toast failed", e);
+      }
       return;
     }
 
@@ -596,10 +607,14 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           onAmountChange("");
           setTradeMessage(`订单创建成功！订单 ID: ${result.data.order.id}`);
           
-          toast.success("订单已提交！", {
-            description: `已成功买入 ${outcome} ${estShares.toFixed(2)} 份额`,
-            duration: 3000,
-          });
+          try {
+            toast.success("订单已提交！", {
+              description: `已成功买入 ${outcome} ${estShares.toFixed(2)} 份额`,
+              duration: 3000,
+            });
+          } catch (e) {
+            console.error("toast failed", e);
+          }
 
           addNotification({
             title: "订单已成交",
@@ -614,10 +629,14 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           // API 返回错误
           const errorMsg = result.error || "交易失败";
           setTradeMessage(`交易失败: ${errorMsg}`);
-          toast.error("交易失败", {
-            description: errorMsg,
-            duration: 3000,
-          });
+          try {
+            toast.error("交易失败", {
+              description: errorMsg,
+              duration: 3000,
+            });
+          } catch (e) {
+            console.error("toast failed", e);
+          }
         }
       } else {
         // 卖出功能暂时保留原有逻辑（使用 Store）
@@ -633,10 +652,14 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         onAmountChange("");
         setTradeMessage(`卖出成功！`);
         
-        toast.success("卖出成功！", {
-          description: `已成功卖出 ${outcome} ${amountNum.toFixed(2)} 份额，收到 ${formatUSD(estReturn)}`,
-          duration: 3000,
-        });
+        try {
+          toast.success("卖出成功！", {
+            description: `已成功卖出 ${outcome} ${amountNum.toFixed(2)} 份额，收到 ${formatUSD(estReturn)}`,
+            duration: 3000,
+          });
+        } catch (e) {
+          console.error("toast failed", e);
+        }
 
         addNotification({
           title: "订单已成交",
@@ -648,10 +671,14 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       console.error("交易失败:", error);
       const errorMsg = error instanceof Error ? error.message : "请稍后重试";
       setTradeMessage(`交易失败: ${errorMsg}`);
-      toast.error("交易失败", {
-        description: errorMsg,
-        duration: 3000,
-      });
+      try {
+        toast.error("交易失败", {
+          description: errorMsg,
+          duration: 3000,
+        });
+      } catch (e) {
+        console.error("toast failed", e);
+      }
     } finally {
       setIsTrading(false);
       setIsSubmitting(false);
@@ -864,10 +891,27 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           </div>
         )}
 
+        {/* 价格达到 $1.00 时的提示 */}
+        {activeTab === "buy" && isPriceAtMax && (
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <p className="text-xs text-amber-500 font-medium text-center">
+              价格已达上限，无法买入
+            </p>
+          </div>
+        )}
+
         {/* 底部按钮 */}
         <button
           onClick={handleTrade}
-          disabled={!isLoggedIn || amountNum <= 0 || isInsufficientBalance || isTrading || isSubmitting || (activeTab === "sell" && (!userPosition || (selectedOutcome === "yes" && userPosition.yesShares === 0) || (selectedOutcome === "no" && userPosition.noShares === 0)))}
+          disabled={
+            !isLoggedIn || 
+            amountNum <= 0 || 
+            isInsufficientBalance || 
+            isTrading || 
+            isSubmitting || 
+            (activeTab === "sell" && (!userPosition || (selectedOutcome === "yes" && userPosition.yesShares === 0) || (selectedOutcome === "no" && userPosition.noShares === 0))) ||
+            (activeTab === "buy" && isPriceAtMax) // 买入时，如果价格达到 $1.00，禁用按钮
+          }
           className={`w-full py-3.5 font-bold rounded-xl transition-transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
             activeTab === "buy"
               ? "bg-pm-green hover:bg-green-400 text-pm-bg disabled:hover:bg-pm-green"
@@ -879,6 +923,8 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
               <Loader2 className="w-5 h-5 animate-spin" />
               Processing...
             </>
+          ) : activeTab === "buy" && isPriceAtMax ? (
+            "等待清算"
           ) : isLoggedIn ? (
             `${activeTab === "buy" ? "买入" : "卖出"} ${selectedOutcome === "yes" ? "Yes" : "No"}`
           ) : (

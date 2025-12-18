@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mockDeposits, mockWithdrawals } from "@/lib/mockData";
+import { DBService } from '@/lib/dbService'; // 修复：使用正确的 DBService，不再使用 mockData
 import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
+import { prisma } from '@/lib/prisma';
+import { TransactionStatus } from '@/types/data';
 
 /**
  * 管理后台 - 财务数据汇总 API
@@ -56,41 +58,42 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 过滤充值数据（按时间范围）
-    let filteredDeposits = [...mockDeposits];
+    // 修复：从数据库查询所有充值记录（管理员可以查看所有用户的充值）
+    const depositWhere: any = {
+      status: TransactionStatus.COMPLETED, // 只统计已完成的充值
+    };
     if (startDate || endDate) {
-      filteredDeposits = filteredDeposits.filter((deposit) => {
-        const depositDate = new Date(deposit.timestamp);
-        if (startDate && depositDate < startDate) return false;
-        if (endDate && depositDate > endDate) return false;
-        return true;
-      });
+      depositWhere.createdAt = {};
+      if (startDate) depositWhere.createdAt.gte = startDate;
+      if (endDate) depositWhere.createdAt.lte = endDate;
     }
 
-    // 只统计已完成的充值
-    const completedDeposits = filteredDeposits.filter((d) => d.status === "completed");
-
-    // 过滤提现数据（按时间范围）
-    let filteredWithdrawals = [...mockWithdrawals];
+    // 修复：从数据库查询所有提现记录（管理员可以查看所有用户的提现）
+    const withdrawalWhere: any = {
+      status: { in: [TransactionStatus.COMPLETED] }, // 只统计已完成的提现（TransactionStatus 枚举只有 PENDING, COMPLETED, FAILED）
+    };
     if (startDate || endDate) {
-      filteredWithdrawals = filteredWithdrawals.filter((withdrawal) => {
-        const withdrawalDate = new Date(withdrawal.timestamp);
-        if (startDate && withdrawalDate < startDate) return false;
-        if (endDate && withdrawalDate > endDate) return false;
-        return true;
-      });
+      withdrawalWhere.createdAt = {};
+      if (startDate) withdrawalWhere.createdAt.gte = startDate;
+      if (endDate) withdrawalWhere.createdAt.lte = endDate;
     }
 
-    // 只统计已审批和已完成的提现
-    const completedWithdrawals = filteredWithdrawals.filter(
-      (w) => w.status === "approved" || w.status === "completed"
-    );
+    const [completedDeposits, completedWithdrawals] = await Promise.all([
+      prisma.deposit.findMany({
+        where: depositWhere,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.withdrawal.findMany({
+        where: withdrawalWhere,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
     // 计算总充值金额
-    const totalDeposits = completedDeposits.reduce((sum, deposit) => sum + deposit.amount, 0);
+    const totalDeposits = completedDeposits.reduce((sum, deposit) => sum + Number(deposit.amount), 0);
 
     // 计算总提现金额
-    const totalWithdrawals = completedWithdrawals.reduce((sum, withdrawal) => sum + withdrawal.amount, 0);
+    const totalWithdrawals = completedWithdrawals.reduce((sum, withdrawal) => sum + Number(withdrawal.amount), 0);
 
     // 计算净流入
     const netFlow = totalDeposits - totalWithdrawals;
@@ -128,8 +131,8 @@ export async function GET(request: NextRequest) {
  * 生成趋势数据（按月）
  */
 function generateTrendData(
-  deposits: typeof mockDeposits,
-  withdrawals: typeof mockWithdrawals,
+  deposits: Array<{ amount: number; createdAt: Date }>,
+  withdrawals: Array<{ amount: number; createdAt: Date }>,
   startDate: Date | null,
   endDate: Date | null
 ) {
@@ -143,7 +146,7 @@ function generateTrendData(
 
   // 处理充值数据
   deposits.forEach((deposit) => {
-    const date = new Date(deposit.timestamp);
+    const date = deposit.createdAt instanceof Date ? deposit.createdAt : new Date(deposit.createdAt);
     if (date >= defaultStartDate && date <= defaultEndDate) {
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
       if (!monthlyData[monthKey]) {
@@ -153,13 +156,13 @@ function generateTrendData(
           month: monthKey,
         };
       }
-      monthlyData[monthKey].deposits += deposit.amount;
+      monthlyData[monthKey].deposits += Number(deposit.amount);
     }
   });
 
   // 处理提现数据
   withdrawals.forEach((withdrawal) => {
-    const date = new Date(withdrawal.timestamp);
+    const date = withdrawal.createdAt instanceof Date ? withdrawal.createdAt : new Date(withdrawal.createdAt);
     if (date >= defaultStartDate && date <= defaultEndDate) {
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
       if (!monthlyData[monthKey]) {
@@ -169,7 +172,7 @@ function generateTrendData(
           month: monthKey,
         };
       }
-      monthlyData[monthKey].withdrawals += withdrawal.amount;
+      monthlyData[monthKey].withdrawals += Number(withdrawal.amount);
     }
   });
 

@@ -32,6 +32,8 @@ export const DBService = {
       orderBy: { createdAt: 'desc' },
     });
     
+    console.log(`[DBService.getAllUsers] Prisma returned ${dbUsers.length} users`);
+    
     return dbUsers.map((dbUser) => ({
       id: dbUser.id,
       email: dbUser.email,

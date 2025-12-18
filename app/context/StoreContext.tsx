@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useAuth } from '@/components/providers/AuthProvider'; // 修复：导入 useAuth 以获取当前用户 ID
 
 export type Position = {
   marketId: string;
@@ -39,9 +40,81 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [balance, setBalance] = useState(0);
   const [positions, setPositions] = useState<Position[]>([]);
   const [history, setHistory] = useState<Transaction[]>([]);
+  
+  // 修复：获取当前用户 ID（从 AuthProvider）
+  const { currentUser } = useAuth();
 
-  // 2. 所有模拟数据必须在 useEffect 内部设置（仅在客户端执行）
+  // ========== 修复：监听用户切换，主动清空状态 ==========
+  // 🔥 关键修复：只在用户 ID 实际变化时清空，不在 API 验证失败时清空（防止死锁）
+  const previousUserIdRef = useRef<string | null>(null);
   useEffect(() => {
+    const currentUserId = currentUser?.id || null;
+    const previousUserId = previousUserIdRef.current;
+    
+    // 只有在用户 ID 从有效值变为 null 或不同 ID 时才清空（真实的用户切换或登出）
+    // 如果 previousUserId 是 null，说明是初始化阶段，不清空（可能只是 API 验证延迟）
+    if (previousUserId !== null && (currentUserId === null || currentUserId !== previousUserId)) {
+      console.log('🧹 [StoreContext] 检测到用户切换或登出，清空所有状态（包括资金记录）', {
+        previousUserId,
+        currentUserId,
+      });
+      setBalance(0);
+      setPositions([]);
+      setHistory([]);
+      
+      // ========== 修复：清空资金记录相关的 localStorage ==========
+      localStorage.removeItem('pm_fundRecords');
+      localStorage.removeItem('pm_deposits');
+      localStorage.removeItem('pm_withdrawals');
+    }
+    
+    // 更新 ref（无论是否清空都更新，以便下次比较）
+    previousUserIdRef.current = currentUserId;
+  }, [currentUser?.id]); // 依赖 currentUser.id，用户切换时触发
+
+  // ========== 修复：从 localStorage 恢复数据前，严格验证用户 ID ==========
+  useEffect(() => {
+    // 如果没有当前用户，不恢复数据
+    if (!currentUser || !currentUser.id) {
+      console.log('⚠️ [StoreContext] 没有当前用户，不恢复数据');
+      setBalance(0);
+      setPositions([]);
+      setHistory([]);
+      return;
+    }
+    
+    // 获取 localStorage 中保存的用户 ID
+    const savedCurrentUser = localStorage.getItem('pm_currentUser');
+    const parsedCurrentUser = savedCurrentUser ? JSON.parse(savedCurrentUser) : null;
+    const savedUserId = parsedCurrentUser?.id;
+    const currentUserId = currentUser.id;
+    
+    // ========== 关键修复：如果用户 ID 不匹配，清除所有数据 ==========
+    if (savedUserId && currentUserId !== savedUserId) {
+      console.warn('⚠️ [StoreContext] 检测到用户切换，清除旧用户数据', {
+        currentUserId,
+        savedUserId,
+      });
+      
+      // 清空内存状态
+      setBalance(0);
+      setPositions([]);
+      setHistory([]);
+      
+      // 清空 localStorage 中的旧数据
+      localStorage.removeItem('pm_store_balance');
+      localStorage.removeItem('pm_store_positions');
+      localStorage.removeItem('pm_store_history');
+      
+      // ========== 修复：清空资金记录相关的 localStorage ==========
+      localStorage.removeItem('pm_fundRecords');
+      localStorage.removeItem('pm_deposits');
+      localStorage.removeItem('pm_withdrawals');
+      
+      return; // 不恢复旧数据
+    }
+    
+    // ========== 只有在用户 ID 匹配时才恢复数据 ==========
     // 先尝试从 localStorage 恢复数据
     const savedBalance = localStorage.getItem('pm_store_balance');
     const savedPositions = localStorage.getItem('pm_store_positions');
@@ -146,7 +219,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } else {
       setHistory([]);
     }
-  }, []);
+  }, [currentUser?.id]); // 修复：依赖 currentUser.id，确保用户切换时重新执行
 
   // 保存到 localStorage（仅在客户端）
   // 使用 useRef 来跟踪上一次的值，避免不必要的写入
@@ -176,10 +249,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [balance, positions, history]);
 
+  // ========== 架构加固：Store 只做缓存，不做业务计算 ==========
+  // 注意：executeTrade 包含业务计算逻辑，但这是用于模拟交易的临时功能
+  // 生产环境应通过 API 执行交易，Store 只缓存 API 返回的结果
   // 手续费常量
   const FEE_RATE = 0.02; // 2%
 
   // 3. 交易逻辑：生成动态数据仅在事件触发后进行，这样是安全的
+  // ⚠️ 架构加固：此函数包含业务计算，应迁移到后端 API
+  // 当前保留仅用于向后兼容，未来应通过 /api/bet 等 API 执行交易
   const executeTrade = useCallback(async (
     type: 'buy' | 'sell',
     marketId: string,

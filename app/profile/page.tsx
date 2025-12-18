@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useNotification } from "@/components/providers/NotificationProvider";
 import { Settings, Users, Key, LogOut, Loader2, BarChart3 } from "lucide-react";
-import { toast } from "sonner";
 import SettingsTab from "@/components/profile/SettingsTab";
 import ReferralTab from "@/components/profile/ReferralTab";
 import ApiManagementTab from "@/components/profile/ApiManagementTab";
@@ -19,6 +19,7 @@ type TabType = "overview" | "settings" | "referral" | "api";
 
 export default function ProfilePage() {
   const { user, isLoggedIn, logout, currentUser } = useAuth();
+  const { addNotification } = useNotification();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -91,7 +92,7 @@ export default function ProfilePage() {
     e.preventDefault();
     
     if (!depositAmount || parseFloat(depositAmount) <= 0) {
-      toast.error("请输入有效的充值金额");
+      addNotification({ type: "error", title: "输入错误", message: "请输入有效的充值金额" });
       return;
     }
 
@@ -113,9 +114,10 @@ export default function ProfilePage() {
       const result = await response.json();
 
       if (result.success) {
-        toast.success("充值成功！", {
-          description: `已成功充值 ${formatUSD(parseFloat(depositAmount))}`,
-          duration: 3000,
+        addNotification({
+          type: "success",
+          title: "充值成功！",
+          message: `已成功充值 ${formatUSD(parseFloat(depositAmount))}`,
         });
         
         // 清空表单
@@ -134,16 +136,18 @@ export default function ProfilePage() {
         }
         refetchTransactions();
       } else {
-        toast.error("充值失败", {
-          description: result.error || "请稍后重试",
-          duration: 3000,
+        addNotification({
+          type: "error",
+          title: "充值失败",
+          message: result.error || "请稍后重试",
         });
       }
     } catch (error) {
       console.error("Deposit error:", error);
-      toast.error("充值失败", {
-        description: "网络错误，请稍后重试",
-        duration: 3000,
+      addNotification({
+        type: "error",
+        title: "充值失败",
+        message: "网络错误，请稍后重试",
       });
     } finally {
       setIsDepositing(false);
@@ -155,12 +159,12 @@ export default function ProfilePage() {
     e.preventDefault();
     
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
-      toast.error("请输入有效的提现金额");
+      addNotification({ type: "error", title: "输入错误", message: "请输入有效的提现金额" });
       return;
     }
 
     if (!withdrawAddress || withdrawAddress.trim().length === 0) {
-      toast.error("请输入提现地址");
+      addNotification({ type: "error", title: "输入错误", message: "请输入提现地址" });
       return;
     }
 
@@ -182,9 +186,10 @@ export default function ProfilePage() {
       const result = await response.json();
 
       if (result.success) {
-        toast.success("提现请求已提交！", {
-          description: `提现金额: ${formatUSD(parseFloat(withdrawAmount))}，等待管理员审批`,
-          duration: 5000,
+        addNotification({
+          type: "success",
+          title: "提现请求已提交！",
+          message: `提现金额: ${formatUSD(parseFloat(withdrawAmount))}，等待管理员审批`,
         });
         
         // 清空表单
@@ -203,16 +208,18 @@ export default function ProfilePage() {
         }
         refetchTransactions();
       } else {
-        toast.error("提现失败", {
-          description: result.error || "请稍后重试",
-          duration: 3000,
+        addNotification({
+          type: "error",
+          title: "提现失败",
+          message: result.error || "请稍后重试",
         });
       }
     } catch (error) {
       console.error("Withdrawal error:", error);
-      toast.error("提现失败", {
-        description: "网络错误，请稍后重试",
-        duration: 3000,
+      addNotification({
+        type: "error",
+        title: "提现失败",
+        message: "网络错误，请稍后重试",
       });
     } finally {
       setIsWithdrawing(false);
@@ -228,21 +235,24 @@ export default function ProfilePage() {
       // 调用 Auth 上下文的退出方法
       logout();
       
-      // 弹出 Toast 提示
-      toast.success("已安全退出", {
-        description: "您已成功退出登录",
-        duration: 2000,
+      // 弹出通知提示
+      addNotification({
+        type: "success",
+        title: "已安全退出",
+        message: "您已成功退出登录",
       });
       
-      // 延迟一下让 Toast 显示，然后跳转
+      // 延迟一下让通知显示，然后跳转
       await new Promise((resolve) => setTimeout(resolve, 500));
       
       // 跳转回首页
       router.push("/");
     } catch (error) {
       console.error("退出登录失败", error);
-      toast.error("退出失败", {
-        description: "请稍后重试",
+      addNotification({
+        type: "error",
+        title: "退出失败",
+        message: "请稍后重试",
       });
     } finally {
       setIsLoggingOut(false);
@@ -372,12 +382,12 @@ export default function ProfilePage() {
                             </span>
                             <span
                               className={`text-2xl font-bold ${
-                                (userData.totalProfitLoss || userData.profitLoss || 0) >= 0
+                                (userData.profitLoss || 0) >= 0
                                   ? "text-pm-green"
                                   : "text-pm-red"
                               }`}
                             >
-                              {formatUSD(userData.totalProfitLoss || userData.profitLoss || 0)}
+                              {formatUSD(userData.profitLoss || 0)}
                             </span>
                           </div>
                         </div>
@@ -406,10 +416,7 @@ export default function ProfilePage() {
                       </div>
 
                       {/* 持仓列表和交易历史 */}
-                      <UserActivityTable
-                        tradeHistory={userData.tradeHistory || []}
-                        positions={userData.positions || []}
-                      />
+                      <UserActivityTable />
 
                       {/* 充值和提现区域 */}
                       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">

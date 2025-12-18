@@ -72,15 +72,23 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
     try {
       await navigator.clipboard.writeText(walletAddress);
       setCopied(true);
-      toast.success("地址已复制", {
-        description: "钱包地址已复制到剪贴板",
-        duration: 2000,
-      });
+      try {
+        toast.success("地址已复制", {
+          description: "钱包地址已复制到剪贴板",
+          duration: 2000,
+        });
+      } catch (e) {
+        console.error("toast failed", e);
+      }
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      toast.error("复制失败", {
-        description: "请手动复制地址",
-      });
+      try {
+        toast.error("复制失败", {
+          description: "请手动复制地址",
+        });
+      } catch (e) {
+        console.error("toast failed", e);
+      }
     }
   };
 
@@ -100,16 +108,20 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
     const provider = PAYMENT_PROVIDERS.find(p => p.id === selectedProvider);
     if (!provider) return;
     
-    toast.info("即将跳转至支付页面", {
-      description: `即将跳转至 ${provider.name} 支付页面...`,
-      duration: 3000,
-    });
+    try {
+      toast.info("即将跳转至支付页面", {
+        description: `即将跳转至 ${provider.name} 支付页面...`,
+        duration: 3000,
+      });
+    } catch (e) {
+      console.error("toast failed", e);
+    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
       <div className="bg-pm-card rounded-xl border border-white/10 shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         {/* 模态框头部 */}
         <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-pm-card z-10">

@@ -6,6 +6,23 @@
   body {
     font-family: 'Inter', 'Noto Sans SC', sans-serif;
   }
+  
+  /* 强制确保输入框和文本区域可以选中文本 - 使用最高优先级选择器 */
+  input,
+  textarea,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"] {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    cursor: text !important;
+  }
 }
 
 @layer utilities {
@@ -29,6 +46,24 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+  
+  /* 强制所有输入框允许文本选择 - 使用最高优先级 */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  textarea,
+  input.select-text,
+  input[class*="select-text"] {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    cursor: text !important;
   }
 }
 

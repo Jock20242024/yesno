@@ -1,30 +1,55 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAdminUsers } from "@/hooks/useAdminData";
-import { toast } from "sonner";
+import { useNotification } from "@/components/providers/NotificationProvider";
 import { useRouter } from "next/navigation";
 
 // 注意：Admin Token 存储在 HttpOnly Cookie 中，浏览器会自动发送
 // 不需要在 Authorization header 中手动传递
 
+interface BalanceModalData {
+  userId: string;
+  email: string;
+  currentBalance: number;
+}
+
 export default function AdminUserManagement() {
   const router = useRouter();
+  const { addNotification } = useNotification();
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [timeFilter, setTimeFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const limit = 10;
 
-  // 构建查询参数
+  // 资金管理弹窗状态
+  const [balanceModalOpen, setBalanceModalOpen] = useState(false);
+  const [balanceModalData, setBalanceModalData] = useState<BalanceModalData | null>(null);
+  const [adjustmentAmount, setAdjustmentAmount] = useState("");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [isSubmittingBalance, setIsSubmittingBalance] = useState(false);
+
+  // 防抖搜索：延迟 300ms 更新搜索查询
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setCurrentPage(1); // 搜索时重置到第一页
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // 构建查询参数（使用防抖后的搜索查询）
   const queryParams = useMemo(
     () => ({
-      search: searchQuery || undefined,
+      search: debouncedSearchQuery || undefined,
       status: statusFilter || undefined,
       page: currentPage,
       limit,
     }),
-    [searchQuery, statusFilter, currentPage]
+    [debouncedSearchQuery, statusFilter, currentPage]
   );
 
   // 获取用户数据
@@ -46,13 +71,13 @@ export default function AdminUserManagement() {
       const data = await response.json();
 
       if (data.success) {
-        toast.success("用户已禁用");
+        addNotification({ type: "success", title: "操作成功", message: "用户已禁用" });
         refetch(); // 刷新用户列表
       } else {
-        toast.error(data.error || "禁用用户失败");
+        addNotification({ type: "error", title: "操作失败", message: data.error || "禁用用户失败" });
       }
     } catch (err) {
-      toast.error("禁用用户失败");
+      addNotification({ type: "error", title: "操作失败", message: "禁用用户失败" });
       console.error("Ban user error:", err);
     }
   };
@@ -73,14 +98,108 @@ export default function AdminUserManagement() {
       const data = await response.json();
 
       if (data.success) {
-        toast.success("用户已解禁");
+        addNotification({ type: "success", title: "操作成功", message: "用户已解禁" });
         refetch(); // 刷新用户列表
       } else {
-        toast.error(data.error || "解禁用户失败");
+        addNotification({ type: "error", title: "操作失败", message: data.error || "解禁用户失败" });
       }
     } catch (err) {
-      toast.error("解禁用户失败");
+      addNotification({ type: "error", title: "操作失败", message: "解禁用户失败" });
       console.error("Unban user error:", err);
+    }
+  };
+
+  // 打开资金管理弹窗
+  const handleOpenBalanceModal = (user: { id: string; email: string; balance: number }) => {
+    setBalanceModalData({
+      userId: user.id,
+      email: user.email,
+      currentBalance: user.balance,
+    });
+    setAdjustmentAmount("");
+    setAdjustmentReason("");
+    setBalanceModalOpen(true);
+  };
+
+  // 关闭资金管理弹窗
+  const handleCloseBalanceModal = () => {
+    setBalanceModalOpen(false);
+    setBalanceModalData(null);
+    setAdjustmentAmount("");
+    setAdjustmentReason("");
+  };
+
+  // 提交余额调整
+  const handleSubmitBalanceAdjustment = async () => {
+    if (!balanceModalData) return;
+
+    // 验证金额
+    const amount = parseFloat(adjustmentAmount);
+    if (isNaN(amount) || amount === 0) {
+      addNotification({ type: "error", title: "输入错误", message: "请输入有效的调整金额（非零数字）" });
+      return;
+    }
+
+    // 验证原因
+    if (!adjustmentReason.trim()) {
+      addNotification({ type: "error", title: "输入错误", message: "请输入调整原因" });
+      return;
+    }
+
+    // 检查余额是否足够（如果是扣款）
+    if (amount < 0 && balanceModalData.currentBalance + amount < 0) {
+      addNotification({ type: "error", title: "余额不足", message: "用户余额不足以完成此次扣款" });
+      return;
+    }
+
+    setIsSubmittingBalance(true);
+
+    try {
+      const response = await fetch("/api/admin/users/balance", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: balanceModalData.userId,
+          amount,
+          reason: adjustmentReason.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        addNotification({
+          type: "success",
+          title: "操作成功",
+          message: `余额调整成功，新余额: $${data.data.newBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        });
+        handleCloseBalanceModal();
+        refetch(); // 刷新用户列表
+        
+        // 强制刷新余额显示：使用 window.location.reload() 作为临时测试手段
+        console.log('💰 [Admin] 余额调整成功，强制刷新页面以更新余额显示');
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      } else {
+        addNotification({ type: "error", title: "操作失败", message: data.error || "余额调整失败" });
+      }
+    } catch (err) {
+      addNotification({ type: "error", title: "操作失败", message: "余额调整失败，请稍后重试" });
+      console.error("Balance adjustment error:", err);
+    } finally {
+      setIsSubmittingBalance(false);
+    }
+  };
+
+  // 处理搜索框回车事件
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      setDebouncedSearchQuery(searchQuery);
+      setCurrentPage(1);
     }
   };
 
@@ -115,13 +234,13 @@ export default function AdminUserManagement() {
             </div>
             <input
               className="block w-full pl-10 pr-3 py-2.5 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg leading-5 bg-white dark:bg-[#101822] text-[#111418] dark:text-white placeholder-[#9da8b9] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm"
-              placeholder="搜索用户ID / 用户名 / 邮箱..."
+              placeholder="搜索用户ID / 用户名 / 邮箱... (支持回车搜索)"
               type="text"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
-                setCurrentPage(1); // 重置到第一页
               }}
+              onKeyDown={handleSearchKeyDown}
             />
           </div>
 
@@ -276,7 +395,7 @@ export default function AdminUserManagement() {
                       </td>
                       <td className="p-4">
                         <span className="text-sm font-bold text-[#111418] dark:text-white">
-                          ${user.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ${((user?.balance ?? 0) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </td>
                       <td className="p-4 text-center">
@@ -292,6 +411,13 @@ export default function AdminUserManagement() {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-end gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleOpenBalanceModal(user)}
+                            className="p-1.5 rounded-md text-[#637588] dark:text-[#9da8b9] hover:bg-gray-100 dark:hover:bg-[#283545] hover:text-primary transition-colors"
+                            title="资金管理"
+                          >
+                            <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+                          </button>
                           <button className="p-1.5 rounded-md text-[#637588] dark:text-[#9da8b9] hover:bg-gray-100 dark:hover:bg-[#283545] hover:text-primary transition-colors" title="查看详情">
                             <span className="material-symbols-outlined text-[20px]">visibility</span>
                           </button>
@@ -367,6 +493,109 @@ export default function AdminUserManagement() {
           </div>
         )}
       </div>
+
+      {/* 资金管理弹窗 */}
+      {balanceModalOpen && balanceModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-xl w-full max-w-md mx-4 p-6">
+            {/* 弹窗头部 */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-[#111418] dark:text-white">资金管理</h2>
+              <button
+                onClick={handleCloseBalanceModal}
+                className="p-1.5 rounded-md text-[#637588] dark:text-[#9da8b9] hover:bg-gray-100 dark:hover:bg-[#283545] transition-colors"
+              >
+                <span className="material-symbols-outlined text-[24px]">close</span>
+              </button>
+            </div>
+
+            {/* 用户信息 */}
+            <div className="mb-6 p-4 bg-[#f9fafb] dark:bg-[#1e2a36] rounded-lg">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="size-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold">
+                  {balanceModalData.email.split('@')[0].slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-[#111418] dark:text-white">{balanceModalData.email}</p>
+                  <p className="text-xs text-[#637588] dark:text-[#9da8b9]">用户 ID: {balanceModalData.userId.slice(0, 8)}...</p>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-[#e5e7eb] dark:border-[#283545]">
+                <p className="text-xs text-[#637588] dark:text-[#9da8b9] mb-1">当前余额</p>
+                <p className="text-2xl font-bold text-[#111418] dark:text-white">
+                  ${balanceModalData.currentBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            {/* 调整金额输入 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                调整金额 <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#637588] dark:text-[#9da8b9]">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={adjustmentAmount}
+                  onChange={(e) => setAdjustmentAmount(e.target.value)}
+                  placeholder="正数加钱，负数扣钱"
+                  className="w-full pl-8 pr-3 py-2.5 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              {adjustmentAmount && !isNaN(parseFloat(adjustmentAmount)) && (
+                <p className="mt-2 text-sm text-[#637588] dark:text-[#9da8b9]">
+                  调整后余额: $
+                  {(balanceModalData.currentBalance + parseFloat(adjustmentAmount)).toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+              )}
+            </div>
+
+            {/* 调整原因输入 */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                调整原因 <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={adjustmentReason}
+                onChange={(e) => setAdjustmentReason(e.target.value)}
+                placeholder="请输入调整原因（必填）"
+                rows={3}
+                className="w-full px-3 py-2.5 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white placeholder-[#9da8b9] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+              />
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleCloseBalanceModal}
+                disabled={isSubmittingBalance}
+                className="flex-1 px-4 py-2.5 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg text-[#111418] dark:text-white bg-white dark:bg-[#101822] hover:bg-[#f3f4f6] dark:hover:bg-[#283545] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSubmitBalanceAdjustment}
+                disabled={isSubmittingBalance || !adjustmentAmount || !adjustmentReason.trim()}
+                className="flex-1 px-4 py-2.5 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isSubmittingBalance ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>处理中...</span>
+                  </>
+                ) : (
+                  "确认调整"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

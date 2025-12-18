@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { X, Download, Share2 } from "lucide-react";
+import Image from "next/image";
 import { toPng } from "html-to-image";
 import download from "downloadjs";
 import { formatUSD } from "@/lib/utils";
@@ -58,7 +59,7 @@ export default function SharePositionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
       <div className="bg-pm-card rounded-xl border border-pm-border shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* 模态框头部 */}
         <div className="flex items-center justify-between p-6 border-b border-pm-border">
@@ -83,62 +84,12 @@ export default function SharePositionModal({
           >
             {/* Logo 和标题 */}
             <div className="flex items-center gap-3 mb-8">
-              <div className="size-12 text-primary flex-shrink-0">
-                <svg
-                  className="w-full h-full"
-                  fill="none"
-                  viewBox="0 0 100 100"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <circle cx="50" cy="50" fill="currentColor" r="50" />
-                  <circle
-                    cx="50"
-                    cy="50"
-                    opacity="0.3"
-                    r="44"
-                    stroke="#000"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M50 6 A 44 44 0 0 1 50 94"
-                    fill="#000"
-                    fillOpacity="0.1"
-                  />
-                  <line
-                    stroke="#000"
-                    strokeLinecap="round"
-                    strokeWidth="4"
-                    x1="50"
-                    x2="50"
-                    y1="10"
-                    y2="90"
-                  />
-                  <text
-                    fill="#000"
-                    fontFamily="sans-serif"
-                    fontSize="18"
-                    fontWeight="900"
-                    textAnchor="middle"
-                    transform="rotate(-90, 35, 50)"
-                    x="35"
-                    y="55"
-                  >
-                    YES
-                  </text>
-                  <text
-                    fill="#000"
-                    fontFamily="sans-serif"
-                    fontSize="18"
-                    fontWeight="900"
-                    textAnchor="middle"
-                    transform="rotate(90, 65, 50)"
-                    x="65"
-                    y="55"
-                  >
-                    NO
-                  </text>
-                </svg>
-              </div>
+              <Image
+                src="/logo.svg"
+                alt="YesNo Logo"
+                width={36}
+                height={36}
+              />
               <h1 className="text-2xl font-black text-white">YesNo</h1>
             </div>
 

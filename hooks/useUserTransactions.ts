@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Deposit, Withdrawal } from '@/types/data';
+import { useAuth } from '@/components/providers/AuthProvider'; // ========== 修复：导入 useAuth ==========
 
 interface UseUserTransactionsReturn {
   deposits: Deposit[];
@@ -17,8 +18,19 @@ export function useUserTransactions(): UseUserTransactionsReturn {
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // ========== 修复：获取当前用户 ID，监听用户切换 ==========
+  const { currentUser, isLoggedIn } = useAuth();
 
   const fetchTransactions = async () => {
+    // ========== 修复：检查用户是否登录 ==========
+    if (!isLoggedIn || !currentUser || !currentUser.id) {
+      setDeposits([]);
+      setWithdrawals([]);
+      setIsLoading(false);
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
 
@@ -44,14 +56,18 @@ export function useUserTransactions(): UseUserTransactionsReturn {
       const errorMessage = err instanceof Error ? err.message : 'Error fetching transactions';
       setError(errorMessage);
       console.error('Error fetching user transactions:', err);
+      // ========== 修复：出错时清空数据 ==========
+      setDeposits([]);
+      setWithdrawals([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    // ========== 修复：依赖 currentUser.id，用户切换时重新获取 ==========
     fetchTransactions();
-  }, []);
+  }, [currentUser?.id, isLoggedIn]); // 添加 currentUser.id 和 isLoggedIn 作为依赖
 
   return {
     deposits,

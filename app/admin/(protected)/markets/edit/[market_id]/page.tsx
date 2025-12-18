@@ -162,24 +162,34 @@ export default function MarketEditPage() {
     }).format(amount);
   };
 
-  // 加载状态
-  if (isLoading) {
-    return (
-      <div className="mx-auto max-w-[1400px] flex flex-col gap-6">
+  return (
+    <div className="mx-auto max-w-[1400px] flex flex-col gap-6">
+      {/* 页面标题 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-[#111418] dark:text-white">市场编辑与结算</h1>
+          <p className="text-sm text-[#637588] dark:text-[#9da8b9] mt-1">查看市场详情并进行结算操作</p>
+        </div>
+        <button
+          onClick={() => router.push("/admin/markets/list")}
+          className="px-4 py-2 bg-white dark:bg-[#101822] border border-[#d1d5db] dark:border-[#3e4e63] text-[#111418] dark:text-white rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-[#283545] transition-colors text-sm font-medium"
+        >
+          返回列表
+        </button>
+      </div>
+
+      {/* 加载状态：显示空状态，不阻塞渲染 */}
+      {isLoading && (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             <p className="text-[#637588] dark:text-[#9da8b9]">加载市场详情...</p>
           </div>
         </div>
-      </div>
-    );
-  }
+      )}
 
-  // 错误状态
-  if (error || !market) {
-    return (
-      <div className="mx-auto max-w-[1400px] flex flex-col gap-6">
+      {/* 错误状态：显示空状态，不阻塞渲染 */}
+      {(error || !market) && !isLoading && (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
             <span className="material-symbols-outlined text-red-500" style={{ fontSize: 48 }}>
@@ -194,12 +204,10 @@ export default function MarketEditPage() {
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
+      )}
 
-  return (
-    <div className="mx-auto max-w-[1400px] flex flex-col gap-6">
+      {/* 正常内容：只在有数据且不在加载时显示 */}
+      {!isLoading && market && (
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>

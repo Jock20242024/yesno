@@ -5,7 +5,6 @@ import { NotificationProvider } from "@/components/providers/NotificationProvide
 import { StoreProvider } from "@/app/context/StoreContext";
 import Navbar from "@/components/Navbar";
 import CategoryBar from "@/components/CategoryBar";
-import { Toaster } from "sonner";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -15,12 +14,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <Navbar />
           <CategoryBar />
           {children}
-          <Toaster
-            position="top-center"
-            richColors
-            closeButton
-            theme="dark"
-          />
         </StoreProvider>
       </NotificationProvider>
     </AuthProvider>

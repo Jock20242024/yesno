@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
+import { auth } from "@/app/api/auth/[...nextauth]/route";
 import { DBService } from '@/lib/dbService';
-import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离：使用统一的 userId 提取函数
 
 /**
  * 获取用户交易记录 API
@@ -8,24 +8,39 @@ import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离�
  * 
  * 返回当前登录用户的所有充值和提现记录
  * 
- * 强制数据隔离：必须使用从 Auth Token 提取的 current_user_id 进行数据库查询
+ * 🔥 关键修复：使用 NextAuth 的 getServerSession 统一认证
  */
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
-    // 强制身份过滤：从 Auth Token 提取 current_user_id
-    const authResult = await extractUserIdFromToken();
+    // 🔥 关键修复：使用 NextAuth v5 的 auth() 统一认证
+    const session = await auth();
     
-    if (!authResult.success || !authResult.userId) {
+    if (!session?.user?.email) {
+      console.log('🔒 [Transactions API] No session or email');
       return NextResponse.json(
         {
           success: false,
-          error: authResult.error || 'Not authenticated',
+          error: 'Not authenticated',
         },
         { status: 401 }
       );
     }
 
-    const userId = authResult.userId;
+    // 从 session 中获取用户 ID（通过 email 查询数据库获取 id）
+    const user = await DBService.findUserByEmail(session.user.email);
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'User not found',
+        },
+        { status: 404 }
+      );
+    }
+
+    const userId = user.id;
 
     // 强制 DB 过滤：使用 DBService.findUserTransactions(userId) 确保数据隔离
     // DBService.findUserTransactions 内部使用 WHERE userId = current_user_id

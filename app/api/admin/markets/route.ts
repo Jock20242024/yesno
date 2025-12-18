@@ -17,7 +17,7 @@ import { CATEGORY_SLUG_MAP } from '@/lib/categories';
 export async function GET(request: NextRequest) {
   try {
     // 权限校验：使用统一的 Admin Token 验证函数（从 Cookie 读取）
-    const authResult = await verifyAdminToken(request);
+    const authResult = await verifyAdminAuth(request);
 
     if (!authResult.success) {
       return createUnauthorizedResponse(

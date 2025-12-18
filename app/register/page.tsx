@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
+import { useAuth } from "@/components/providers/AuthProvider";
+import { toast } from "sonner";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -11,11 +14,39 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { login } = useAuth();
+  
+  // 强制开启文本选择（DOM 注入）
+  useEffect(() => {
+    const emailInput = document.getElementById('email') as HTMLInputElement;
+    const passwordInput = document.getElementById('password') as HTMLInputElement;
+    const confirmPasswordInput = document.getElementById('confirmPassword') as HTMLInputElement;
+    
+    const setupInput = (input: HTMLInputElement | null) => {
+      if (input) {
+        // 使用 setProperty 设置 !important，确保计算值为 text 而非 auto
+        input.style.setProperty('user-select', 'text', 'important');
+        input.style.setProperty('-webkit-user-select', 'text', 'important');
+        input.style.setProperty('-moz-user-select', 'text', 'important');
+        input.style.setProperty('-ms-user-select', 'text', 'important');
+        input.style.cursor = 'text';
+        input.draggable = false;
+        // 阻止 IE/Edge 的选择阻断
+        input.onselectstart = (e) => {
+          e.stopPropagation();
+          return true;
+        };
+      }
+    };
+    
+    setupInput(emailInput);
+    setupInput(passwordInput);
+    setupInput(confirmPasswordInput);
+  }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // 强制清除所有错误状态，确保不会显示之前的错误
     setError(null);
 
     // 验证邮箱格式
@@ -33,52 +64,63 @@ export default function RegisterPage() {
       return;
     }
 
-    // 客户端调试：确保数据已正确捕获
-    console.log("Submitting:", { email, password: "***" }); // 不打印实际密码
-
     try {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: 'include',
         body: JSON.stringify({
           email,
           password,
         }),
       });
 
-      // 检查响应状态码 - 如果成功（201 Created），立即重定向
-      if (response.ok) {
-        // 注册成功，强制清除错误状态（确保 UI 不显示错误）
+      const data = await response.json();
+
+      if (response.ok && data.success) {
         setError(null);
-        setIsLoading(false); // 清除加载状态
-        console.log("Register API success:", { status: response.status });
+        setIsLoading(false);
         
-        // 注册成功，重定向到主页或登录页
-        // 确保这里没有逻辑会再次设置错误状态
-        router.push("/");
-        // 或者使用: router.push("/login?message=注册成功，请登录");
-        return; // 确保不执行后续的错误处理逻辑
+        // 显示成功提示
+        try {
+          toast.success("注册成功，正在登录...");
+        } catch (e) {
+          console.error("toast failed", e);
+        }
+
+        // 立即更新 AuthProvider 状态
+        if (data.user && data.token) {
+          login(data.token, data.user);
+        }
+
+        // 等待一小段时间确保状态更新完成，然后跳转
+        setTimeout(() => {
+          router.refresh();
+          router.push("/");
+        }, 100);
+        return;
       }
 
-      // 错误处理逻辑（仅在 response.ok 为 false 时执行）
-      const errorText = await response.text();
-      let errorData;
+      // 处理错误响应
+      const errorMessage = data.error || data.message || `注册失败: ${response.status} ${response.statusText}`;
+      setError(errorMessage);
+      
+      // 显示错误提示
       try {
-        errorData = JSON.parse(errorText);
-      } catch {
-        errorData = { error: errorText || `HTTP ${response.status}: ${response.statusText}` };
+        toast.error(errorMessage);
+      } catch (e) {
+        console.error("toast failed", e);
       }
-      console.error("Register API error:", {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorData.error || errorData,
-      });
-      setError(errorData.error || `注册失败: ${response.status} ${response.statusText}`);
     } catch (err) {
-      console.error("Register error:", err);
-      setError("注册失败，请稍后重试");
+      const errorMessage = "注册失败，请稍后重试";
+      setError(errorMessage);
+      try {
+        toast.error(errorMessage);
+      } catch (e) {
+        console.error("toast failed", e);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -94,18 +136,48 @@ export default function RegisterPage() {
               创建新账户以开始交易
             </p>
 
+            <div className="space-y-3 mb-6">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const result = await signIn("google", {
+                      callbackUrl: "/",
+                      redirect: true,
+                    });
+                    if (result?.error) {
+                      try {
+                        toast.error("Google 登录失败");
+                      } catch (e) {
+                        console.error("toast failed", e);
+                      }
+                    }
+                  } catch (error) {
+                    console.error("Google sign in error:", error);
+                    try {
+                      toast.error("Google 登录失败，请稍后重试");
+                    } catch (e) {
+                      console.error("toast failed", e);
+                    }
+                  }
+                }}
+                className="w-full bg-pm-bg border border-pm-border hover:bg-pm-card-hover text-white font-medium py-3 rounded-lg transition-all text-sm"
+              >
+                使用 Google 邮箱注册
+              </button>
+            </div>
+
             <form onSubmit={handleRegister} className="space-y-4">
-              {/* 错误提示 - 仅在非加载状态且存在错误时显示 */}
               {!isLoading && error && (
-                <div className="p-3 rounded-lg bg-pm-red/10 border border-pm-red/20">
+                <div className="p-3 rounded-lg bg-pm-red/10 border border-pm-red/20 pointer-events-auto">
                   <p className="text-pm-red text-sm">{error}</p>
                 </div>
               )}
 
-              <div>
+              <div className="pointer-events-none">
                 <label
                   htmlFor="email"
-                  className="block text-sm font-medium text-pm-text-dim mb-2"
+                  className="block text-sm font-medium text-pm-text-dim mb-2 pointer-events-auto"
                 >
                   邮箱
                 </label>
@@ -114,16 +186,33 @@ export default function RegisterPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  draggable={false}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onSelect={(e) => {
+                    e.stopPropagation();
+                  }}
                   required
-                  className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
+                  className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all select-text pointer-events-auto"
                   placeholder="example@email.com"
+                  style={{
+                    userSelect: 'text',
+                    WebkitUserSelect: 'text',
+                    cursor: 'text',
+                    position: 'relative',
+                    zIndex: 50,
+                  } as React.CSSProperties}
                 />
               </div>
 
-              <div>
+              <div className="pointer-events-none">
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-pm-text-dim mb-2"
+                  className="block text-sm font-medium text-pm-text-dim mb-2 pointer-events-auto"
                 >
                   密码
                 </label>
@@ -132,17 +221,34 @@ export default function RegisterPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  draggable={false}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onSelect={(e) => {
+                    e.stopPropagation();
+                  }}
                   required
                   minLength={6}
-                  className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
+                  className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all select-text pointer-events-auto"
                   placeholder="至少6个字符"
+                  style={{
+                    userSelect: 'text',
+                    WebkitUserSelect: 'text',
+                    cursor: 'text',
+                    position: 'relative',
+                    zIndex: 50,
+                  } as React.CSSProperties}
                 />
               </div>
 
-              <div>
+              <div className="pointer-events-none">
                 <label
                   htmlFor="confirmPassword"
-                  className="block text-sm font-medium text-pm-text-dim mb-2"
+                  className="block text-sm font-medium text-pm-text-dim mb-2 pointer-events-auto"
                 >
                   确认密码
                 </label>
@@ -151,10 +257,27 @@ export default function RegisterPage() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  draggable={false}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onSelect={(e) => {
+                    e.stopPropagation();
+                  }}
                   required
                   minLength={6}
-                  className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
+                  className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all select-text pointer-events-auto"
                   placeholder="再次输入密码"
+                  style={{
+                    userSelect: 'text',
+                    WebkitUserSelect: 'text',
+                    cursor: 'text',
+                    position: 'relative',
+                    zIndex: 50,
+                  } as React.CSSProperties}
                 />
               </div>
 
@@ -192,4 +315,3 @@ export default function RegisterPage() {
     </>
   );
 }
-

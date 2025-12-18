@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { DBService } from '@/lib/dbService';
 import { MarketStatus, Outcome } from '@/types/data';
+import { extractUserIdFromToken } from '@/lib/authUtils'; // ========== 修复：导入统一的 userId 提取函数 ==========
 
 /**
  * 交易响应接口

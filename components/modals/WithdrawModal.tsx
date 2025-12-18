@@ -70,10 +70,14 @@ export default function WithdrawModal({
 
     setIsLoading(false);
     const selectedNetworkConfig = availableNetworks.find(n => n.id === selectedNetwork);
-    toast.success("提现成功", {
-      description: `已提交提现申请，预计 ${selectedNetworkConfig?.arrival || "5-10 分钟"} 到账`,
-      duration: 3000,
-    });
+    try {
+      toast.success("提现成功", {
+        description: `已提交提现申请，预计 ${selectedNetworkConfig?.arrival || "5-10 分钟"} 到账`,
+        duration: 3000,
+      });
+    } catch (e) {
+      console.error("toast failed", e);
+    }
 
     // 重置表单并关闭
     setAddress("");
@@ -84,7 +88,7 @@ export default function WithdrawModal({
   const selectedNetworkConfig = availableNetworks.find(n => n.id === selectedNetwork);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
       <div className="bg-pm-card rounded-xl border border-white/10 shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         {/* 模态框头部 */}
         <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-pm-card z-10">

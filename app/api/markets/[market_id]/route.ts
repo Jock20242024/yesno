@@ -77,65 +77,47 @@ export async function GET(
           userOrders = [];
           userPosition = null;
         } else {
-          // 强制 DB 过滤：使用 DBService.findOrdersByUserId(userId) 确保数据隔离
-          // DBService.findOrdersByUserId 内部使用 WHERE userId = current_user_id
-          // 查询结构强制修复：明确且强制地包含基于传入 current_user_id 的过滤条件
-          const allUserOrders = await DBService.findOrdersByUserId(userId);
-          // 进一步过滤：确保只返回当前市场的订单
-          userOrders = allUserOrders.filter(order => order.marketId === market_id);
+          // ========== 修复：从Position表查询持仓，不再从Order数组计算 ==========
+          // 强制规则：UI的"我的持仓"100%只能来自Position表，不允许从Trade计算
+          const { prisma } = await import('@/lib/prisma');
           
-          // 从订单计算用户持仓（原子交易：创建持仓记录）
-          // 计算 YES 和 NO 的持仓
-          const yesOrders = userOrders.filter(order => order.outcomeSelection === 'YES');
-          const noOrders = userOrders.filter(order => order.outcomeSelection === 'NO');
+          const yesPosition = await prisma.position.findFirst({
+            where: {
+              userId,
+              marketId: market_id,
+              outcome: 'YES',
+              status: 'OPEN', // ========== 强制规则：只查询OPEN状态的持仓 ==========
+            },
+          });
           
-          // 计算 YES 持仓
-          if (yesOrders.length > 0) {
-            const totalYesAmount = yesOrders.reduce((sum, order) => sum + (order.amount - order.feeDeducted), 0);
-            const totalYesShares = yesOrders.reduce((sum, order) => {
-              // 计算份额：净投资 / 当前价格（简化计算，使用市场平均价格）
-              const currentPrice = market.totalYes / (market.totalYes + market.totalNo) || 0.5;
-              const netAmount = order.amount - order.feeDeducted;
-              return sum + (netAmount / (currentPrice || 0.5));
-            }, 0);
-            const avgYesPrice = totalYesAmount / totalYesShares || 0;
-            
+          const noPosition = await prisma.position.findFirst({
+            where: {
+              userId,
+              marketId: market_id,
+              outcome: 'NO',
+              status: 'OPEN', // ========== 强制规则：只查询OPEN状态的持仓 ==========
+            },
+          });
+          
+          // 构建userPosition对象
+          if (yesPosition || noPosition) {
             userPosition = {
-              yesShares: totalYesShares,
-              noShares: 0,
-              yesAvgPrice: avgYesPrice,
-              noAvgPrice: 0,
+              yesShares: yesPosition?.shares || 0,
+              noShares: noPosition?.shares || 0,
+              yesAvgPrice: yesPosition?.avgPrice || 0,
+              noAvgPrice: noPosition?.avgPrice || 0,
             };
           }
           
-          // 计算 NO 持仓
-          if (noOrders.length > 0) {
-            const totalNoAmount = noOrders.reduce((sum, order) => sum + (order.amount - order.feeDeducted), 0);
-            const totalNoShares = noOrders.reduce((sum, order) => {
-              const currentPrice = market.totalNo / (market.totalYes + market.totalNo) || 0.5;
-              const netAmount = order.amount - order.feeDeducted;
-              return sum + (netAmount / (currentPrice || 0.5));
-            }, 0);
-            const avgNoPrice = totalNoAmount / totalNoShares || 0;
-            
-            if (userPosition) {
-              userPosition.noShares = totalNoShares;
-              userPosition.noAvgPrice = avgNoPrice;
-            } else {
-              userPosition = {
-                yesShares: 0,
-                noShares: totalNoShares,
-                yesAvgPrice: 0,
-                noAvgPrice: avgNoPrice,
-              };
-            }
-          }
+          // 获取用户订单（用于显示交易历史，不是用于计算持仓）
+          const allUserOrders = await DBService.findOrdersByUserId(userId);
+          userOrders = allUserOrders.filter(order => order.marketId === market_id);
           
-          console.log('📊 [Market Detail API] 用户订单和持仓:', {
+          console.log('📊 [Market Detail API] 用户持仓（从Position表）:', {
             userId,
             marketId: market_id,
-            orderCount: userOrders.length,
             userPosition,
+            orderCount: userOrders.length,
           });
         }
       } else {

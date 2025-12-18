@@ -1,0 +1,8 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="50" fill="#ec9c13" r="50" />
+  <circle cx="50" cy="50" opacity="0.3" r="44" stroke="#000" stroke-width="2" />
+  <path d="M50 6 A 44 44 0 0 1 50 94" fill="#000" fill-opacity="0.1" />
+  <line stroke="#000" stroke-linecap="round" stroke-width="4" x1="50" x2="50" y1="10" y2="90" />
+  <text fill="#000" font-family="sans-serif" font-size="18" font-weight="900" text-anchor="middle" transform="rotate(-90, 35, 50)" x="35" y="55">YES</text>
+  <text fill="#000" font-family="sans-serif" font-size="18" font-weight="900" text-anchor="middle" transform="rotate(90, 65, 50)" x="65" y="55">NO</text>
+</svg>

@@ -3,8 +3,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Search, Trophy, Bell, CheckCircle, XCircle, Info, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useNotification } from "@/components/providers/NotificationProvider";
+import LiveWallet from "@/components/user/LiveWallet";
 
 // 格式化相对时间
 function formatRelativeTime(timestamp: number): string {
@@ -23,47 +25,8 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 export default function Navbar() {
+  const router = useRouter();
   const { isLoggedIn, user, currentUser, logout } = useAuth();
-  
-  // 统一余额显示：优先使用 currentUser.balance（从 API 获取的最新值），如果没有则使用 user.balance（格式化后的字符串）
-  // 状态绑定：确保这些字段不再使用本地或硬编码的 $0.00 值，而是使用从全局认证/用户状态中获取的最新 balance 值
-  const displayBalance = React.useMemo(() => {
-    // 优先级 1: 使用 currentUser.balance（从 /api/auth/me 获取的最新值）
-    if (currentUser?.balance !== undefined && currentUser.balance !== null) {
-      const balanceNum = Number(currentUser.balance);
-      if (!isNaN(balanceNum) && balanceNum >= 0) {
-        return new Intl.NumberFormat('en-US', {
-          style: 'currency',
-          currency: 'USD',
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        }).format(balanceNum);
-      }
-    }
-    
-    // 优先级 2: 使用 user.balance（格式化后的字符串，如 "$1000.00"）
-    if (user?.balance) {
-      const parsedBalance = parseFloat(user.balance.replace(/[$,]/g, ''));
-      if (!isNaN(parsedBalance) && parsedBalance >= 0) {
-        return user.balance; // 已经是格式化字符串，直接返回
-      }
-    }
-    
-    // 默认值：如果都没有，显示 $0.00
-    return "$0.00";
-  }, [currentUser?.balance, user?.balance]);
-  
-  // 调试日志：确认余额值
-  React.useEffect(() => {
-    if (isLoggedIn) {
-      console.log('💰 [Navbar] 余额显示调试:', {
-        currentUserBalance: currentUser?.balance,
-        userBalance: user?.balance,
-        displayBalance,
-        isLoggedIn,
-      });
-    }
-  }, [currentUser?.balance, user?.balance, displayBalance, isLoggedIn]);
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotification();
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -99,7 +62,7 @@ export default function Navbar() {
               viewBox="0 0 100 100"
               xmlns="http://www.w3.org/2000/svg"
             >
-              <circle cx="50" cy="50" fill="currentColor" r="50" />
+              <circle cx="50" cy="50" fill="#d48a11" r="50" />
               <circle
                 cx="50"
                 cy="50"
@@ -179,23 +142,20 @@ export default function Navbar() {
                 {/* 余额区域 - 点击跳转到钱包 */}
                 <Link
                   href="/wallet"
+                  prefetch={false}
                   className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer group"
                 >
                   <div className="flex flex-col items-end mr-1">
                     <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1">
                       总资产
                     </span>
-                    <span className="text-sm font-black text-white leading-none font-mono tracking-tight group-hover:text-primary transition-colors">
-                      {displayBalance}
-                    </span>
+                    <LiveWallet className="group-hover:text-primary transition-colors" />
                   </div>
                   <div className="flex flex-col items-end mr-2">
                     <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1">
                       可用
                     </span>
-                    <span className="text-sm font-black text-poly-green leading-none font-mono tracking-tight group-hover:text-primary transition-colors">
-                      {displayBalance}
-                    </span>
+                    <LiveWallet className="text-poly-green group-hover:text-primary transition-colors" />
                   </div>
                 </Link>
                 <div className="flex items-center gap-2">
@@ -344,7 +304,7 @@ export default function Navbar() {
               </div>
             </>
           ) : (
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
               <Link
                 href="/login"
                 className="flex min-w-[80px] cursor-pointer items-center justify-center rounded-lg h-9 px-4 bg-surface-dark hover:bg-border-dark transition-colors text-white text-sm font-bold leading-normal tracking-wide border border-border-dark"
@@ -353,9 +313,9 @@ export default function Navbar() {
               </Link>
               <Link
                 href="/login"
-                className="flex min-w-[80px] cursor-pointer items-center justify-center rounded-lg h-9 px-4 bg-primary hover:bg-primary-hover transition-colors text-[#18181b] text-sm font-bold leading-normal tracking-wide shadow-[0_0_10px_rgba(236,156,19,0.2)]"
+                className="relative z-10 flex flex-shrink-0 min-w-[80px] cursor-pointer items-center justify-center rounded-lg h-9 px-4 bg-[#ec9c13] hover:bg-primary-hover transition-colors text-[#18181b] text-sm font-bold leading-normal tracking-wide shadow-[0_0_10px_rgba(236,156,19,0.2)] opacity-100 pointer-events-auto"
               >
-                <span className="truncate">注册</span>
+                <span className="truncate text-[#18181b] opacity-100">注册</span>
               </Link>
             </div>
           )}

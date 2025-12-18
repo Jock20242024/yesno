@@ -1,143 +1,87 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { signIn } from "next-auth/react";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
-
+  const handleAdminLogin = async () => {
     try {
-      const response = await fetch("/api/admin/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          adminEmail,
-          adminPassword,
-        }),
+      await signIn("google", {
+        callbackUrl: "/admin/users",
+        redirect: true,
       });
-
-      // 检查响应状态
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        // 登录成功，跳转到后台主页
-        router.push("/admin/dashboard");
-      } else {
-        setError(result.error || "登录失败，请检查凭证");
-      }
     } catch (error) {
       console.error("Admin login error:", error);
-      setError(
-        error instanceof Error 
-          ? error.message 
-          : "网络错误，请稍后重试"
-      );
-    } finally {
-      // 确保 loading 状态总是被重置
-      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0e13] px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0e13] via-[#111418] to-[#0a0e13] px-4">
       <div className="w-full max-w-md">
-        <div className="bg-[#111418] border border-[#283545] rounded-xl p-8 shadow-lg">
+        <div className="bg-[#111418] border border-[#283545] rounded-2xl p-8 md:p-10 shadow-2xl">
           {/* Logo/标题 */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-lg mb-4">
-              <span className="material-symbols-outlined text-white text-3xl">admin_panel_settings</span>
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl mb-6 shadow-lg">
+              <span className="material-symbols-outlined text-white text-4xl">admin_panel_settings</span>
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">管理后台登录</h1>
-            <p className="text-sm text-[#9da8b9]">请输入管理员凭证以继续</p>
+            <h1 className="text-3xl font-bold text-white mb-2">后台管理系统</h1>
+            <p className="text-sm text-[#9da8b9]">Admin Portal</p>
           </div>
 
-          {/* 错误提示 */}
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <p className="text-sm text-red-400">{error}</p>
-            </div>
-          )}
+          {/* 分隔线 */}
+          <div className="flex items-center my-8">
+            <div className="flex-1 border-t border-[#283545]"></div>
+            <span className="px-4 text-xs text-[#637588] uppercase tracking-wider">管理员登录</span>
+            <div className="flex-1 border-t border-[#283545]"></div>
+          </div>
 
-          {/* 登录表单 */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="adminEmail" className="block text-sm font-medium text-[#9da8b9] mb-2">
-                管理员邮箱
-              </label>
-              <input
-                id="adminEmail"
-                type="text"
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-[#0a0e13] border border-[#283545] rounded-lg text-white placeholder-[#637588] focus:outline-none focus:border-primary transition-colors"
-                placeholder="管理员邮箱"
-                disabled={isLoading}
+          {/* Google 登录按钮 */}
+          <button
+            onClick={handleAdminLogin}
+            className="w-full py-4 bg-white hover:bg-gray-50 active:bg-gray-100 text-[#111418] font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-3 shadow-md hover:shadow-lg group"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
               />
-            </div>
-
-            <div>
-              <label htmlFor="adminPassword" className="block text-sm font-medium text-[#9da8b9] mb-2">
-                密码
-              </label>
-              <input
-                id="adminPassword"
-                type="password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-[#0a0e13] border border-[#283545] rounded-lg text-white placeholder-[#637588] focus:outline-none focus:border-primary transition-colors"
-                placeholder="请输入密码"
-                disabled={isLoading}
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
               />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <span className="material-symbols-outlined animate-spin">refresh</span>
-                  <span>登录中...</span>
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined">login</span>
-                  <span>登录</span>
-                </>
-              )}
-            </button>
-          </form>
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+              />
+            </svg>
+            <span className="text-base">Sign in as Admin</span>
+            <span className="material-symbols-outlined text-lg opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward</span>
+          </button>
 
           {/* 提示信息 */}
-          <div className="mt-6 pt-6 border-t border-[#283545]">
-            <p className="text-xs text-center text-[#637588]">
-              管理员凭证：yesno@yesno.com / yesno2025
+          <div className="mt-8 pt-6 border-t border-[#283545]">
+            <p className="text-xs text-center text-[#637588] leading-relaxed">
+              使用 Google 账号登录以访问管理后台
+              <br />
+              只有管理员账号可以访问
             </p>
           </div>
 
+          {/* 返回首页链接 */}
+          <div className="mt-6 text-center">
+            <a
+              href="/"
+              className="text-sm text-[#637588] hover:text-white transition-colors inline-flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-base">arrow_back</span>
+              <span>返回首页</span>
+            </a>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-

@@ -33,6 +33,19 @@ enum TransactionStatus {
   FAILED    // 失败
 }
 
+enum PositionStatus {
+  OPEN    // 持仓中
+  CLOSED  // 已关闭（卖出或结算）
+}
+
+enum TransactionType {
+  DEPOSIT          // 充值
+  WITHDRAW         // 提现
+  BET              // 下注
+  WIN              // 获胜
+  ADMIN_ADJUSTMENT // 管理员调整
+}
+
 // ============================================
 // 核心模型 (Models)
 // ============================================
@@ -40,7 +53,8 @@ enum TransactionStatus {
 model User {
   id            String   @id @default(uuid())
   email         String   @unique
-  passwordHash  String
+  passwordHash  String?
+  provider      String   @default("email")
   balance       Float    @default(0.0)
   walletAddress String?  // 可空字段，无唯一性约束
   isAdmin       Boolean  @default(false)
@@ -50,11 +64,24 @@ model User {
 
   // 关联关系
   orders      Order[]
+  positions   Position[] // ✅ 修复：添加 Position 关系
   deposits    Deposit[]
   withdrawals Withdrawal[]
+  transactions Transaction[] // 资金变动记录
   adminLogs   AdminLog[] @relation("AdminLogs")
+  authSessions AuthSession[]
 
   @@map("users")
+}
+
+model AuthSession {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("auth_sessions")
 }
 
 model Market {
@@ -75,6 +102,7 @@ model Market {
 
   // 关联关系
   orders         Order[]
+  positions      Position[]
 
   @@map("markets")
 }
@@ -87,6 +115,7 @@ model Order {
   amount          Float
   payout          Float?
   feeDeducted     Float    @default(0.0)
+  type            String?  @default("BUY")  // BUY | SELL
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -97,7 +126,30 @@ model Order {
   @@index([userId])
   @@index([marketId])
   @@index([createdAt])
+  @@index([type])
   @@map("orders")
+}
+
+model Position {
+  id              String         @id @default(uuid())
+  userId          String
+  marketId        String
+  outcome         Outcome
+  shares          Float          @default(0.0)
+  avgPrice        Float          @default(0.0)
+  status          PositionStatus @default(OPEN)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // 外键关联
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market          Market         @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketId, outcome, status])
+  @@index([userId])
+  @@index([marketId])
+  @@index([status])
+  @@map("positions")
 }
 
 model Deposit {
@@ -134,6 +186,25 @@ model Withdrawal {
   @@index([status])
   @@index([createdAt])
   @@map("withdrawals")
+}
+
+model Transaction {
+  id        String            @id @default(uuid())
+  userId    String
+  amount    Float             // 正数表示增加，负数表示减少
+  type      TransactionType
+  status    TransactionStatus @default(COMPLETED) // 交易状态
+  reason    String?           // 备注/原因（管理员调整时必填）
+  createdAt DateTime          @default(now())
+
+  // 外键关联
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("transactions")
 }
 
 model AdminLog {

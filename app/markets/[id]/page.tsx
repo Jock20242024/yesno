@@ -10,10 +10,10 @@ import TradeSidebar, { TradeSidebarRef } from "@/components/market-detail/TradeS
 import UserPositionCard from "@/components/market-detail/UserPositionCard";
 import { useStore } from "@/app/context/StoreContext";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useNotification } from "@/components/providers/NotificationProvider";
 import { Market } from "@/types/api";
 import { MarketEvent } from "@/lib/data";
 import { formatUSD } from "@/lib/utils";
-import { toast } from "sonner";
 
 // 新的持仓接口：支持同时持有 YES 和 NO
 interface UserPosition {
@@ -27,8 +27,12 @@ export default function MarketDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  // 架构加固：Page 级组件允许使用 Context，但需要防御性处理
   const { positions: storePositions } = useStore();
-  const { currentUser } = useAuth();
+  const { currentUser, isLoading: authLoading } = useAuth();
+  const { addNotification } = useNotification();
+  
+  // 移除 early return，确保初始 render 直接返回 UI
   
   // API 数据状态
   const [marketData, setMarketData] = useState<Market | null>(null);
@@ -138,72 +142,31 @@ export default function MarketDetailPage() {
     }
   }, [tradeTab]);
 
-  // 加载状态
-  if (isLoading) {
-    return (
-      <main className="flex-1 w-full max-w-[1200px] mx-auto p-8">
-        <div className="flex flex-col items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-pm-green mb-4" />
-          <p className="text-white text-lg font-medium">Loading Market Details...</p>
-        </div>
-      </main>
-    );
-  }
-
-  // 错误状态
-  if (error || !marketData) {
-    return (
-      <main className="flex-1 w-full max-w-[1280px] mx-auto p-8">
-        <div className="flex flex-col items-center justify-center py-20">
-          <h1 className="text-2xl font-bold text-white mb-4">Market not found</h1>
-          <p className="text-zinc-500 mb-6">
-            {error || "The market you're looking for doesn't exist."}
-          </p>
-          <button
-            onClick={() => router.push("/")}
-            className="px-6 py-3 bg-pm-green hover:bg-green-400 text-pm-bg font-bold rounded-xl transition-colors"
-          >
-            返回首页
-          </button>
-        </div>
-      </main>
-    );
-  }
+  // 格式化交易量（移到 return 之前，确保始终可用）
 
   // 格式化交易量
-  const formatVolume = (volume: number): string => {
-    if (volume >= 1000000) {
-      return `$${(volume / 1000000).toFixed(1)}M`;
-    } else if (volume >= 1000) {
-      return `$${(volume / 1000).toFixed(1)}K`;
+  // ========== 修复：格式化交易量，处理 undefined/null 值 ==========
+  const formatVolume = (volume?: number | null): string => {
+    // 安全检查：处理 undefined、null 或无效值
+    if (volume === undefined || volume === null || isNaN(volume)) {
+      return "$0.00"; // 返回安全的默认值
     }
-    return `$${volume.toLocaleString()}`;
+    
+    const volumeNum = Number(volume);
+    if (isNaN(volumeNum) || volumeNum < 0) {
+      return "$0.00";
+    }
+    
+    // 格式化逻辑
+    if (volumeNum >= 1000000) {
+      return `$${(volumeNum / 1000000).toFixed(1)}M`;
+    } else if (volumeNum >= 1000) {
+      return `$${(volumeNum / 1000).toFixed(1)}K`;
+    }
+    return `$${volumeNum.toLocaleString()}`;
   };
 
-  // 创建 MarketEvent 对象用于 MarketHeader
-  const marketEvent: MarketEvent = {
-    id: parseInt(marketData.id),
-    rank: 1,
-    title: marketData.title,
-    category: marketData.category,
-    categorySlug: marketData.categorySlug,
-    icon: "Bitcoin", // 可以根据 category 映射
-    iconColor: "bg-[#f7931a]",
-    yesPercent: marketData.yesPercent,
-    noPercent: marketData.noPercent,
-    deadline: new Date(marketData.endTime).toISOString().split("T")[0],
-    imageUrl: marketData.imageUrl,
-    volume: formatVolume(marketData.volume),
-    comments: marketData.commentsCount,
-  };
-
-  // 转换状态格式用于 MarketHeader
-  const marketStatus = marketData.status === "OPEN" ? "open" : "closed";
-  const marketResult = marketData.winningOutcome === "YES" ? "YES_WON" : 
-                       marketData.winningOutcome === "NO" ? "NO_WON" : null;
-  
-  // 计算费率（默认 2%，已结束市场 1%）
-  const feeRate = marketData.status === "RESOLVED" ? 0.01 : 0.02;
+  // 这些变量已在条件渲染块内计算，不再提前计算
 
   // 处理交易成功回调
   // 修复交易状态管理：下注成功后，刷新详情页订单列表，并根据用户持仓情况禁用或修改交易按钮状态
@@ -275,9 +238,10 @@ export default function MarketDetailPage() {
       const result = await response.json();
 
       if (result.success) {
-        toast.success("市场已结算！", {
-          description: `结算结果: ${resolutionOutcome === "Invalid" ? "无效" : resolutionOutcome}`,
-          duration: 5000,
+        addNotification({
+          type: "success",
+          title: "市场已结算！",
+          message: `结算结果: ${resolutionOutcome === "Invalid" ? "无效" : resolutionOutcome}`,
         });
 
         // 更新市场数据
@@ -294,14 +258,18 @@ export default function MarketDetailPage() {
         // 重新获取市场数据以确保同步
         await fetchMarket();
       } else {
-        toast.error("结算失败", {
-          description: result.error || "请稍后重试",
+        addNotification({
+          type: "error",
+          title: "结算失败",
+          message: result.error || "请稍后重试",
         });
       }
     } catch (error) {
       console.error("Market resolution error:", error);
-      toast.error("结算失败", {
-        description: "网络错误，请稍后重试",
+      addNotification({
+        type: "error",
+        title: "结算失败",
+        message: "网络错误，请稍后重试",
       });
     } finally {
       setIsResolving(false);
@@ -310,9 +278,67 @@ export default function MarketDetailPage() {
 
   return (
       <main className="flex-1 w-full max-w-[1200px] mx-auto p-8 flex flex-row gap-8">
+      {/* 加载状态：显示空状态，不阻塞渲染 */}
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center py-20 w-full">
+          <Loader2 className="w-8 h-8 animate-spin text-pm-green mb-4" />
+          <p className="text-white text-lg font-medium">Loading Market Details...</p>
+        </div>
+      )}
+
+      {/* 错误状态：显示空状态，不阻塞渲染 */}
+      {(error || !marketData) && !isLoading && (
+        <div className="flex flex-col items-center justify-center py-20 w-full">
+          <h1 className="text-2xl font-bold text-white mb-4">Market not found</h1>
+          <p className="text-zinc-500 mb-6">
+            {error || "The market you're looking for doesn't exist."}
+          </p>
+          <button
+            onClick={() => router.push("/")}
+            className="px-6 py-3 bg-pm-green hover:bg-green-400 text-pm-bg font-bold rounded-xl transition-colors"
+          >
+            返回首页
+          </button>
+        </div>
+      )}
+
+      {/* 正常内容：只在有数据且不在加载时显示 */}
+      {!isLoading && marketData && (() => {
+        // 创建 MarketEvent 对象用于 MarketHeader
+        const marketEvent: MarketEvent = {
+          id: parseInt(marketData.id),
+          rank: 1,
+          title: marketData.title,
+          category: marketData.category,
+          categorySlug: marketData.categorySlug,
+          icon: "Bitcoin",
+          iconColor: "bg-[#f7931a]",
+          yesPercent: marketData.yesPercent,
+          noPercent: marketData.noPercent,
+          deadline: new Date(marketData.endTime).toISOString().split("T")[0],
+          imageUrl: marketData.imageUrl,
+          volume: formatVolume(marketData.volume),
+          comments: marketData.commentsCount,
+        };
+
+        // 转换状态格式用于 MarketHeader
+        const marketStatus = marketData.status === "OPEN" ? "open" : "closed";
+        const marketResult = marketData.winningOutcome === "YES" ? "YES_WON" : 
+                             marketData.winningOutcome === "NO" ? "NO_WON" : null;
+        
+        // 计算费率（默认 2%，已结束市场 1%）
+        const feeRate = marketData.status === "RESOLVED" ? 0.01 : 0.02;
+
+        return (
+          <>
       <div className="flex-1 flex flex-col">
         {/* Market Header */}
-        <MarketHeader event={marketEvent} status={marketStatus} result={marketResult} />
+        <MarketHeader 
+          event={marketEvent} 
+          status={marketStatus} 
+          result={marketResult}
+          closingDate={marketData.endTime}
+        />
 
         {/* 管理员结算 UI */}
         {isAdmin && marketData.status === "OPEN" && (
@@ -505,6 +531,9 @@ export default function MarketDetailPage() {
           onTradeSuccess={handleTradeSuccess}
         />
       </div>
+          </>
+        );
+      })()}
     </main>
   );
 }

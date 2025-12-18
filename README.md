@@ -150,14 +150,26 @@ yesno-app/
 
 ### 环境变量
 
-在项目根目录创建 `.env.local` 文件（可选）：
+在项目根目录创建 `.env.local` 文件：
 
 ```env
+# 数据库配置
+DATABASE_URL="postgresql://user:password@localhost:5432/yesno_db"
+
+# NextAuth.js 配置
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your-secret-key-here-change-in-production
+
+# Google OAuth 配置
+# 获取方式：https://console.cloud.google.com/apis/credentials
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
 # API 配置
 NEXT_PUBLIC_API_URL=http://localhost:3000
 
 # 其他环境变量
-# ...
+NODE_ENV=development
 ```
 
 ### Mock 数据
