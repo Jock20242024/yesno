@@ -11,18 +11,51 @@ interface AdminLayoutProps {
 }
 
 export default async function AdminLayout({ children }: AdminLayoutProps) {
+  // 🔥 布局组件"终极审判"：这是最后一道防线
+  // 逻辑：获取 session。只有当明确 session.user 存在且 session.user.isAdmin === false 时，才执行重定向到 /
+  // 关键：如果 session 还没加载出来，显示一个 Loading... 界面，绝对不要跳转
+
   // 权限检查：必须使用服务器端会话验证
   const session = await auth();
 
+  // 🛡️ 权限锁：页面级防御 - 确保管理员后台的 Layout 逻辑是最终防线
+  // 🛡️ 监控：保留我们之前的 🛡️ [Admin-Layout] 日志，直到测试完全通过
+  console.log('🛡️ [Admin-Layout] 权限检查:', session?.user);
+
   // 情况 A: 如果用户未登录，重定向到 admin 登录页
   if (!session || !session.user) {
+    // 🛡️ 强制"打桩"监控：在执行 redirect 之前，打印 Session 数据
+    console.log('🛡️ [Admin-Layout] 拦截检查 - Session 数据:', JSON.stringify(session?.user));
     redirect("/admin/login");
   }
-
-  // 情况 B: 如果已登录但不是管理员，重定向到首页
-  if (!session.user.isAdmin) {
+  
+  // 🔥 布局组件"终极审判"：只有当明确 session.user.isAdmin === false 时，才执行重定向到 /
+  // 如果 isAdmin 为 undefined 或 true，都不应该重定向
+  const isAdmin = (session.user as any).isAdmin;
+  
+  if (isAdmin === false) {
+    // 🔥 明确是 false，才重定向
+    console.log('🛡️ [Admin-Layout] 权限拦截：已登录但明确不是管理员（isAdmin === false），重定向到首页', {
+      email: session.user.email,
+      isAdmin: isAdmin,
+    });
     redirect("/");
   }
+
+  // 如果 isAdmin 为 undefined 或 true，继续渲染（包括 Loading 状态）
+  if (isAdmin === undefined) {
+    console.log('🛡️ [Admin-Layout] 权限状态未确定（isAdmin === undefined），显示 Loading 界面');
+    return (
+      <div className="relative flex h-screen w-full flex-row overflow-hidden items-center justify-center">
+        <div className="text-white text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  console.log('🛡️ [Admin-Layout] 权限验证通过：允许渲染管理员页面', {
+    email: session.user.email,
+    isAdmin: isAdmin,
+  });
 
   // 情况 C: 是管理员，正常渲染 children
 

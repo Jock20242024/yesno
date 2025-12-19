@@ -20,68 +20,88 @@ interface AssetsData {
   totalEquity: number;
 }
 
-const fetcher = async (url: string): Promise<number> => {
-  try {
-    // 给 URL 加上时间戳参数，防止浏览器死缓存
-    const timestampedUrl = url + '?t=' + new Date().getTime();
-    
-    console.log('💰 [LiveWallet] Fetching total balance from:', timestampedUrl);
-    
-    // 🔥 彻底对齐数据：使用与 Dashboard 完全一致的 headers
-    const response = await fetch(timestampedUrl, {
-      method: 'GET',
-      credentials: 'include', // 与 Dashboard 一致：包含 Cookie
-      cache: 'no-store', // 与 Dashboard 一致：禁用缓存
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    console.log('💰 [LiveWallet] Response status:', response.status, response.statusText);
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        console.log('💰 [LiveWallet] Unauthorized, returning 0');
-        return 0;
-      }
-      const errorText = await response.text();
-      console.error('💰 [LiveWallet] Fetch failed:', response.status, errorText);
-      return 0; // 发生错误时返回 0，避免 SWR 停止重试
-    }
-
-    const result = await response.json();
-    console.log('💰 [LiveWallet] Fetched assets data:', result);
-    
-    // 🔥 关键修复：从 /api/user/assets 获取 totalBalance（总资产）
-    // 这与 WalletPage 主页面使用相同的数据源，确保数据一致
-    const totalBalance = result?.success && result?.data?.totalBalance 
-      ? result.data.totalBalance 
-      : 0;
-    
-    console.log('💰 [LiveWallet] Parsed totalBalance:', totalBalance);
-    
-    return totalBalance;
-  } catch (error) {
-    console.error('💰 [LiveWallet] Fetcher error:', error);
-    // 发生错误时返回 0，而不是抛出异常，避免 SWR 停止重试
-    return 0;
-  }
-};
-
 interface LiveWalletProps {
   className?: string;
 }
 
 export default function LiveWallet({ className = "" }: LiveWalletProps) {
-  const { isLoggedIn, isLoading: authLoading } = useAuth();
+  const { isLoggedIn, isLoading: authLoading, logout, handleApiGuestResponse } = useAuth();
+
+  // 🔴 [AUTH_LEAK] 诊断日志：记录 Auth 状态
+  console.log('🔴 [AUTH_LEAK] isLoggedIn:', isLoggedIn, 'authLoading:', authLoading);
 
   // 🔥 架构修复：不要在 authLoading 为 true 时就去解析余额
   // 只有当 isLoggedIn 为 true 时才发起请求
   const shouldFetch = isLoggedIn && !authLoading;
 
+  // 🔥 修复：检测 isGuest: true，强制触发退出登录
+  // fetcher 必须放在组件内部，以便访问 logout 函数
+  const fetcher = async (url: string): Promise<number> => {
+    try {
+      // 给 URL 加上时间戳参数，防止浏览器死缓存
+      const timestampedUrl = url + '?t=' + new Date().getTime();
+      
+      console.log('💰 [LiveWallet] Fetching total balance from:', timestampedUrl);
+      
+      // 🔥 彻底对齐数据：使用与 Dashboard 完全一致的 headers
+      const response = await fetch(timestampedUrl, {
+        method: 'GET',
+        credentials: 'include', // 与 Dashboard 一致：包含 Cookie
+        cache: 'no-store', // 与 Dashboard 一致：禁用缓存
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('💰 [LiveWallet] Response status:', response.status, response.statusText);
+
+      // 🔥 修复：统一使用 AuthProvider 的 handleApiGuestResponse 处理 isGuest/401
+      // 先处理响应状态，检测 401 或 isGuest
+      if (!response.ok && response.status === 401) {
+        // 401 状态码，先调用 handleApiGuestResponse 处理
+        if (handleApiGuestResponse(response)) {
+          console.log('🔴 [LiveWallet] 已触发退出登录，返回 -1 表示需要重新登录');
+          return -1; // 使用 -1 作为特殊标记，表示需要重新登录
+        }
+        return 0;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('💰 [LiveWallet] Fetch failed:', response.status, errorText);
+        return 0; // 发生错误时返回 0，避免 SWR 停止重试
+      }
+
+      // 解析响应数据
+      const result = await response.json();
+      console.log('💰 [LiveWallet] Fetched assets data:', result);
+      
+      // 检测 isGuest: true
+      if (handleApiGuestResponse(response, result)) {
+        console.log('🔴 [LiveWallet] 已触发退出登录，返回 -1 表示需要重新登录');
+        return -1; // 使用 -1 作为特殊标记，表示需要重新登录
+      }
+      
+      // 🔥 关键修复：从 /api/user/assets 获取 totalBalance（总资产）
+      // 这与 WalletPage 主页面使用相同的数据源，确保数据一致
+      const totalBalance = result?.success && result?.data?.totalBalance 
+        ? result.data.totalBalance 
+        : 0;
+      
+      console.log('💰 [LiveWallet] Parsed totalBalance:', totalBalance);
+      
+      return totalBalance;
+    } catch (error) {
+      console.error('💰 [LiveWallet] Fetcher error:', error);
+      // 发生错误时返回 0，而不是抛出异常，避免 SWR 停止重试
+      return 0;
+    }
+  };
+
   // 🔥 关键修复：使用 /api/user/assets 获取总资产，与主页面数据源一致
+  // 🔴 [临时诊断] 强制发送请求：无论登录与否都发送请求，用于诊断
   const { data: totalBalance, isLoading, error } = useSWR<number>(
-    shouldFetch ? '/api/user/assets' : null,
+    '/api/user/assets',  // 🔴 临时诊断：强制发送请求，不再判断 shouldFetch
     fetcher,
     {
       refreshInterval: shouldFetch ? 5000 : 0, // 5秒刷新一次（资产数据不需要太频繁）
@@ -112,6 +132,15 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
     return (
       <span className={`text-sm font-black text-white leading-none font-mono tracking-tight ${className} animate-pulse`}>
         <span className="opacity-50">...</span>
+      </span>
+    );
+  }
+
+  // 🔥 修复：如果 totalBalance 为 -1，表示需要重新登录，显示提示而不是余额
+  if (totalBalance === -1) {
+    return (
+      <span className={`text-xs font-medium text-yellow-400 leading-none ${className}`}>
+        需要重新登录
       </span>
     );
   }

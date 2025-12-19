@@ -135,6 +135,42 @@ export default function AdminSidebar() {
             </Link>
 
             <Link
+              href="/admin/markets/review"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                pathname === "/admin/markets/review"
+                  ? "bg-primary text-white shadow-sm hover:bg-blue-600"
+                  : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
+              }`}
+            >
+              <span className="material-symbols-outlined">gavel</span>
+              <p className="text-sm font-medium leading-normal">事件审核中心</p>
+            </Link>
+
+            <Link
+              href="/admin/categories"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                pathname === "/admin/categories"
+                  ? "bg-primary text-white shadow-sm hover:bg-blue-600"
+                  : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
+              }`}
+            >
+              <span className="material-symbols-outlined">layers</span>
+              <p className="text-sm font-medium leading-normal">分类管理</p>
+            </Link>
+
+            <Link
+              href="/admin/stats"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                pathname === "/admin/stats"
+                  ? "bg-primary text-white shadow-sm hover:bg-blue-600"
+                  : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
+              }`}
+            >
+              <span className="material-symbols-outlined">bar_chart</span>
+              <p className="text-sm font-medium leading-normal">全局指标管理</p>
+            </Link>
+
+            <Link
               href="/admin/orders"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                 pathname === "/admin/orders"
@@ -144,6 +180,18 @@ export default function AdminSidebar() {
             >
               <span className="material-symbols-outlined">list_alt</span>
               <p className="text-sm font-medium leading-normal">用户下注订单列表</p>
+            </Link>
+
+            <Link
+              href="/admin/factory"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                pathname === "/admin/factory"
+                  ? "bg-primary text-white shadow-sm hover:bg-blue-600"
+                  : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
+              }`}
+            >
+              <span className="material-symbols-outlined">precision_manufacturing</span>
+              <p className="text-sm font-medium leading-normal">自动化工厂 (Market Factory)</p>
             </Link>
 
             {/* 报表与日志分组 */}

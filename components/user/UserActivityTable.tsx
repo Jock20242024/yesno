@@ -57,8 +57,8 @@ const mockActivities: ActivityItem[] = [
 ];
 
 const tabs = [
-  { id: "positions", label: "Positions" },
-  { id: "activity", label: "Activity" },
+  { id: "positions", label: "持仓" },
+  { id: "activity", label: "活跃" },
 ];
 
 export default function UserActivityTable() {
@@ -90,13 +90,13 @@ export default function UserActivityTable() {
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  TYPE
+                  类型
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  MARKET
+                  市场
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  AMOUNT
+                  价值
                 </th>
               </tr>
             </thead>
@@ -114,7 +114,7 @@ export default function UserActivityTable() {
                           : "text-pm-red"
                       }`}
                     >
-                      {activity.type}
+                      {activity.type === "Buy" ? "买入" : "卖出"}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -140,7 +140,7 @@ export default function UserActivityTable() {
       {/* Positions Tab 内容（占位） */}
       {activeTab === "positions" && (
         <div className="p-8 text-center text-zinc-400">
-          <p>No open positions</p>
+          <p>暂无持仓</p>
         </div>
       )}
     </div>

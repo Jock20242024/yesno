@@ -33,12 +33,13 @@ export async function GET() {
     // 🔥 强制 API 降级：使用 auth() 识别用户（NextAuth v5）
     const session = await auth();
     
+    // 🔥 身份识别标准化：直接使用 session.user.id，废弃 email 查找逻辑
     // 🔥 强制 API 健壮化：容错逻辑 - 如果 auth() 获取的 session 为空，禁止返回 401
     // 请返回 { success: true, balance: 0, isGuest: true } 并给状态码 200
     // 这样可以彻底阻止前端 AuthProvider 触发登出死循环
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       console.log('DEBUG: Session missing in Assets API');
-      console.log('🔒 [Assets API] No session or email, returning 200 with balance: 0, isGuest: true');
+      console.log('🔒 [Assets API] No session or user.id, returning 200 with balance: 0, isGuest: true');
       // 🔥 强制 API 健壮化：返回 200 状态码，而不是 401，彻底阻止前端 AuthProvider 触发登出死循环
       const response = NextResponse.json({
         success: true,
@@ -64,65 +65,10 @@ export async function GET() {
       return response;
     }
 
-    // 🔥 强制统一查询 ID：先从 session 获取 user.email，查询数据库拿到该用户的唯一 id
-    // 🔥 修复：处理数据库连接超时错误，返回降级数据而不是 isGuest: true
-    let dbUser;
-    try {
-      dbUser = await DBService.findUserByEmail(session.user.email);
-    } catch (dbError: any) {
-      // 🔥 修复：数据库连接超时或其他错误时，返回降级数据（零值），但不返回 isGuest: true
-      // 因为用户确实有有效的 session，只是数据库暂时不可用
-      console.error('❌ [Assets API] 数据库查询失败（可能是超时）:', dbError?.message || dbError);
-      console.log('🔒 [Assets API] 数据库查询失败，返回降级数据（零值）而非 isGuest: true');
-      const response = NextResponse.json({
-        success: true,
-        // 🔥 修复：不返回 isGuest: true，因为用户有有效的 session
-        data: {
-          balance: 0,
-          availableBalance: 0,
-          frozenBalance: 0,
-          positionsValue: 0,
-          totalBalance: 0,
-          totalEquity: 0,
-          historical: {
-            '1D': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-            '1W': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-            '1M': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-            '1Y': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-          },
-        },
-      }, { status: 200 });
-      response.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
-      return response;
-    }
+    // 🔥 身份识别标准化：直接从 session.user.id 获取用户 ID，一步直达查询
+    const userId = session.user.id;
     
-    if (!dbUser) {
-      console.log('🔒 [Assets API] User not found in database, returning 200 with balance: 0');
-      const response = NextResponse.json({
-        success: true,
-        data: {
-          balance: 0,
-          availableBalance: 0,
-          frozenBalance: 0,
-          positionsValue: 0,
-          totalBalance: 0,
-          totalEquity: 0,
-          historical: {
-            '1D': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-            '1W': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-            '1M': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-            '1Y': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-          },
-        },
-      }, { status: 200 });
-      response.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
-      return response;
-    }
-
-    // 🔥 强制统一查询 ID：只根据这个 id 查 balance
-    const userId = dbUser.id;
-    
-    // 🔥 使用 user.id 重新查询数据库获取最新 balance（确保数据一致性）
+    // 🔥 性能优化：直接基于 ID 查询，只查询必需的字段（balance）
     // 🔥 修复：处理数据库查询超时错误
     let user;
     try {
@@ -134,6 +80,22 @@ export async function GET() {
           balance: true,
         },
       });
+      
+      // ========== STEP 1: 深度日志埋点 - User 查询结果 ==========
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🔍 [STEP 1] User 查询结果（数据库原始值）:');
+      console.log('  ✅ User 对象存在:', !!user);
+      if (user) {
+        console.log('  📋 User ID:', user.id);
+        console.log('  📧 User Email:', user.email);
+        console.log('  💰 User.balance (原始数据库值):', user.balance);
+        console.log('  💰 User.balance 类型:', typeof user.balance);
+        console.log('  💰 User.balance 是否为 null:', user.balance === null);
+        console.log('  💰 User.balance 是否为 undefined:', user.balance === undefined);
+      } else {
+        console.log('  ⚠️ User 对象为 null 或 undefined');
+      }
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (dbError: any) {
       // 🔥 修复：数据库连接超时或其他错误时，返回降级数据（零值），但不返回 isGuest: true
       console.error('❌ [Assets API] 用户查询失败（可能是超时）:', dbError?.message || dbError);
@@ -182,16 +144,18 @@ export async function GET() {
       return response;
     }
 
-    const availableBalance = user.balance || 0;
+    // 🔥 余额字段保护：使用 ?? 0 确保即使字段为 null，也能稳定得到数字 0
+    const availableBalance = user.balance ?? 0;
 
-    // 🔥 调试日志：在返回数据前，打印 UserID 和 Balance
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('💰 [Assets API] Balance 查询结果:');
-    console.log('  UserID:', user.id);
-    console.log('  Email:', session.user.email);
-    console.log('  Balance:', user.balance);
-    console.log('  AvailableBalance:', availableBalance);
-    console.log('═══════════════════════════════════════════════════════');
+    // ========== STEP 2: 深度日志埋点 - AvailableBalance 计算后 ==========
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 [STEP 2] AvailableBalance 计算结果:');
+    console.log('  💰 user.balance (原始值):', user.balance);
+    console.log('  💰 user.balance ?? 0 计算结果:', availableBalance);
+    console.log('  📊 availableBalance 类型:', typeof availableBalance);
+    console.log('  ✅ availableBalance 是否为数字:', typeof availableBalance === 'number');
+    console.log('  ⚠️ availableBalance 是否为 NaN:', isNaN(availableBalance));
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // 2. 获取用户所有订单
     const orders = await DBService.findOrdersByUserId(userId);
@@ -253,6 +217,20 @@ export async function GET() {
 
     // 5. 计算总资产
     const totalBalance = availableBalance + frozenBalance + positionsValue;
+
+    // ========== STEP 3: 深度日志埋点 - TotalBalance 计算后（最终返回前）==========
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 [STEP 3] TotalBalance 最终计算结果（即将返回给前端）:');
+    console.log('  💰 availableBalance:', availableBalance, `(类型: ${typeof availableBalance})`);
+    console.log('  🧊 frozenBalance:', frozenBalance, `(类型: ${typeof frozenBalance})`);
+    console.log('  📈 positionsValue:', positionsValue, `(类型: ${typeof positionsValue})`);
+    console.log('  🧮 计算公式: totalBalance = availableBalance + frozenBalance + positionsValue');
+    console.log('  🧮 计算过程:', `${availableBalance} + ${frozenBalance} + ${positionsValue}`);
+    console.log('  💎 totalBalance (最终结果):', totalBalance, `(类型: ${typeof totalBalance})`);
+    console.log('  ⚠️ totalBalance 是否为 NaN:', isNaN(totalBalance));
+    console.log('  ⚠️ totalBalance 是否为 0:', totalBalance === 0);
+    console.log('  ✅ 即将返回的 JSON.data.balance 字段值:', totalBalance);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // 6. 计算历史资产（用于计算收益）
     // 获取不同时间点的订单和交易记录

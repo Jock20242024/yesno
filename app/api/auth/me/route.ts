@@ -44,8 +44,9 @@ export async function GET() {
         id: user.id,
         email: user.email,
         provider: user.provider,
-        isAdmin: user.isAdmin || false,
+        isAdmin: user.isAdmin === true, // 🔥 确保如果数据库中是 true，API 必须返回 true
         balance: user.balance || 0,
+        avatar: (user as any).avatar || "", // 确保字段存在，即使数据库中没有该字段也返回空字符串
       },
     });
   } catch (error) {

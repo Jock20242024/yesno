@@ -48,21 +48,25 @@ export default function UserProfileHeader({
           {/* 用户头像和基本信息 */}
           <div className="flex items-center gap-4">
             <div className="relative">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-pm-green via-primary to-pm-blue flex items-center justify-center text-white text-2xl font-bold">
-                {userName.charAt(0).toUpperCase()}
+              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#D4AF37] flex-shrink-0 bg-pm-card" style={{ boxShadow: '0 0 8px rgba(212, 175, 55, 0.3)' }}>
+                <img
+                  src="/logo.svg"
+                  alt={userName}
+                  className="w-full h-full object-cover"
+                />
               </div>
             </div>
             <div className="flex flex-col gap-2">
               <h1 className="text-2xl font-black text-white">{userName}</h1>
               <button className="w-fit px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm font-medium text-white transition-colors">
-                Connect X
+                连接 X
               </button>
             </div>
           </div>
 
           {/* 注册日期 */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-400">Joined</span>
+            <span className="text-xs text-zinc-400">加入时间</span>
             <span className="text-sm text-zinc-300">{joinDate}</span>
           </div>
 
@@ -70,19 +74,19 @@ export default function UserProfileHeader({
           <div className="grid grid-cols-3 gap-4">
             <div className="flex flex-col gap-1">
               <span className="text-xs text-zinc-400 uppercase tracking-wider">
-                Positions Value
+                持仓价值
               </span>
               <span className="text-lg font-bold text-white">{positionsValue}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-zinc-400 uppercase tracking-wider">
-                Biggest Win
+                最高收益
               </span>
               <span className="text-lg font-bold text-pm-green">{biggestWin}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-zinc-400 uppercase tracking-wider">
-                Predictions
+                预测次数
               </span>
               <span className="text-lg font-bold text-white">{predictions}</span>
             </div>
@@ -95,7 +99,7 @@ export default function UserProfileHeader({
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-zinc-400 uppercase tracking-wider">
-                  Profit/Loss
+                  盈利/亏损
                 </span>
               </div>
               <div className="flex items-baseline gap-2">

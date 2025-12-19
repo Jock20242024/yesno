@@ -187,17 +187,49 @@ export const DBService = {
 
   /**
    * 获取所有市场
+   * @param categorySlug 分类 slug（可选）
+   * @param includePending 是否包含待审核的市场（默认 false，只返回已发布的）
    * @returns Promise<Market[]> 市场数组
    */
-  async getAllMarkets(categorySlug?: string): Promise<Market[]> {
+  async getAllMarkets(categorySlug?: string, includePending: boolean = false): Promise<Market[]> {
     // 构建查询条件
     const where: any = {};
+    
+    // 🔥 默认只返回已发布的市场（除非 explicitly 指定 includePending）
+    if (!includePending) {
+      where.reviewStatus = 'PUBLISHED';
+    }
+    
+    // 🔥 支持通过多对多关系筛选分类
     if (categorySlug) {
-      where.categorySlug = categorySlug;
+      // 查找对应的分类
+      const category = await prisma.category.findFirst({
+        where: { slug: categorySlug },
+      });
+      
+      if (category) {
+        where.categories = {
+          some: {
+            categoryId: category.id,
+          },
+        };
+      }
     }
 
     const dbMarkets = await prisma.market.findMany({
       where,
+      include: {
+        categories: {
+          include: {
+            category: {
+              select: {
+                name: true,
+                slug: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -212,9 +244,18 @@ export const DBService = {
       totalYes: dbMarket.totalYes,
       totalNo: dbMarket.totalNo,
       feeRate: dbMarket.feeRate,
-      category: dbMarket.category || undefined,
-      categorySlug: dbMarket.categorySlug || undefined,
+      category: dbMarket.categories[0]?.category?.name || dbMarket.category || undefined,
+      categorySlug: dbMarket.categories[0]?.category?.slug || dbMarket.categorySlug || undefined,
       createdAt: dbMarket.createdAt.toISOString(),
+      // 添加 isHot 字段（用于前端筛选）
+      ...(dbMarket.isHot !== undefined && { isHot: dbMarket.isHot } as any),
+      // 添加 volume 字段（用于排序，兼容性字段）
+      volume: dbMarket.totalVolume || 0,
+      totalVolume: dbMarket.totalVolume || 0,
+      // 添加 yesPercent 字段（用于显示）
+      yesPercent: dbMarket.totalYes && dbMarket.totalNo
+        ? Math.round((dbMarket.totalYes / (dbMarket.totalYes + dbMarket.totalNo)) * 100)
+        : 50,
     }));
   },
 
@@ -250,10 +291,13 @@ export const DBService = {
   /**
    * 添加新市场
    * @param market 市场对象
-   * @param options 可选参数（category 和 categorySlug）
+   * @param options 可选参数（category, categorySlug, reviewStatus）
    * @returns Promise<Market> 创建的市场对象
    */
-  async addMarket(market: Market, options?: { category?: string; categorySlug?: string }): Promise<Market> {
+  async addMarket(
+    market: Market,
+    options?: { category?: string; categorySlug?: string; reviewStatus?: 'PENDING' | 'PUBLISHED' | 'REJECTED' }
+  ): Promise<Market> {
     const dbMarket = await prisma.market.create({
       data: {
         title: market.title,
@@ -267,6 +311,8 @@ export const DBService = {
         feeRate: market.feeRate,
         category: options?.category || market.category || null,
         categorySlug: options?.categorySlug || market.categorySlug || null,
+        // 如果未指定 reviewStatus，默认为 PUBLISHED（管理员手动创建）
+        reviewStatus: options?.reviewStatus || 'PUBLISHED',
       },
     });
 

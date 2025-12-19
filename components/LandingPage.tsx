@@ -13,7 +13,7 @@ export default function LandingPage() {
             <span className="text-primary">预测未来</span>，赢取丰厚奖励
           </h1>
           <p className="text-text-secondary text-lg font-normal leading-normal max-w-[600px]">
-            加入全球最大的预测市场。不仅是旁观者，更是参与者。交易您对世界大事的看法，在每一份不确定中发现价值。
+            加入全球预测市场。不仅是旁观者，更是参与者。交易您对世界大事的看法，在每一份不确定中发现价值。
           </p>
           <div className="flex gap-4 mt-2">
             <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark px-3 py-1.5 rounded-full border border-border-dark">

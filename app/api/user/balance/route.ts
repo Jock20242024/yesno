@@ -21,8 +21,11 @@ export async function GET(request: Request) {
     console.log('🔍 [Balance API] Cookies received:', cookieHeader || 'No cookies');
     console.log('🔍 [Balance API] All request headers:', Object.fromEntries(request.headers.entries()));
     // 1. 获取 Session
-    const session = await auth();
-    console.log('🔍 [Balance API] Session User Email:', session?.user?.email);
+    let session;
+    try {
+      session = await auth();
+      console.log('🔍 [Balance API] Session User Email:', session?.user?.email);
+    } catch (sessionError) {
       console.error("❌ [Balance API] Session fetch failed:", sessionError);
       // 即使 session 获取失败，也返回 200 状态码，避免前端崩溃
       const response = NextResponse.json({ balance: 0 }, { status: 200 });

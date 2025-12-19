@@ -202,18 +202,12 @@ export default function RankingTable() {
                         href={`/rank/${user.name}`}
                         className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                       >
-                        <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center overflow-hidden">
-                          {user.avatar ? (
-                            <img
-                              src={user.avatar}
-                              alt={user.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <span className="text-white text-sm font-bold">
-                              {user.name.charAt(0)}
-                            </span>
-                          )}
+                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#D4AF37] flex-shrink-0 bg-pm-card" style={{ boxShadow: '0 0 8px rgba(212, 175, 55, 0.3)' }}>
+                          <img
+                            src="/logo.svg"
+                            alt={user.name}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                         <span className="text-white text-sm font-medium">
                           {user.name}

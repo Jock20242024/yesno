@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useNotification } from "@/components/providers/NotificationProvider";
-import { Settings, Users, Key, LogOut, Loader2, BarChart3 } from "lucide-react";
+import { Settings, Users, Key, LogOut, Loader2, BarChart3, HelpCircle, Search, TrendingUp, Calendar, Share2, X } from "lucide-react";
 import SettingsTab from "@/components/profile/SettingsTab";
 import ReferralTab from "@/components/profile/ReferralTab";
 import ApiManagementTab from "@/components/profile/ApiManagementTab";
@@ -17,8 +17,266 @@ import { Order, Deposit, Withdrawal, TransactionStatus } from "@/types/data";
 
 type TabType = "overview" | "settings" | "referral" | "api";
 
+// 个人概览组件（Polymarket 风格）
+function OverviewTab({ 
+  user, 
+  userData, 
+  isLoading, 
+  error,
+  orders,
+  ordersLoading,
+}: {
+  user: any;
+  userData: any;
+  isLoading: boolean;
+  error: string | null;
+  orders: any[];
+  ordersLoading: boolean;
+}) {
+  const [timeFilter, setTimeFilter] = useState<"1D" | "1W" | "全部">("全部");
+  const [listTab, setListTab] = useState<"positions" | "activity">("positions");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"value" | "none">("none");
+
+  // 数据容错：确保所有数值都有默认值
+  const profitLoss = (!error && userData?.profitLoss) ? userData.profitLoss : 0;
+  const positionsValue = (!error && userData?.positionsValue) ? userData.positionsValue : 0;
+  const biggestWin = (!error && userData?.biggestWin) ? userData.biggestWin : 0;
+  const predictionsCount = (!error && userData?.predictionsCount) ? userData.predictionsCount : 0;
+  const userName = user?.name || user?.email?.split("@")[0] || "用户";
+  const joinDate = "2025年10月加入"; // Mock 数据
+
+  // Mock 职位数据（容错处理）
+  const positions = (orders || []).map((order, index) => ({
+    id: order.id || `pos-${index}`,
+    marketId: order.marketId || 1,
+    marketName: `市场 ${index + 1}`,
+    averagePrice: 0.5,
+    currentPrice: 0.5,
+    value: positionsValue / (orders.length || 1),
+    pnlPercent: 0,
+  }));
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* 顶部双栏布局 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 左侧：用户信息卡片 */}
+        <div className="bg-[#0F111A] rounded-xl border border-pm-border p-6">
+          {isLoading ? (
+            <div className="animate-pulse space-y-4">
+              <div className="h-8 w-32 bg-pm-card rounded"></div>
+              <div className="h-4 w-24 bg-pm-card rounded"></div>
+              <div className="h-4 w-40 bg-pm-card rounded"></div>
+            </div>
+          ) : (
+            <>
+              {/* 用户名 */}
+              <h2 className="text-2xl font-bold text-white mb-4">{userName}</h2>
+              
+              {/* 加入日期和社交链接 */}
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex items-center gap-2 text-pm-text-dim text-sm">
+                  <Calendar className="w-4 h-4" />
+                  <span>{joinDate}</span>
+                </div>
+                <a 
+                  href="#" 
+                  className="flex items-center gap-2 text-pm-text-dim hover:text-white text-sm transition-colors"
+                  onClick={(e) => { e.preventDefault(); }}
+                >
+                  <X size={16} className="text-pm-text-dim" />
+                </a>
+              </div>
+
+              {/* 三个小指标 */}
+              <div className="grid grid-cols-3 gap-4 pt-6 border-t border-pm-border">
+                <div className="flex flex-col">
+                  <span className="text-xs text-pm-text-dim uppercase tracking-wider mb-1">职位价值</span>
+                  <span className="text-lg font-bold text-white">{formatUSD(positionsValue)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-pm-text-dim uppercase tracking-wider mb-1">最大胜利</span>
+                  <span className="text-lg font-bold text-pm-green">{formatUSD(biggestWin)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-pm-text-dim uppercase tracking-wider mb-1">预测次数</span>
+                  <span className="text-lg font-bold text-white">{predictionsCount}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* 右侧：利润看板 */}
+        <div className="bg-[#0F111A] rounded-xl border border-pm-border p-6">
+          {isLoading ? (
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 w-24 bg-pm-card rounded"></div>
+              <div className="h-12 w-48 bg-pm-card rounded"></div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white">利润/亏损</h3>
+                {/* 时间筛选 */}
+                <div className="flex items-center gap-2">
+                  {(["1D", "1W", "全部"] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => setTimeFilter(filter)}
+                      className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
+                        timeFilter === filter
+                          ? "bg-pm-green text-white"
+                          : "text-pm-text-dim hover:text-white"
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* 大数值 */}
+              <div className="flex items-center gap-3">
+                <span className={`text-4xl font-bold ${
+                  profitLoss >= 0 ? "text-pm-green" : "text-pm-red"
+                }`}>
+                  {formatUSD(profitLoss)}
+                </span>
+                <HelpCircle className="w-5 h-5 text-pm-text-dim cursor-help" />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 下方列表区 */}
+      <div className="bg-[#0F111A] rounded-xl border border-pm-border">
+        {/* 标签页 */}
+        <div className="border-b border-pm-border px-6">
+          <div className="flex items-center gap-2">
+            {[
+              { id: "positions" as const, label: "职位" },
+              { id: "activity" as const, label: "活动" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setListTab(tab.id)}
+                className={`relative px-4 py-4 text-sm font-bold transition-colors ${
+                  listTab === tab.id
+                    ? "text-white"
+                    : "text-pm-text-dim hover:text-white"
+                }`}
+              >
+                {tab.label}
+                {/* 激活线 */}
+                {listTab === tab.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-pm-green"></div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 操作栏 */}
+        <div className="flex items-center gap-4 p-6 border-b border-pm-border">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-pm-text-dim" />
+            <input
+              type="text"
+              placeholder="搜索职位"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-pm-card border border-pm-border rounded-lg pl-10 pr-4 py-2 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
+            />
+          </div>
+          <button
+            onClick={() => setSortBy(sortBy === "value" ? "none" : "value")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+              sortBy === "value"
+                ? "bg-pm-green/10 border-pm-green text-pm-green"
+                : "border-pm-border text-pm-text-dim hover:text-white"
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span className="text-sm font-medium">价值</span>
+          </button>
+        </div>
+
+        {/* 数据列表 */}
+        <div className="p-6">
+          {isLoading || ordersLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="animate-pulse flex items-center gap-4 p-4 bg-pm-card rounded-lg">
+                  <div className="w-10 h-10 bg-pm-border rounded-full"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-48 bg-pm-border rounded"></div>
+                    <div className="h-3 w-32 bg-pm-border rounded"></div>
+                  </div>
+                  <div className="h-6 w-20 bg-pm-border rounded"></div>
+                </div>
+              ))}
+            </div>
+          ) : listTab === "positions" ? (
+            positions.length > 0 ? (
+              <div className="space-y-3">
+                {positions.map((position) => (
+                  <div
+                    key={position.id}
+                    className="flex items-center gap-4 p-4 bg-pm-card rounded-lg hover:bg-pm-card-hover transition-colors cursor-pointer group"
+                    onClick={() => {
+                      // 生成分享图片的逻辑（占位）
+                      console.log("Share position:", position.id);
+                    }}
+                  >
+                    {/* 左侧：市场图标和名称 */}
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+                        BTC
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white font-medium truncate">{position.marketName}</div>
+                        <div className="text-sm text-pm-text-dim">
+                          平均值: {formatUSD(position.averagePrice)} | 当前的: {formatUSD(position.currentPrice)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 右侧：价值和盈亏 */}
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="text-white font-bold">{formatUSD(position.value)}</div>
+                        <div className={`text-sm font-medium ${
+                          position.pnlPercent >= 0 ? "text-pm-green" : "text-pm-red"
+                        }`}>
+                          {position.pnlPercent >= 0 ? "+" : ""}{position.pnlPercent.toFixed(2)}%
+                        </div>
+                      </div>
+                      <Share2 className="w-5 h-5 text-pm-text-dim opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-pm-text-dim">
+                <p>暂无职位</p>
+              </div>
+            )
+          ) : (
+            <div className="text-center py-12 text-pm-text-dim">
+              <p>暂无活动记录</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
-  const { user, isLoggedIn, logout, currentUser } = useAuth();
+  const { user, isLoggedIn, logout, currentUser, isLoading: authLoading } = useAuth();
   const { addNotification } = useNotification();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
@@ -42,11 +300,12 @@ export default function ProfilePage() {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   // 如果未登录，重定向到登录页
+  // 🔥 修复：增加 authLoading 判断，防止在身份验证状态未确认前误判并踢回登录页
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (!authLoading && !isLoggedIn) {
       router.push("/login?redirect=/profile");
     }
-  }, [isLoggedIn, router]);
+  }, [authLoading, isLoggedIn, router]);
 
   // 获取用户详细数据
   useEffect(() => {
@@ -83,7 +342,7 @@ export default function ProfilePage() {
     }
   }, [isLoggedIn, currentUser]);
 
-  if (!isLoggedIn) {
+  if (!authLoading && !isLoggedIn) {
     return null;
   }
 
@@ -262,7 +521,7 @@ export default function ProfilePage() {
   const menuItems = [
     {
       id: "overview" as TabType,
-      label: "概览",
+      label: "个人概览",
       icon: BarChart3,
     },
     {
@@ -291,9 +550,9 @@ export default function ProfilePage() {
             <div className="bg-pm-card rounded-xl border border-pm-border shadow-2xl p-4 sticky top-24">
               {/* 用户信息 */}
               <div className="flex items-center gap-3 mb-6 pb-6 border-b border-pm-border">
-                <div className="size-12 rounded-full overflow-hidden border-2 border-pm-border flex-shrink-0">
+                <div className="size-12 rounded-full overflow-hidden border border-[#D4AF37] flex-shrink-0 bg-pm-card">
                   <img
-                    src={user?.avatar || ""}
+                    src="/logo.svg"
                     alt={user?.name || "User"}
                     className="w-full h-full object-cover"
                   />
@@ -361,233 +620,14 @@ export default function ProfilePage() {
           <div className="lg:col-span-3">
             <div className="bg-pm-card rounded-xl border border-pm-border shadow-2xl p-6 md:p-8">
               {activeTab === "overview" && (
-                <div className="flex flex-col gap-6">
-                  {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-20">
-                      <Loader2 className="w-8 h-8 animate-spin text-pm-green mb-4" />
-                      <p className="text-white text-lg font-medium">Loading Profile...</p>
-                    </div>
-                  ) : error ? (
-                    <div className="flex flex-col items-center justify-center py-20">
-                      <p className="text-red-500 text-lg font-medium">Error: {error}</p>
-                    </div>
-                  ) : userData ? (
-                    <>
-                      {/* 统计信息 */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-pm-bg rounded-xl border border-pm-border p-6">
-                          <div className="flex flex-col gap-2">
-                            <span className="text-xs text-pm-text-dim uppercase tracking-wider">
-                              总盈亏
-                            </span>
-                            <span
-                              className={`text-2xl font-bold ${
-                                (userData.profitLoss || 0) >= 0
-                                  ? "text-pm-green"
-                                  : "text-pm-red"
-                              }`}
-                            >
-                              {formatUSD(userData.profitLoss || 0)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="bg-pm-bg rounded-xl border border-pm-border p-6">
-                          <div className="flex flex-col gap-2">
-                            <span className="text-xs text-pm-text-dim uppercase tracking-wider">
-                              持仓价值
-                            </span>
-                            {/* 持仓价值 (Holding Value)：目前应为 $0.00（用户未下注） */}
-                            {/* 强制修正：删除或修正任何显示 $537.34 的硬编码值 */}
-                            <span className="text-2xl font-bold text-white">
-                              {formatUSD(userData.positionsValue || 0)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="bg-pm-bg rounded-xl border border-pm-border p-6">
-                          <div className="flex flex-col gap-2">
-                            <span className="text-xs text-pm-text-dim uppercase tracking-wider">
-                              最大胜利
-                            </span>
-                            <span className="text-2xl font-bold text-pm-green">
-                              {formatUSD(userData.biggestWin || 0)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 持仓列表和交易历史 */}
-                      <UserActivityTable />
-
-                      {/* 充值和提现区域 */}
-                      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* 充值区域 */}
-                        <div className="bg-pm-bg rounded-xl border border-pm-border p-6">
-                          <h3 className="text-lg font-bold text-white mb-4">充值</h3>
-                          <form onSubmit={handleDeposit} className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-medium text-pm-text-dim mb-2">
-                                充值金额
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                value={depositAmount}
-                                onChange={(e) => setDepositAmount(e.target.value)}
-                                required
-                                className="w-full bg-pm-card border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
-                                placeholder="0.00"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-pm-text-dim mb-2">
-                                交易哈希（可选）
-                              </label>
-                              <input
-                                type="text"
-                                value={depositTxHash}
-                                onChange={(e) => setDepositTxHash(e.target.value)}
-                                className="w-full bg-pm-card border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
-                                placeholder="自动生成（可选）"
-                              />
-                            </div>
-                            <button
-                              type="submit"
-                              disabled={isDepositing}
-                              className="w-full bg-pm-green hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed text-pm-bg font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
-                            >
-                              {isDepositing ? (
-                                <>
-                                  <Loader2 className="w-5 h-5 animate-spin" />
-                                  处理中...
-                                </>
-                              ) : (
-                                "确认充值"
-                              )}
-                            </button>
-                          </form>
-                        </div>
-
-                        {/* 提现区域 */}
-                        <div className="bg-pm-bg rounded-xl border border-pm-border p-6">
-                          <h3 className="text-lg font-bold text-white mb-4">提现</h3>
-                          <form onSubmit={handleWithdrawal} className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-medium text-pm-text-dim mb-2">
-                                提现金额
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                value={withdrawAmount}
-                                onChange={(e) => setWithdrawAmount(e.target.value)}
-                                required
-                                className="w-full bg-pm-card border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
-                                placeholder="0.00"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-pm-text-dim mb-2">
-                                提现地址
-                              </label>
-                              <input
-                                type="text"
-                                value={withdrawAddress}
-                                onChange={(e) => setWithdrawAddress(e.target.value)}
-                                required
-                                className="w-full bg-pm-card border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
-                                placeholder="0x..."
-                              />
-                            </div>
-                            <button
-                              type="submit"
-                              disabled={isWithdrawing}
-                              className="w-full bg-pm-red hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
-                            >
-                              {isWithdrawing ? (
-                                <>
-                                  <Loader2 className="w-5 h-5 animate-spin" />
-                                  处理中...
-                                </>
-                              ) : (
-                                "提交提现请求"
-                              )}
-                            </button>
-                          </form>
-                        </div>
-                      </div>
-
-                      {/* 资金记录 */}
-                      <div className="mt-6">
-                        <h3 className="text-lg font-bold text-white mb-4">资金记录</h3>
-                        {transactionsLoading ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Loader2 className="w-6 h-6 animate-spin text-pm-green" />
-                            <span className="ml-2 text-pm-text-dim">加载中...</span>
-                          </div>
-                        ) : transactionsError ? (
-                          <div className="bg-pm-red/10 border border-pm-red/20 rounded-xl p-4">
-                            <p className="text-pm-red text-sm">{transactionsError}</p>
-                          </div>
-                        ) : deposits.length === 0 && withdrawals.length === 0 ? (
-                          <div className="bg-pm-bg rounded-xl border border-pm-border p-8 text-center">
-                            <p className="text-pm-text-dim">暂无资金记录</p>
-                          </div>
-                        ) : (
-                          <div className="bg-pm-bg rounded-xl border border-pm-border overflow-hidden">
-                            <div className="overflow-x-auto">
-                              <table className="w-full">
-                                <thead className="bg-pm-card border-b border-pm-border">
-                                  <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-pm-text-dim uppercase tracking-wider">
-                                      类型
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-pm-text-dim uppercase tracking-wider">
-                                      金额
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-pm-text-dim uppercase tracking-wider">
-                                      状态
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-pm-text-dim uppercase tracking-wider">
-                                      时间
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-pm-border">
-                                  {deposits.map((deposit) => (
-                                    <TransactionRow
-                                      key={deposit.id}
-                                      type="deposit"
-                                      amount={deposit.amount}
-                                      status={deposit.status}
-                                      createdAt={deposit.createdAt}
-                                      extraInfo={deposit.txHash}
-                                    />
-                                  ))}
-                                  {withdrawals.map((withdrawal) => (
-                                    <TransactionRow
-                                      key={withdrawal.id}
-                                      type="withdrawal"
-                                      amount={withdrawal.amount}
-                                      status={withdrawal.status}
-                                      createdAt={withdrawal.createdAt}
-                                      extraInfo={withdrawal.targetAddress}
-                                    />
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-20">
-                      <p className="text-pm-text-dim text-lg">No user data available</p>
-                    </div>
-                  )}
-                </div>
+                <OverviewTab 
+                  user={user}
+                  userData={userData}
+                  isLoading={isLoading}
+                  error={error}
+                  orders={orders}
+                  ordersLoading={ordersLoading}
+                />
               )}
               {activeTab === "settings" && <SettingsTab />}
               {activeTab === "referral" && <ReferralTab />}

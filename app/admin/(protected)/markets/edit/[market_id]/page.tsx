@@ -208,48 +208,49 @@ export default function MarketEditPage() {
 
       {/* 正常内容：只在有数据且不在加载时显示 */}
       {!isLoading && market && (
-      {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#111418] dark:text-white">市场编辑与结算</h1>
-          <p className="text-sm text-[#637588] dark:text-[#9da8b9] mt-1">查看市场详情并进行结算操作</p>
-        </div>
-        <button
-          onClick={() => router.push("/admin/markets/list")}
-          className="px-4 py-2 bg-white dark:bg-[#101822] border border-[#d1d5db] dark:border-[#3e4e63] text-[#111418] dark:text-white rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-[#283545] transition-colors text-sm font-medium"
-        >
-          返回列表
-        </button>
-      </div>
-
-      {/* 两栏布局 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左侧：市场基本信息 */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <form onSubmit={handleUpdateMarket} className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-[#111418] dark:text-white">市场基本信息</h2>
-              <button
-                type="submit"
-                disabled={isUpdating}
-                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isUpdating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>更新中...</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-                      save
-                    </span>
-                    <span>保存更改</span>
-                  </>
-                )}
-              </button>
+        <>
+          {/* 页面标题 */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-[#111418] dark:text-white">市场编辑与结算</h1>
+              <p className="text-sm text-[#637588] dark:text-[#9da8b9] mt-1">查看市场详情并进行结算操作</p>
             </div>
-            <div className="space-y-4">
+            <button
+              onClick={() => router.push("/admin/markets/list")}
+              className="px-4 py-2 bg-white dark:bg-[#101822] border border-[#d1d5db] dark:border-[#3e4e63] text-[#111418] dark:text-white rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-[#283545] transition-colors text-sm font-medium"
+            >
+              返回列表
+            </button>
+          </div>
+
+          {/* 两栏布局 */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* 左侧：市场基本信息 */}
+            <div className="lg:col-span-2 flex flex-col gap-6">
+              <form onSubmit={handleUpdateMarket} className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold text-[#111418] dark:text-white">市场基本信息</h2>
+                  <button
+                    type="submit"
+                    disabled={isUpdating}
+                    className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isUpdating ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>更新中...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                          save
+                        </span>
+                        <span>保存更改</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="space-y-4">
               {/* 市场标题 */}
               <div>
                 <label className="block text-sm font-medium text-[#637588] dark:text-[#9da8b9] mb-1">
@@ -338,12 +339,12 @@ export default function MarketEditPage() {
                     当前设置：{formatDateTime(new Date(formData.closingDate).toISOString())}
                   </p>
                 )}
-              </div>
-            </div>
-          </form>
+                </div>
+                </div>
+              </form>
 
-          {/* 当前赔率和交易量 */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* 当前赔率和交易量 */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* YES 赔率 */}
             <div className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-sm p-6">
               <div className="flex justify-between items-start mb-2">
@@ -373,10 +374,10 @@ export default function MarketEditPage() {
               <p className="text-2xl font-bold text-[#111418] dark:text-white">{formatCurrency(market.volume)}</p>
               <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">累计交易额</p>
             </div>
-          </div>
+            </div>
 
-          {/* 时间信息（只读） */}
-          <div className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-sm p-6">
+            {/* 时间信息（只读） */}
+            <div className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-sm p-6">
             <h3 className="text-base font-bold text-[#111418] dark:text-white mb-4">时间信息</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -389,12 +390,12 @@ export default function MarketEditPage() {
                   <p className="text-sm text-[#111418] dark:text-white">{formatDateTime(market.createdAt)}</p>
                 </div>
               )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* 右侧：管理操作表单 */}
-        <div className="lg:col-span-1">
+          {/* 右侧：管理操作表单 */}
+          <div className="lg:col-span-1">
           <div className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-sm p-6 sticky top-6">
             <h2 className="text-lg font-bold text-[#111418] dark:text-white mb-6">市场结算</h2>
 
@@ -491,10 +492,12 @@ export default function MarketEditPage() {
                   )}
                 </button>
               </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

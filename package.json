@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "cron:market-factory": "ts-node --compiler-options {\"module\":\"commonjs\"} scripts/market-factory-cron.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"commonjs\"} prisma/seed.ts"
@@ -21,6 +22,7 @@
     "lucide-react": "^0.294.0",
     "next": "^14.0.0",
     "next-auth": "^5.0.0-beta.30",
+    "node-cron": "^3.0.3",
     "prisma": "^6.0.0",
     "qrcode.react": "^4.2.0",
     "react": "^18.2.0",
@@ -32,6 +34,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.19.27",
+    "@types/node-cron": "^3.0.11",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "autoprefixer": "^10.4.16",

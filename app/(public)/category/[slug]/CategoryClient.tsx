@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { Market } from "@/types/api";
 import { MarketEvent } from "@/lib/data";
-import FilterSidebar from "@/components/category/FilterSidebar";
 import MarketCard from "@/components/MarketCard";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
+import SubCategoryTabs from "./SubCategoryTabs";
 
 interface CategoryClientProps {
   slug: string;
@@ -35,6 +35,7 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
   // 架构加固：Page/ClientPage 级别读取 Context，通过 props 传给子组件
   const { isLoggedIn } = useAuth();
   
+  // activeFilter 用于子分类筛选："all" 表示显示全部，其他值表示子分类 slug
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [marketData, setMarketData] = useState<Market[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,8 +48,22 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
 
     try {
       const params = new URLSearchParams();
-      if (slug !== "all" && slug !== "trending") {
-        params.append("category", slug);
+      
+      // 如果 activeFilter 是 "all"，显示当前分类的所有市场
+      // 否则，根据 activeFilter（子分类 slug）筛选
+      if (slug === "all") {
+        // "所有市场" 页面，不添加 category 参数
+      } else if (slug === "hot" || slug === "trending") {
+        params.append("category", "hot");
+      } else {
+        // 普通分类页面
+        if (activeFilter !== "all" && activeFilter !== slug) {
+          // 如果选择了子分类，使用子分类的 slug
+          params.append("category", activeFilter);
+        } else {
+          // 如果选择"全部"，使用当前分类的 slug
+          params.append("category", slug);
+        }
       }
 
       const response = await fetch(`/api/markets?${params.toString()}`);
@@ -62,10 +77,12 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
       if (result.success && result.data) {
         let markets = result.data;
         
-        if (slug === "trending") {
-          markets = [...markets]
-            .sort((a, b) => b.volume - a.volume)
-            .slice(0, 10);
+        if (slug === "hot" || slug === "trending") {
+          // 热门市场已经由后端按 isHot 筛选和排序，这里不需要再次处理
+          // 但如果是 trending（旧逻辑），可能需要限制数量
+          if (slug === "trending") {
+            markets = markets.slice(0, 20);
+          }
         }
         
         setMarketData(markets);
@@ -82,7 +99,7 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
 
   useEffect(() => {
     fetchMarkets();
-  }, [slug]);
+  }, [slug, activeFilter]);
 
   // 将 Market 类型转换为 MarketEvent 类型
   const convertMarketToEvent = (market: Market): MarketEvent & { originalId?: string } => {
@@ -157,22 +174,16 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
       <div className="flex-1 w-full lg:max-w-[1600px] lg:mx-auto">
         <main className="flex-1 min-w-0 flex flex-col">
           <div className="px-4 md:px-6 py-6 border-b border-border-dark">
-            <h1 className="text-2xl md:text-3xl font-bold text-white">
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-4">
               {pageTitle}
             </h1>
+            {/* 子分类标签栏 - 显示当前分类的子分类 */}
+            <SubCategoryTabs slug={slug} onFilterChange={setActiveFilter} activeFilter={activeFilter} />
           </div>
 
-          <div className="flex gap-6 px-4 md:px-6 py-6">
-            {/* STEP 3: 测试 2 - 加回 FilterSidebar */}
-            {hasFilters && (
-              <FilterSidebar
-                slug={slug}
-                activeFilter={activeFilter}
-                onFilterChange={setActiveFilter}
-              />
-            )}
-
-            <div className="flex-1 flex flex-col gap-6">
+          <div className="px-4 md:px-6 py-6">
+            {/* 主体内容区域 - 已移除左侧侧边栏 */}
+            <div className="flex flex-col gap-6">
               {isLoading && (
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
@@ -189,11 +200,11 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
                 </div>
               )}
 
-              {/* STEP 3: 测试 3 - 加回 MarketCard */}
+              {/* 市场列表展示 */}
               {!isLoading && !error && (
                 <>
                   {filteredEvents.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                       {filteredEvents.map((event) => (
                         <MarketCard key={event.id} event={event} isLoggedIn={isLoggedIn} />
                       ))}

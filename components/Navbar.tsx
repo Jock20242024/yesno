@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Search, Trophy, Bell, CheckCircle, XCircle, Info, X } from "lucide-react";
+import { Search, Trophy, Bell, CheckCircle, XCircle, Info, X, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -282,18 +282,25 @@ export default function Navbar() {
                     href="/profile"
                     className="flex items-center justify-center size-8 rounded-full bg-surface-dark border border-border-dark hover:border-text-secondary text-white transition-colors ml-1 overflow-hidden cursor-pointer group"
                     title="个人中心"
+                    style={{ position: 'relative', zIndex: 50 }}
                   >
-                    <img
-                      alt="User"
-                      className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                      src={user?.avatar || ""}
-                    />
+                    {user?.avatar ? (
+                      <img
+                        alt="User"
+                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                        src={user.avatar}
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <User className="w-5 h-5 opacity-80 group-hover:opacity-100 transition-opacity" />
+                    )}
                   </Link>
                   {/* 登出按钮 */}
                   <button
-                    onClick={() => {
-                      logout();
-                      window.location.href = "/";
+                    onClick={async () => {
+                      await logout();
+                      // 🔥 彻底清理内存中的状态缓存，确保彻底清理
+                      window.location.replace('/login');
                     }}
                     className="flex items-center justify-center px-3 py-1.5 rounded-lg bg-surface-dark hover:bg-red-500/10 border border-border-dark hover:border-red-500/30 text-text-secondary hover:text-red-400 text-xs font-bold transition-colors ml-2"
                     title="登出"

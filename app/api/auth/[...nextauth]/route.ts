@@ -1,3 +1,5 @@
+console.log("🔥 NextAuth API 被触发");
+
 import NextAuth from "next-auth";
 import { authOptions } from "@/lib/auth";
 

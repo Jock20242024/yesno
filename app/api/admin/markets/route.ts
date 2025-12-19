@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DBService } from '@/lib/mockData';
 import { Market, MarketStatus, Outcome } from '@/types/data';
-import { verifyAdminAuth, createUnauthorizedResponse } from '@/lib/adminAuth';
-import { CATEGORY_SLUG_MAP } from '@/lib/categories';
+import { prisma } from '@/lib/prisma';
+import { auth } from "@/app/api/auth/[...nextauth]/route";
 
 /**
  * 管理后台 - 获取市场列表 API
@@ -16,13 +16,32 @@ import { CATEGORY_SLUG_MAP } from '@/lib/categories';
  */
 export async function GET(request: NextRequest) {
   try {
-    // 权限校验：使用统一的 Admin Token 验证函数（从 Cookie 读取）
-    const authResult = await verifyAdminAuth(request);
-
-    if (!authResult.success) {
-      return createUnauthorizedResponse(
-        authResult.error || 'Unauthorized. Admin access required.',
-        authResult.statusCode || 401
+    // 权限校验：使用 NextAuth session 验证管理员身份
+    const session = await auth();
+    
+    // 🔥 修复 500 错误：确保 session 和 user 不为 null
+    if (!session || !session.user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Unauthorized. Admin access required.',
+        },
+        { status: 401 }
+      );
+    }
+    
+    // 🔥 双重校验：角色为 ADMIN 或邮箱为管理员邮箱
+    const userRole = (session.user as any).role;
+    const userEmail = session.user.email;
+    const adminEmail = 'yesno@yesno.com'; // 管理员邮箱
+    
+    if (userRole !== 'ADMIN' && userEmail !== adminEmail) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Unauthorized. Admin access required.',
+        },
+        { status: 401 }
       );
     }
 
@@ -109,19 +128,39 @@ export async function POST(request: Request) {
   try {
     console.log('🏗️ [Market API] ========== 开始处理创建市场请求 ==========');
     
-    // 权限校验：使用统一的 Admin Token 验证函数（从 Cookie 读取）
-    console.log('🔍 [Market API] 开始验证 Admin Token...');
-    const authResult = await verifyAdminAuth(request);
-
-    if (!authResult.success) {
-      console.error('❌ [Market API] Admin Token 验证失败:', authResult.error);
-      return createUnauthorizedResponse(
-        authResult.error || 'Unauthorized. Admin access required.',
-        authResult.statusCode || 401
+    // 权限校验：使用 NextAuth session 验证管理员身份
+    console.log('🔍 [Market API] 开始验证管理员身份...');
+    const session = await auth();
+    
+    // 🔥 修复 500 错误：确保 session 和 user 不为 null
+    if (!session || !session.user) {
+      console.error('❌ [Market API] Session 验证失败: session 或 user 为空');
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Unauthorized. Admin access required.',
+        },
+        { status: 401 }
+      );
+    }
+    
+    // 🔥 双重校验：角色为 ADMIN 或邮箱为管理员邮箱
+    const userRole = (session.user as any).role;
+    const userEmail = session.user.email;
+    const adminEmail = 'yesno@yesno.com'; // 管理员邮箱
+    
+    if (userRole !== 'ADMIN' && userEmail !== adminEmail) {
+      console.error('❌ [Market API] 权限验证失败:', { userRole, userEmail });
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Unauthorized. Admin access required.',
+        },
+        { status: 401 }
       );
     }
 
-    console.log('✅ [Market API] Admin Token 验证成功，用户ID:', authResult.userId);
+    console.log('✅ [Market API] 管理员身份验证成功，用户邮箱:', userEmail);
 
     // 解析请求体
     console.log('📥 [Market API] 开始解析请求体...');
@@ -170,20 +209,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // 验证分类是否有效
-    console.log('🔍 [Market API] 验证分类:', { category, availableCategories: Object.keys(CATEGORY_SLUG_MAP) });
-    const categorySlug = CATEGORY_SLUG_MAP[category];
-    if (!categorySlug) {
+    // 从数据库查询分类信息（根据中文名称）
+    console.log('🔍 [Market API] 查询分类:', { category });
+    const categoryRecord = await prisma.category.findFirst({
+      where: {
+        name: category,
+        status: 'active',
+      },
+    });
+
+    if (!categoryRecord) {
       console.error('❌ [Market API] 无效的分类:', category);
       return NextResponse.json(
         {
           success: false,
-          error: `Invalid category. Valid categories are: ${Object.keys(CATEGORY_SLUG_MAP).join(', ')}`,
+          error: `Invalid category: ${category}. Category not found or inactive.`,
         },
         { status: 400 }
       );
     }
-    console.log('✅ [Market API] 分类验证通过:', { category, categorySlug });
+
+    const categorySlug = categoryRecord.slug;
+    console.log('✅ [Market API] 分类验证通过:', { category, slug: categorySlug });
 
     // 验证日期格式
     console.log('🔍 [Market API] 验证日期格式:', { endTime });

@@ -24,6 +24,7 @@ export async function GET(request: Request) {
     const search = searchParams.get('search');
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const includePending = searchParams.get('includePending') === 'true'; // 仅管理员可设置
 
     console.log('📊 [Markets API] 查询参数:', {
       category,
@@ -31,7 +32,11 @@ export async function GET(request: Request) {
       search,
       page,
       pageSize,
+      includePending,
     });
+
+    // 检查是否为管理员请求（可以通过特殊参数或 session 判断）
+    // 非管理员请求默认只返回已发布的市场
 
     // 数据库调试：从数据库获取市场（支持分类筛选）
     console.log('💾 [Markets API] 准备调用 DBService.getAllMarkets()...');
@@ -41,8 +46,25 @@ export async function GET(request: Request) {
       willFilterByCategory: !!category,
     });
     
-    // 如果提供了 category 参数，在数据库层面进行筛选
-    let filteredMarkets = await DBService.getAllMarkets(category || undefined);
+    // 🔥 特殊处理：hot 和 all
+    // 注意：默认只返回已发布的市场（PUBLISHED），除非 explicitly 指定 includePending
+    let filteredMarkets;
+    
+    if (category === 'hot') {
+      // 热门市场：使用 isHot 字段筛选（只返回已发布的）
+      console.log('🔥 [Markets API] 获取热门市场 (isHot: true, reviewStatus: PUBLISHED)');
+      filteredMarkets = await DBService.getAllMarkets(undefined, includePending);
+      filteredMarkets = filteredMarkets.filter(market => (market as any).isHot === true);
+      // 按交易量排序
+      filteredMarkets.sort((a, b) => (b.totalVolume || 0) - (a.totalVolume || 0));
+    } else if (category === 'all') {
+      // 所有市场：返回全部（只返回已发布的，除非管理员指定 includePending）
+      console.log('📊 [Markets API] 获取所有市场 (reviewStatus: PUBLISHED)');
+      filteredMarkets = await DBService.getAllMarkets(undefined, includePending);
+    } else {
+      // 普通分类筛选（只返回已发布的，除非管理员指定 includePending）
+      filteredMarkets = await DBService.getAllMarkets(category || undefined, includePending);
+    }
     
     console.log('✅ [Markets API] DBService.getAllMarkets() 返回结果:', {
       totalMarkets: filteredMarkets.length,

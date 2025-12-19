@@ -3,17 +3,6 @@
 import { signIn } from "next-auth/react";
 
 export default function AdminLoginPage() {
-  const handleAdminLogin = async () => {
-    try {
-      await signIn("google", {
-        callbackUrl: "/admin/users",
-        redirect: true,
-      });
-    } catch (error) {
-      console.error("Admin login error:", error);
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0e13] via-[#111418] to-[#0a0e13] px-4">
       <div className="w-full max-w-md">
@@ -36,7 +25,7 @@ export default function AdminLoginPage() {
 
           {/* Google 登录按钮 */}
           <button
-            onClick={handleAdminLogin}
+            onClick={() => signIn('google', { callbackUrl: '/admin/dashboard' })}
             className="w-full py-4 bg-white hover:bg-gray-50 active:bg-gray-100 text-[#111418] font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-3 shadow-md hover:shadow-lg group"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -68,17 +57,6 @@ export default function AdminLoginPage() {
               <br />
               只有管理员账号可以访问
             </p>
-          </div>
-
-          {/* 返回首页链接 */}
-          <div className="mt-6 text-center">
-            <a
-              href="/"
-              className="text-sm text-[#637588] hover:text-white transition-colors inline-flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-base">arrow_back</span>
-              <span>返回首页</span>
-            </a>
           </div>
         </div>
       </div>

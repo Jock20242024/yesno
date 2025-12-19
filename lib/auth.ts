@@ -6,7 +6,9 @@
 
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
+import { comparePassword } from "@/services/authService";
 
 // NextAuth 配置
 // NextAuth v5 配置对象
@@ -24,119 +26,144 @@ export const authOptions: NextAuthConfig = {
         }
       }
     }),
+    // 🔥 添加 Credentials Provider 支持邮箱密码登录
+    CredentialsProvider({
+      id: "credentials",
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
+
+        try {
+          // 查找用户
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email as string },
+          });
+
+          if (!user || !user.passwordHash) {
+            return null;
+          }
+
+          // 验证密码
+          const isPasswordValid = await comparePassword(
+            credentials.password as string,
+            user.passwordHash
+          );
+
+          if (!isPasswordValid) {
+            return null;
+          }
+
+          // 返回用户信息（会被传递给 jwt callback）
+          return {
+            id: user.id,
+            email: user.email,
+            isAdmin: user.isAdmin || false,
+            balance: user.balance || 0,
+          };
+        } catch (error) {
+          console.error("Credentials authorize error:", error);
+          return null;
+        }
+      }
+    }),
   ],
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
   session: {
     strategy: "jwt" as const, // 🔥 强制物理重置：策略归位，确保只有一行 strategy: 'jwt'
   },
-  // 🔥 强制 Session 静态化：彻底移除所有自定义的 cookies 配置块，恢复 NextAuth 默认
-  callbacks: {
-    async signIn(params: any) {
-      const { user, account } = params;
-      if (account?.provider === "google") {
-        const email = user.email;
-        if (!email) return false;
-        try {
-          const existingUser = await prisma.user.findUnique({ where: { email } });
-          if (!existingUser) {
-            await prisma.user.create({
-              data: {
-                email: email,
-                provider: "google",
-                passwordHash: null, // Google 用户没有密码
-                balance: 0,
-                isAdmin: false,
-                isBanned: false,
-              },
-            });
-          }
-          return true;
-        } catch (error) {
-          console.error("SignIn Error:", error);
-          return false;
-        }
-      }
-      return true;
+  // 🔥 修复 Cookie 配置：确保 SameSite 设置为 'lax'，防止跨域请求时 Cookie 丢失
+  cookies: {
+    sessionToken: {
+      name: `${process.env.NODE_ENV === 'production' ? '__Secure-' : ''}next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax', // 🔥 关键修复：使用 'lax' 而不是 'strict'，允许同站请求携带 Cookie
+        path: '/',
+        secure: process.env.NODE_ENV === 'production', // 生产环境使用 HTTPS，开发环境允许 HTTP
+      },
     },
-    async jwt(params: any) {
-      const { token, user } = params;
-      
-      // 🔥 强制 Session 静态化：在 callbacks 中强制注入一个硬编码的测试 UserID（仅限开发环境）
-      // 确保即使 JWT 校验不稳，API 也能拿到 ID
-      if (process.env.NODE_ENV === 'development' && !token.sub && !token.id) {
-        // 开发环境：如果没有 user.id，使用硬编码的测试 ID
-        token.sub = 'dev-test-user-id';
-        token.id = 'dev-test-user-id';
-        token.email = token.email || 'dev@test.com';
-        token.isAdmin = false;
-        token.balance = 0;
-        token.provider = "email";
-        return token;
+  },
+  callbacks: {
+    async signIn({ user, account }: any) {
+      try {
+        // 🔥 登录/注册全局扩展：允许所有合法的 Google 和账号登录
+        // 如果是新用户登录且数据库无记录，确保 Prisma 自动创建基础 User 记录
+        if (account?.provider === "google") {
+          const email = user.email;
+          if (!email) {
+            console.error("❌ [SignIn Callback] Google 登录失败：缺少 email");
+            return false;
+          }
+
+          try {
+            // 查找现有用户
+            const existingUser = await prisma.user.findUnique({ 
+              where: { email },
+              select: { id: true, isAdmin: true }
+            });
+
+            if (existingUser) {
+              // 现有用户：允许登录
+              console.log('✅ [SignIn Callback] Google 登录现有用户:', { email, isAdmin: existingUser.isAdmin });
+              return true;
+            } else {
+              // 新用户：自动创建基础 User 记录（isAdmin 默认为 false）
+              const newUser = await prisma.user.create({
+                data: {
+                  email: email,
+                  provider: "google",
+                  passwordHash: null, // Google 用户没有密码
+                  balance: 0,
+                  isAdmin: false, // 🔥 新用户默认非管理员
+                  isBanned: false,
+                },
+              });
+              console.log('✅ [SignIn Callback] Google 登录新用户已创建:', { email, id: newUser.id, isAdmin: false });
+              return true;
+            }
+          } catch (error) {
+            console.error("❌ [SignIn Callback] 数据库查询/创建错误:", error);
+            return false;
+          }
+        }
+        
+        // 非 Google 登录方式（如 Credentials），允许通过
+        return true;
+      } catch (error) {
+        console.error("❌ [SignIn Callback] 未知错误:", error);
+        return false;
       }
-      
-      // 🔥 强制逻辑对齐：如果是首次登录（user 存在），从数据库查询用户信息并设置 token
+    },
+    async jwt({ token, user }: any) {
+      // 🔥 身份"强绑定"：恢复带日志的版本
       if (user) {
-        try {
-          const dbUser = await prisma.user.findUnique({
-            where: { email: user.email! },
-            select: {
-              id: true,
-              isAdmin: true,
-              balance: true,
-              provider: true,
-            }
-          });
-          
-          if (dbUser) {
-            // 🔥 字段同步：将 user.id 写入 token（确保在 jwt 和 session 钩子间正确传递）
-            token.sub = dbUser.id; // NextAuth 标准字段
-            token.id = dbUser.id; // 向后兼容字段
-            token.email = user.email;
-            token.isAdmin = dbUser.isAdmin ?? false;
-            token.balance = dbUser.balance ?? 0;
-            token.provider = dbUser.provider ?? "email";
-          }
-        } catch (error) {
-          console.error("JWT callback error:", error);
-        }
+        console.log('🛡️ [Auth-JWT] 初始登录用户:', user.email, 'isAdmin:', (user as any).isAdmin);
+        token.sub = user.id;
+        token.id = user.id;
+        token.email = user.email;
       }
-      
-      // 🔥 强制 Session 静态化：如果 token 中缺少 isAdmin，从数据库查询（处理旧 token 的情况）
-      // 开发环境：如果仍然没有 ID，使用硬编码的测试 ID
-      if (process.env.NODE_ENV === 'development' && !token.sub && !token.id) {
-        token.sub = 'dev-test-user-id';
-        token.id = 'dev-test-user-id';
-      }
-      
-      if (!token.isAdmin && token.email) {
-        try {
-          const dbUser = await prisma.user.findUnique({
-            where: { email: token.email as string },
-            select: {
-              isAdmin: true,
-            }
-          });
-          
-          if (dbUser) {
-            token.isAdmin = dbUser.isAdmin ?? false;
-          }
-        } catch (error) {
-          console.error("JWT callback error (missing isAdmin):", error);
-        }
-      }
-      
+      // 🔥 强制从数据库查询最新的 isAdmin 状态
+      const dbUser = await prisma.user.findUnique({ where: { email: token.email as string } });
+      const isAdmin = dbUser?.isAdmin === true;
+      token.isAdmin = isAdmin;
+      // 🔥 添加 role 字段：如果是管理员则为 'ADMIN'，否则为 'USER'
+      token.role = isAdmin ? 'ADMIN' : 'USER';
+      console.log('🛡️ [Auth-JWT] 最终存入 Token 的 isAdmin:', token.isAdmin, 'role:', token.role);
       return token;
     },
-    async session(params: any) {
-      const { session, token } = params;
-      if (session.user && token) {
-        // 🔥 字段同步：从 token 读取 id 并写入 session.user（确保 user.id 在两者间正确传递）
-        const userId = (token.sub as string) || (token.id as string);
-        session.user.id = userId; // 从 token 读取 id 并写入 session.user.id
-        session.user.isAdmin = (token.isAdmin as boolean) ?? false;
-        session.user.balance = (token.balance as number) ?? 0;
-        session.user.provider = (token.provider as string) ?? "email";
-        session.user.email = (token.email as string) || session.user.email;
+    async session({ session, token }: any) {
+      if (session.user) {
+        session.user.id = token.sub as string;
+        // 🔥 只保留最简单的映射
+        (session.user as any).isAdmin = token.isAdmin || false;
+        // 🔥 添加 role 字段：传递 role 到 session
+        (session.user as any).role = token.role || 'USER';
       }
       return session;
     }

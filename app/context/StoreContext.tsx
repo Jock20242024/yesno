@@ -42,7 +42,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [history, setHistory] = useState<Transaction[]>([]);
   
   // 修复：获取当前用户 ID（从 AuthProvider）
-  const { currentUser } = useAuth();
+  const { currentUser, isLoading: authLoading } = useAuth();
 
   // ========== 修复：监听用户切换，主动清空状态 ==========
   // 🔥 关键修复：只在用户 ID 实际变化时清空，不在 API 验证失败时清空（防止死锁）
@@ -74,9 +74,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // ========== 修复：从 localStorage 恢复数据前，严格验证用户 ID ==========
   useEffect(() => {
-    // 如果没有当前用户，不恢复数据
+    // 🔥 关键修复：如果 AuthProvider 还在加载中，等待加载完成
+    if (authLoading) {
+      console.log('⏳ [StoreContext] AuthProvider 正在加载中，等待完成...');
+      return;
+    }
+    
+    // 如果 AuthProvider 加载完成但没有当前用户，清空数据
     if (!currentUser || !currentUser.id) {
-      console.log('⚠️ [StoreContext] 没有当前用户，不恢复数据');
+      console.log('⚠️ [StoreContext] 没有当前用户，不恢复数据', {
+        currentUser: currentUser ? 'exists' : 'null',
+        authLoading,
+      });
       setBalance(0);
       setPositions([]);
       setHistory([]);
@@ -219,7 +228,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } else {
       setHistory([]);
     }
-  }, [currentUser?.id]); // 修复：依赖 currentUser.id，确保用户切换时重新执行
+  }, [currentUser?.id, authLoading]); // 🔥 修复：同时依赖 authLoading，确保在 Auth 加载完成后再执行
 
   // 保存到 localStorage（仅在客户端）
   // 使用 useRef 来跟踪上一次的值，避免不必要的写入

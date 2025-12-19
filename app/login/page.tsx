@@ -50,29 +50,31 @@ export default function LoginPage() {
     }
   }, []);
 
-  useEffect(() => {
-    // 如果已经登录，直接跳转
-    if (isLoggedIn) {
-      router.push(redirect);
-    }
-  }, [isLoggedIn, redirect, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ email, password }),
-      });
+      // 🔥 调用 AuthProvider 的 login 函数
+      const res = await login({ email, password });
+      
+      // 🛑 [DEBUG] 登录接口返回原始数据日志
+      console.log('🛑 [DEBUG] 登录接口返回原始数据:', res);
+      console.log('🛑 [DEBUG] 这里的 isAdmin 到底是什么:', res.user?.isAdmin);
+      console.log('🛑 [DEBUG] 当前 user 对象全貌:', JSON.stringify(res.user));
 
-      const data = await response.json();
+      if (!res.success) {
+        const errorMessage = res.error === 'CredentialsSignin' ? '邮箱或密码错误' : res.error || '登录失败';
+        try {
+          toast.error(errorMessage);
+        } catch (e) {
+          console.error("toast failed", e);
+          alert(errorMessage);
+        }
+        return;
+      }
 
-      if (data.success) {
+      if (res.success && res.user) {
         // 显示成功提示
         try {
           toast.success("登录成功");
@@ -80,26 +82,16 @@ export default function LoginPage() {
           console.error("toast failed", e);
         }
 
-        // 立即更新 AuthProvider 状态
-        if (data.user && data.token) {
-          login(data.token, data.user);
-        }
-
-        // 等待一小段时间确保状态更新完成，然后跳转
-        setTimeout(() => {
-          router.refresh();
-          router.push(redirect);
-        }, 100);
-      } else {
-        const errorMessage = data.error || '登录失败';
-        try {
-          toast.error(errorMessage);
-        } catch (e) {
-          console.error("toast failed", e);
-          alert(errorMessage);
+        // 🔥 物理清除所有"自动跳转"：登录成功后，直接使用 window.location.href 进行物理硬跳转
+        // 物理刷新页面会强制清除浏览器路由缓存，绕过 Next.js 的缓存陷阱
+        if (res.user.isAdmin) {
+          window.location.href = '/admin/dashboard';
+        } else {
+          window.location.href = redirect || '/';
         }
       }
     } catch (err) {
+      console.error('Login error:', err);
       const errorMessage = '网络错误，请稍后重试';
       try {
         toast.error(errorMessage);
@@ -125,16 +117,17 @@ export default function LoginPage() {
                 type="button"
                 onClick={async () => {
                   try {
+                    // 🔥 物理清除所有"自动跳转"：使用 signIn 但不依赖 callbackUrl，登录成功后手动硬跳转
                     const result = await signIn("google", {
-                      callbackUrl: redirect || "/",
-                      redirect: true,
+                      callbackUrl: '/admin/dashboard',
+                      redirect: false, // 不自动跳转，手动控制
                     });
-                    if (result?.error) {
-                      try {
-                        toast.error("Google 登录失败");
-                      } catch (e) {
-                        console.error("toast failed", e);
-                      }
+                    
+                    if (result?.ok && !result?.error) {
+                      // 登录成功，物理硬跳转
+                      window.location.href = '/admin/dashboard';
+                    } else {
+                      toast.error("Google 登录失败，请稍后重试");
                     }
                   } catch (error) {
                     console.error("Google sign in error:", error);
