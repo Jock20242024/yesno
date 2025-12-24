@@ -154,13 +154,15 @@ export async function POST(request: Request) {
       });
 
       // 7.6 更新市场池（反向操作）
-      const marketTotalVolumeCents = Math.round(market.totalVolume * PRECISION_MULTIPLIER);
+      // 🔥 修复：只更新 internalVolume（内部交易量），不覆盖 externalVolume
+      const marketInternalVolumeCents = Math.round((market.internalVolume || 0) * PRECISION_MULTIPLIER);
       const marketTotalYesCents = Math.round(market.totalYes * PRECISION_MULTIPLIER);
       const marketTotalNoCents = Math.round(market.totalNo * PRECISION_MULTIPLIER);
-      
+
       const grossValueCents = Math.round(grossValue * PRECISION_MULTIPLIER);
-      const newTotalVolumeCents = marketTotalVolumeCents - grossValueCents;
-      
+      const newInternalVolumeCents = marketInternalVolumeCents - grossValueCents;
+      const newInternalVolume = newInternalVolumeCents / PRECISION_MULTIPLIER;
+
       const newTotalYesCents = outcome === 'YES'
         ? marketTotalYesCents - Math.round(netReturn * PRECISION_MULTIPLIER)
         : marketTotalYesCents;
@@ -168,14 +170,23 @@ export async function POST(request: Request) {
         ? marketTotalNoCents - Math.round(netReturn * PRECISION_MULTIPLIER)
         : marketTotalNoCents;
 
-      const newTotalVolume = newTotalVolumeCents / PRECISION_MULTIPLIER;
       const newTotalYes = newTotalYesCents / PRECISION_MULTIPLIER;
       const newTotalNo = newTotalNoCents / PRECISION_MULTIPLIER;
+
+      // 🔥 计算展示交易量（向后兼容）
+      const { calculateDisplayVolume } = await import('@/lib/marketUtils');
+      const displayVolume = calculateDisplayVolume({
+        source: market.source || 'INTERNAL',
+        externalVolume: market.externalVolume || 0,
+        internalVolume: newInternalVolume,
+        manualOffset: market.manualOffset || 0,
+      });
 
       const updatedMarket = await tx.market.update({
         where: { id: marketId },
         data: {
-          totalVolume: newTotalVolume,
+          internalVolume: newInternalVolume, // 🔥 只更新内部交易量
+          totalVolume: displayVolume, // 更新展示交易量（向后兼容）
           totalYes: newTotalYes,
           totalNo: newTotalNo,
         },

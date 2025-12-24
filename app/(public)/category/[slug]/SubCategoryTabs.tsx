@@ -11,6 +11,7 @@ interface Category {
   icon?: string | null;
   level?: number;
   parentId?: string | null;
+  count?: number; // 🔥 该分类下的市场数量
   children?: Category[];
 }
 
@@ -23,6 +24,7 @@ interface SubCategoryTabsProps {
 export default function SubCategoryTabs({ slug, activeFilter, onFilterChange }: SubCategoryTabsProps) {
   const [subCategories, setSubCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [allCount, setAllCount] = useState<number>(0); // 🔥 "全部"选项的数量
   const pathname = usePathname();
 
   useEffect(() => {
@@ -37,18 +39,33 @@ export default function SubCategoryTabs({ slug, activeFilter, onFilterChange }: 
           const currentCategory = data.data.find((cat: Category) => cat.slug === slug);
           
           if (currentCategory && currentCategory.children && currentCategory.children.length > 0) {
-            // 如果当前分类有子分类，显示子分类
-            setSubCategories(currentCategory.children);
+            // 如果当前分类有子分类，显示子分类（确保包含 count 字段）
+            const childrenWithCount = currentCategory.children.map((child: Category) => ({
+              ...child,
+              count: child.count ?? 0, // 确保 count 字段存在
+            }));
+            setSubCategories(childrenWithCount);
+            // 🚀 物理对齐：直接使用后端递归计算好的 count
+            // 后端 API 已经通过 getAllCategoryIds 正确计算了父分类及其所有子分类聚合后的唯一系列总数
+            setAllCount(currentCategory.count || 0);
           } else {
             // 如果没有子分类，检查是否当前分类本身是子分类
             // 如果是，显示同级分类
             if (currentCategory?.parentId) {
               const parent = data.data.find((cat: Category) => cat.id === currentCategory.parentId);
               if (parent?.children) {
-                setSubCategories(parent.children);
+                const siblingsWithCount = parent.children.map((child: Category) => ({
+                  ...child,
+                  count: child.count ?? 0, // 确保 count 字段存在
+                }));
+                setSubCategories(siblingsWithCount);
+                // 🚀 物理对齐：直接使用后端递归计算好的 count
+                // 后端 API 已经通过 getAllCategoryIds 正确计算了父分类及其所有子分类聚合后的唯一系列总数
+                setAllCount(parent.count || 0);
               }
             } else {
               setSubCategories([]);
+              setAllCount(0);
             }
           }
         }
@@ -79,13 +96,22 @@ export default function SubCategoryTabs({ slug, activeFilter, onFilterChange }: 
         onClick={() => {
           onFilterChange("all");
         }}
-        className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+        className={`relative flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-all border flex items-center justify-between gap-2 ${
           activeFilter === "all"
-            ? "bg-primary/20 text-primary border-primary/50"
+            ? "bg-primary/20 text-white border-primary/50"
             : "bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border-transparent"
         }`}
       >
-        全部
+        {/* 🔥 点击子菜单文字不变颜色，效果跟父级一样 */}
+        <span>全部</span>
+        {/* 🔥 数字格式化：添加小括号，使用较淡的灰色 */}
+        <span className="ml-1 text-xs opacity-60 text-[#64748b]">
+          ({allCount})
+        </span>
+        {/* 🔥 底部横条：在选中项下方添加绿色横条，与父级分类物理一致 */}
+        {activeFilter === "all" && (
+          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-500 rounded-b-lg" />
+        )}
       </button>
       
       {/* 子分类选项 */}
@@ -98,13 +124,22 @@ export default function SubCategoryTabs({ slug, activeFilter, onFilterChange }: 
             onClick={() => {
               onFilterChange(subCat.slug);
             }}
-            className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+            className={`relative flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-all border flex items-center justify-between gap-2 ${
               isActive
-                ? "bg-primary/20 text-primary border-primary/50"
+                ? "bg-primary/20 text-white border-primary/50"
                 : "bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border-transparent"
             }`}
           >
-            {subCat.name}
+            {/* 🔥 点击子菜单文字不变颜色，效果跟父级一样 */}
+            <span>{subCat.name}</span>
+            {/* 🔥 数字格式化：添加小括号，使用较淡的灰色 */}
+            <span className="ml-1 text-xs opacity-60 text-[#64748b]">
+              ({subCat.count ?? 0})
+            </span>
+            {/* 🔥 底部横条：在选中项下方添加绿色横条，与父级分类物理一致 */}
+            {isActive && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-500 rounded-b-lg" />
+            )}
           </button>
         );
       })}

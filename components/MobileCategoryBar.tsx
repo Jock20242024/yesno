@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const categories = [
-  { slug: "all", label: "全部" },
   { slug: "politics", label: "政治" },
   { slug: "sports", label: "体育" },
   { slug: "tech", label: "科技" },
@@ -15,9 +14,6 @@ export default function MobileCategoryBar() {
   const pathname = usePathname();
 
   const getIsActive = (slug: string): boolean => {
-    if (slug === "all") {
-      return pathname === "/" || pathname === "/category/all";
-    }
     return pathname === `/category/${slug}`;
   };
 
@@ -29,7 +25,7 @@ export default function MobileCategoryBar() {
           return (
             <Link
               key={category.slug}
-              href={category.slug === "all" ? "/" : `/category/${category.slug}`}
+              href={`/category/${category.slug}`}
               className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-all ${
                 isActive
                   ? "bg-white text-black"

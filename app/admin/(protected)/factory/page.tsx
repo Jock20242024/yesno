@@ -1,38 +1,57 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Play, Pause, Trash2 } from "lucide-react";
+import StatsCards from "./components/StatsCards";
+import TemplateList from "./components/TemplateList";
+import CreateTemplateModal from "./components/CreateTemplateModal";
+import FactoryMarketsTab from "./components/FactoryMarketsTab";
 
 interface MarketTemplate {
   id: string;
   name: string;
+  nameZh?: string | null; // 🔥 中文名称（人工翻译）
   symbol: string;
   period: number;
   advanceTime: number;
   oracleUrl?: string | null;
   isActive: boolean;
+  status?: string;
+  failureCount?: number;
+  pauseReason?: string | null;
   lastMarketId?: string | null;
   lastCreatedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  healthStatus?: 'HEALTHY' | 'GAP'; // 🚀 第一步：健康度状态
+}
+
+interface FactoryStats {
+  activeTemplates: number;
+  todayGenerated: number;
+  pausedTemplates: number;
+  totalTemplates: number;
+  lastFactoryRunAt?: string | null; // 🔥 修复：添加心跳字段
 }
 
 export default function FactoryPage() {
   const [templates, setTemplates] = useState<MarketTemplate[]>([]);
+  const [stats, setStats] = useState<FactoryStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    symbol: "BTC/USD",
-    period: "15",
-    advanceTime: "60",
-    oracleUrl: "",
-    isActive: true,
-  });
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [triggeringId, setTriggeringId] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  // 🚀 第二步：添加 Tabs 状态
+  const [activeTab, setActiveTab] = useState<'templates' | 'markets'>('templates');
+  // 🔥 移除 harvest 相关状态
 
-  // 获取模板列表
+  // 获取模板列表和统计数据
   useEffect(() => {
     fetchTemplates();
+    fetchStats();
+    
+    // 每 3 秒刷新一次统计数据
+    const statsInterval = setInterval(fetchStats, 3000);
+    return () => clearInterval(statsInterval);
   }, []);
 
   const fetchTemplates = async () => {
@@ -52,53 +71,81 @@ export default function FactoryPage() {
     }
   };
 
-  const handleCreateTemplate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const fetchStats = async () => {
     try {
-      const response = await fetch("/api/admin/factory/templates", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+      setIsLoadingStats(true);
+      const response = await fetch("/api/admin/factory/stats", {
         credentials: 'include',
-        body: JSON.stringify(formData),
       });
-
       const data = await response.json();
       if (data.success) {
-        setShowCreateForm(false);
-        setFormData({
-          name: "",
-          symbol: "BTC/USD",
-          period: "15",
-          advanceTime: "60",
-          oracleUrl: "",
-          isActive: true,
-        });
-        fetchTemplates();
-      } else {
-        alert(data.error || "创建模板失败");
+        setStats(data.data);
       }
     } catch (error) {
-      console.error("创建模板失败:", error);
-      alert("创建模板失败");
+      console.error("获取统计数据失败:", error);
+    } finally {
+      setIsLoadingStats(false);
     }
+  };
+
+  const handleTriggerGeneration = async (templateId: string) => {
+    if (!confirm('确定要立即触发生成下期市场吗？')) {
+      return;
+    }
+
+    setTriggeringId(templateId);
+    try {
+      const response = await fetch(`/api/admin/factory/templates/${templateId}/trigger`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert('市场生成成功！');
+        fetchTemplates();
+        fetchStats();
+      } else {
+        alert(`生成失败: ${data.error}`);
+      }
+    } catch (error) {
+      console.error("触发生成失败:", error);
+      alert("触发生成失败");
+    } finally {
+      setTriggeringId(null);
+    }
+  };
+
+  const handleModalSuccess = () => {
+    fetchTemplates();
+    fetchStats();
   };
 
   const handleToggleActive = async (id: string, currentActive: boolean) => {
     try {
-      // 这里可以添加更新 API，暂时使用刷新
-      alert("切换激活状态功能待实现");
-      fetchTemplates();
+      const newActiveState = !currentActive;
+      const response = await fetch(`/api/admin/factory/templates/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ isActive: newActiveState }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchTemplates();
+        fetchStats();
+      } else {
+        alert(data.error || "更新模板状态失败");
+      }
     } catch (error) {
       console.error("更新模板状态失败:", error);
+      alert("更新模板状态失败");
     }
   };
 
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleString("zh-CN");
-  };
+  // 🔥 移除 handleHarvestTemplates 函数（物理删除 harvest 功能）
 
   return (
     <div className="mx-auto max-w-[1400px] flex flex-col gap-6">
@@ -108,174 +155,66 @@ export default function FactoryPage() {
           <h1 className="text-2xl font-bold text-[#111418] dark:text-white">自动化工厂 (Market Factory)</h1>
           <p className="text-sm text-[#637588] dark:text-[#9da8b9] mt-1">批量创建和管理预测市场的自动化工具</p>
         </div>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-black font-bold rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          新建模板
-        </button>
       </div>
 
-      {/* 创建模板表单 */}
-      {showCreateForm && (
-        <div className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-sm p-6">
-          <h2 className="text-lg font-bold text-[#111418] dark:text-white mb-4">创建新模板</h2>
-          <form onSubmit={handleCreateTemplate} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
-                模板名称 <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="block w-full px-4 py-2 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white"
-                placeholder="例如：BTC/USD 15分钟"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
-                  标的符号 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.symbol}
-                  onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
-                  className="block w-full px-4 py-2 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white"
-                  placeholder="BTC/USD"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
-                  周期（分钟） <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  value={formData.period}
-                  onChange={(e) => setFormData({ ...formData, period: e.target.value })}
-                  className="block w-full px-4 py-2 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white"
-                  placeholder="15"
-                  min="1"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
-                接力时间（秒）
-              </label>
-              <input
-                type="number"
-                value={formData.advanceTime}
-                onChange={(e) => setFormData({ ...formData, advanceTime: e.target.value })}
-                className="block w-full px-4 py-2 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white"
-                placeholder="60"
-                min="1"
-              />
-              <p className="mt-1 text-xs text-[#637588] dark:text-[#9da8b9]">
-                提前多少秒创建下一期市场（默认 60 秒）
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
-                Oracle URL（可选）
-              </label>
-              <input
-                type="url"
-                value={formData.oracleUrl}
-                onChange={(e) => setFormData({ ...formData, oracleUrl: e.target.value })}
-                className="block w-full px-4 py-2 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white"
-                placeholder="https://api.coingecko.com/..."
-              />
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button
-                type="submit"
-                className="px-4 py-2 bg-primary hover:bg-primary/90 text-black font-bold rounded-lg transition-colors"
-              >
-                创建模板
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="px-4 py-2 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg text-[#111418] dark:text-white hover:bg-[#f3f4f6] dark:hover:bg-[#1a2332] transition-colors"
-              >
-                取消
-              </button>
-            </div>
-          </form>
+      {/* 🚀 第二步：Tabs 导航 */}
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-sm">
+        <div className="flex border-b border-[#e5e7eb] dark:border-[#283545]">
+          <button
+            onClick={() => setActiveTab('templates')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+              activeTab === 'templates'
+                ? 'text-primary border-b-2 border-primary bg-primary/5 dark:bg-primary/10'
+                : 'text-[#637588] dark:text-[#9da8b9] hover:text-[#111418] dark:hover:text-white hover:bg-[#f9fafb] dark:hover:bg-[#1e2a36]'
+            }`}
+          >
+            模板列表
+          </button>
+          <button
+            onClick={() => setActiveTab('markets')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+              activeTab === 'markets'
+                ? 'text-primary border-b-2 border-primary bg-primary/5 dark:bg-primary/10'
+                : 'text-[#637588] dark:text-[#9da8b9] hover:text-[#111418] dark:hover:text-white hover:bg-[#f9fafb] dark:hover:bg-[#1e2a36]'
+            }`}
+          >
+            工厂市场列表
+          </button>
         </div>
-      )}
 
-      {/* 模板列表 */}
-      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-[#e5e7eb] dark:border-[#283545] shadow-sm overflow-hidden">
+        {/* Tab 内容 */}
         <div className="p-6">
-          <h2 className="text-lg font-bold text-[#111418] dark:text-white mb-4">模板列表</h2>
-          
-          {isLoading ? (
-            <div className="text-center py-8 text-[#637588] dark:text-[#9da8b9]">加载中...</div>
-          ) : templates.length === 0 ? (
-            <div className="text-center py-8 text-[#637588] dark:text-[#9da8b9]">
-              暂无模板，点击"新建模板"创建
-            </div>
+          {activeTab === 'templates' ? (
+            <>
+              {/* 工厂运行状态监控卡片组 */}
+              <div className="mb-6">
+                <StatsCards stats={stats} isLoadingStats={isLoadingStats} templates={templates} />
+              </div>
+
+              {/* 模板列表 */}
+              <TemplateList
+                templates={templates}
+                isLoading={isLoading}
+                triggeringId={triggeringId}
+                onTriggerGeneration={handleTriggerGeneration}
+                onToggleActive={handleToggleActive}
+                onCreateTemplate={() => setIsCreateModalOpen(true)}
+                onRefresh={fetchTemplates}
+              />
+            </>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-[#e5e7eb] dark:border-[#283545]">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[#111418] dark:text-white">名称</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[#111418] dark:text-white">标的</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[#111418] dark:text-white">周期</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[#111418] dark:text-white">接力时间</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[#111418] dark:text-white">状态</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[#111418] dark:text-white">最后创建</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-[#111418] dark:text-white">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {templates.map((template) => (
-                    <tr key={template.id} className="border-b border-[#e5e7eb] dark:border-[#283545] hover:bg-[#f9fafb] dark:hover:bg-[#1a2332]">
-                      <td className="py-3 px-4 text-sm text-[#111418] dark:text-white">{template.name}</td>
-                      <td className="py-3 px-4 text-sm text-[#111418] dark:text-white">{template.symbol}</td>
-                      <td className="py-3 px-4 text-sm text-[#111418] dark:text-white">{template.period} 分钟</td>
-                      <td className="py-3 px-4 text-sm text-[#111418] dark:text-white">{template.advanceTime} 秒</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          template.isActive 
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-                        }`}>
-                          {template.isActive ? '激活' : '停用'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-[#637588] dark:text-[#9da8b9]">
-                        {formatDate(template.lastCreatedAt)}
-                      </td>
-                      <td className="py-3 px-4">
-                        <button
-                          onClick={() => handleToggleActive(template.id, template.isActive)}
-                          className="text-[#637588] dark:text-[#9da8b9] hover:text-primary transition-colors"
-                        >
-                          {template.isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            /* 🚀 第二步：工厂市场列表 - 使用独立组件，传入 source='factory' */
+            <FactoryMarketsTab />
           )}
         </div>
       </div>
+
+      {/* 创建模板 Dialog */}
+      <CreateTemplateModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleModalSuccess}
+      />
     </div>
   );
 }

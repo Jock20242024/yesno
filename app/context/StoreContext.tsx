@@ -76,16 +76,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // 🔥 关键修复：如果 AuthProvider 还在加载中，等待加载完成
     if (authLoading) {
-      console.log('⏳ [StoreContext] AuthProvider 正在加载中，等待完成...');
+      // 🔥 性能优化：删除高频日志
+      // console.log('⏳ [StoreContext] AuthProvider 正在加载中，等待完成...');
       return;
     }
     
     // 如果 AuthProvider 加载完成但没有当前用户，清空数据
     if (!currentUser || !currentUser.id) {
-      console.log('⚠️ [StoreContext] 没有当前用户，不恢复数据', {
-        currentUser: currentUser ? 'exists' : 'null',
-        authLoading,
-      });
+      // 🔥 性能优化：删除高频日志
+      // console.log('⚠️ [StoreContext] 没有当前用户，不恢复数据', {
+      //   currentUser: currentUser ? 'exists' : 'null',
+      //   authLoading,
+      // });
       setBalance(0);
       setPositions([]);
       setHistory([]);

@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { label, value, unit, icon, sortOrder, isActive } = body;
+    const { label, value, unit, icon, sortOrder, isActive, overrideValue, manualOffset } = body;
 
     // 验证必填字段
     if (!label || !label.trim()) {
@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
         icon: icon || null,
         sortOrder: sortOrder !== undefined ? parseInt(sortOrder) : 0,
         isActive: isActive !== undefined ? Boolean(isActive) : true,
+        overrideValue: overrideValue !== undefined && overrideValue !== null && overrideValue !== '' ? parseFloat(overrideValue) : null,
+        manualOffset: manualOffset !== undefined ? (parseFloat(manualOffset) || 0) : 0,
       },
     });
 

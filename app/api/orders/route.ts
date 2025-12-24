@@ -186,12 +186,16 @@ export async function POST(request: Request) {
           data: { balance: newBalance },
         });
         
-        // 2. 在 Market 中增加 totalVolume 和对应的 totalYes/totalNo（扣除手续费后）
-        const marketTotalVolumeCents = Math.round(market.totalVolume * PRECISION_MULTIPLIER);
+        // 2. 在 Market 中增加交易量和对应的 totalYes/totalNo（扣除手续费后）
+        // 🔥 修复：只更新 internalVolume（内部交易量），不覆盖 externalVolume
+        const marketInternalVolumeCents = Math.round((market.internalVolume || 0) * PRECISION_MULTIPLIER);
         const marketTotalYesCents = Math.round(market.totalYes * PRECISION_MULTIPLIER);
         const marketTotalNoCents = Math.round(market.totalNo * PRECISION_MULTIPLIER);
         
-        const newTotalVolumeCents = marketTotalVolumeCents + amountCents;
+        // 内部交易量累加（只累加用户下注的金额）
+        const newInternalVolumeCents = marketInternalVolumeCents + amountCents;
+        const newInternalVolume = newInternalVolumeCents / PRECISION_MULTIPLIER;
+        
         const newTotalYesCents = outcomeSelection === Outcome.YES 
           ? marketTotalYesCents + netAmountCents
           : marketTotalYesCents;
@@ -199,14 +203,23 @@ export async function POST(request: Request) {
           ? marketTotalNoCents + netAmountCents
           : marketTotalNoCents;
         
-        const newTotalVolume = newTotalVolumeCents / PRECISION_MULTIPLIER;
         const newTotalYes = newTotalYesCents / PRECISION_MULTIPLIER;
         const newTotalNo = newTotalNoCents / PRECISION_MULTIPLIER;
+        
+        // 🔥 同时更新 totalVolume 保持向后兼容（使用 calculateDisplayVolume 计算）
+        const { calculateDisplayVolume } = await import('@/lib/marketUtils');
+        const displayVolume = calculateDisplayVolume({
+          source: market.source || 'INTERNAL',
+          externalVolume: market.externalVolume || 0,
+          internalVolume: newInternalVolume,
+          manualOffset: market.manualOffset || 0,
+        });
         
         const updatedMarket = await tx.market.update({
           where: { id: marketId },
           data: {
-            totalVolume: newTotalVolume,
+            internalVolume: newInternalVolume, // 🔥 只更新内部交易量
+            totalVolume: displayVolume, // 更新展示交易量（向后兼容）
             totalYes: newTotalYes,
             totalNo: newTotalNo,
           },

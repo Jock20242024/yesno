@@ -19,6 +19,7 @@ enum MarketStatus {
   CLOSED // 已关闭 - 市场已关闭，等待结算
   RESOLVED // 已结算 - 市场已结算，结果已确定
   CANCELED // 已取消 - 市场被取消，不进行结算
+  PENDING_REVIEW // 待审核 - 新抓取的市场，等待管理员审核
 }
 
 enum ReviewStatus {
@@ -56,6 +57,11 @@ enum DataSourceStatus {
   ACTIVE // 激活
   INACTIVE // 停用
   ERROR // 错误
+}
+
+enum MarketSource {
+  POLYMARKET // 从外部爬取的（Polymarket）
+  INTERNAL // 自主上架的内部事件
 }
 
 // ============================================
@@ -97,23 +103,23 @@ model AuthSession {
 }
 
 model Category {
-  id           String      @id @default(uuid())
-  name         String      @unique // 分类名称（中文，如 "加密货币"）
-  slug         String      @unique // 分类 slug（如 "crypto"）
+  id           String     @id @default(uuid())
+  name         String // 分类名称（中文，如 "加密货币"）- 已移除 @unique 约束，允许不同父类下有同名子类
+  slug         String     @unique // 分类 slug（如 "crypto" 或 "crypto-15m"）- 必须唯一，子分类使用父类前缀避免冲突
   icon         String? // 图标名称（可选）
-  displayOrder Int         @default(0) // 显示顺序
-  sortOrder    Int         @default(0) // 手动排序字段（后台使用）
-  status       String      @default("active") // active | inactive
-  level        Int         @default(0) // 层级（0=顶级，1=二级，2=三级...）
+  displayOrder Int        @default(0) // 显示顺序
+  sortOrder    Int        @default(0) // 手动排序字段（后台使用）
+  status       String     @default("active") // active | inactive
+  level        Int        @default(0) // 层级（0=顶级，1=二级，2=三级...）
   parentId     String? // 父分类 ID（自关联）
-  parent       Category?   @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children     Category[]  @relation("CategoryChildren") // 子分类列表
-  
-  // 多对多关系：市场可以属于多个分类
-  markets      MarketCategory[]
+  parent       Category?  @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Category[] @relation("CategoryChildren") // 子分类列表
 
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  // 多对多关系：市场可以属于多个分类
+  markets MarketCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([parentId])
   @@index([status])
@@ -122,37 +128,62 @@ model Category {
 }
 
 model Market {
-  id              String            @id @default(uuid())
+  id              String       @id @default(uuid())
   title           String
-  description     String            @default("")
+  titleZh         String? // 中文标题（可选）
+  description     String       @default("")
+  descriptionZh   String? // 中文描述（可选）
   closingDate     DateTime
   resolvedOutcome Outcome?
-  status          MarketStatus      @default(OPEN)
-  reviewStatus    ReviewStatus      @default(PENDING) // 审核状态
-  totalVolume     Float             @default(0.0)
-  totalYes        Float             @default(0.0)
-  totalNo         Float             @default(0.0)
-  yesProbability  Int?              // Yes 概率（如 32，表示 32%）
-  noProbability   Int?              // No 概率（如 68，表示 68%）
-  rank            Int?              // 手动排名顺序（用于排行榜）
-  feeRate         Float             @default(0.05)
-  isHot           Boolean           @default(false) // 是否热门市场
+  status          MarketStatus @default(OPEN)
+  reviewStatus    ReviewStatus @default(PENDING) // 审核状态
+  totalVolume     Float        @default(0.0) // 保留字段，向后兼容，实际使用 displayVolume
+  totalYes        Float        @default(0.0)
+  totalNo         Float        @default(0.0)
+  yesProbability  Int? // Yes 概率（如 32，表示 32%）
+  noProbability   Int? // No 概率（如 68，表示 68%）
+  rank            Int? // 手动排名顺序（用于排行榜）
+  feeRate         Float        @default(0.05)
+  isHot           Boolean      @default(false) // 是否热门市场
   category        String? // 兼容字段（保留用于向后兼容）
   categorySlug    String? // 兼容字段（保留用于向后兼容）
   externalId      String? // 外部市场 ID（如 Polymarket 事件 ID）
-  externalSource  String? // 外部数据源（如 "polymarket"）
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  externalSource  String? // 外部数据源（如 "polymarket"），保留字段用于向后兼容
+  source          MarketSource @default(INTERNAL) // 事件来源：POLYMARKET（爬取的）或 INTERNAL（自主上架）
+  externalVolume  Float        @default(0.0) // 外部爬取的交易量（只读，由爬虫更新）
+  internalVolume  Float        @default(0.0) // 本平台产生的交易量（实时累加）
+  manualOffset    Float        @default(0.0) // 手动校准偏移量（后台可调整）
+  isActive        Boolean      @default(true) // 🔥 软删除标记（false 表示已删除）
+  // 🔥 添加 Polymarket 原始数据字段
+  outcomePrices   String? // 存储原始赔率 JSON 字符串，如 "[\"0.7\", \"0.3\"]"
+  image           String? // 存储全网头像 URL
+  iconUrl         String? // 作为备份头像字段
+  initialPrice    Float? // 存储初始价格（0-1 之间）
+  volume24h       Float? // 存储 24 小时交易量
+  isFactory       Boolean      @default(false) // 🔥 是否为工厂自动生成的市场
+  strikePrice     Float? // 🔥 行权价（用于工厂生成的市场，存储实时价格如 $88196.00）
+  templateId      String? // 🔥 关联的模板ID（用于统计该模板生成了多少市场）
+  symbol          String? // 🔥 标的符号（如 "BTC/USD"，从模板继承）
+  period          Int? // 🔥 周期（分钟数，如 15，从模板继承）
+  // factoryId       String? // 🔥 临时移除：数据库中没有这个字段，导致查询错误
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   // 关联关系
-  orders          Order[]
-  positions       Position[]
+  orders         Order[]
+  positions      Position[]
   // 多对多关系：一个市场可以属于多个分类
-  categories      MarketCategory[]
+  categories     MarketCategory[]
+  // 🔥 关联MarketTemplate（如果templateId存在）
+  marketTemplate MarketTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   @@index([isHot])
   @@index([externalId, externalSource])
   @@index([reviewStatus])
+  @@index([templateId]) // 🔥 索引：方便统计模板生成的市场
+  @@index([symbol]) // 🔥 索引：方便按资产查询
+  // @@index([factoryId]) // 🔥 临时注释：数据库可能还没有这个字段
+  @@index([isFactory]) // 🔥 索引：方便查询工厂市场
   @@map("markets")
 }
 
@@ -291,34 +322,59 @@ model AdminLog {
 
 // 自动化工厂模板
 model MarketTemplate {
-  id            String   @id @default(uuid())
-  name          String   // 模板名称（如 "BTC/USD 15分钟")
-  symbol        String   // 标的符号（如 "BTC/USD"）
-  period        Int      // 周期（分钟数，如 15）
-  advanceTime   Int      @default(60) // 接力时间（秒，提前多少秒创建下一期）
-  oracleUrl     String?  // Oracle 价格来源 URL（可选）
-  isActive      Boolean  @default(true) // 是否激活
-  lastMarketId  String?  // 最后创建的市场ID
-  lastCreatedAt DateTime? // 最后创建时间
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String    @id @default(uuid())
+  name              String // 模板名称（如 "BTC/USD 15分钟")
+  nameZh            String? // 🔥 中文名称（人工翻译，仅用于前端显示）
+  titleTemplate     String? // 🔥 模板标题（支持占位符如 $[StrikePrice] 和 [EndTime]）
+  displayTemplate   String? // 🔥 显示名称模板（中文模板，用于人工预设翻译，支持占位符如 $[StrikePrice] 和 [EndTime]）
+  symbol            String // 标的符号（如 "BTC/USD"）
+  period            Int // 周期（分钟数，如 15）
+  type              String    @default("UP_OR_DOWN") // 🔥 模板类型：UP_OR_DOWN, HIT_PRICE, NEG_RISK, MULTI_STRIKES 等
+  advanceTime       Int       @default(60) // 接力时间（秒，提前多少秒创建下一期）
+  oracleUrl         String? // Oracle 价格来源 URL（可选）
+  categorySlug      String? // 🔥 关联分类的slug（如 "crypto" 或 "finance"）
+  externalIdPattern String? // 🔥 对标外部URL模式（用于自动生成externalId）
+  seriesId          String? // 🔥 Polymarket Series ID（用于直接从API获取价格）
+  isActive          Boolean   @default(true) // 是否激活
+  status            String    @default("ACTIVE") // 🔥 状态：ACTIVE（运行中）、PAUSED（已熔断）
+  failureCount      Int       @default(0) // 🔥 连续失败计数（用于熔断逻辑）
+  pauseReason       String? // 🔥 熔断原因（如 "由于数据源丢失已自动熔断"）
+  lastMarketId      String? // 最后创建的市场ID
+  lastCreatedAt     DateTime? // 最后创建时间
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  @@unique([symbol, period]) // 同一标的和周期的模板唯一
+  // 🔥 关联关系：一个模板可以生成多个市场
+  markets Market[]
+
+  @@unique([symbol, period, type]) // 🔥 保留唯一约束：同一标的、周期和类型的模板唯一
   @@index([isActive])
+  @@index([status]) // 🔥 添加 status 索引
   @@index([symbol])
   @@map("market_templates")
 }
 
-model GlobalStat {
-  id        String   @id @default(uuid())
-  label     String   // 指标名称（如 "24H 交易量"）
-  value     Float    @default(0.0) // 指标数值
-  unit      String?  // 单位（如 "USD", "%", "人"）
-  icon      String?  // 图标名称（如 "DollarSign", "Users"）
-  sortOrder Int      @default(0) // 显示顺序
-  isActive  Boolean  @default(true) // 是否激活
-  createdAt DateTime @default(now())
+// 系统设置表（用于存储全局配置和状态）
+model SystemSettings {
+  key       String   @id // 设置键名作为主键
+  value     String   // 设置值（JSON字符串或纯文本）
   updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model GlobalStat {
+  id            String   @id @default(uuid())
+  label         String // 指标名称（如 "24H 交易量"）
+  value         Float    @default(0.0) // 指标数值（自动计算值或手动固定值）
+  manualOffset  Float    @default(0.0) // 手动偏移量（在自动计算值基础上增减）
+  overrideValue Float? // 手动固定值（如果设置，则忽略自动计算，直接使用此值）
+  unit          String? // 单位（如 "USD", "%", "人"）
+  icon          String? // 图标名称（如 "DollarSign", "Users"）
+  sortOrder     Int      @default(0) // 显示顺序
+  isActive      Boolean  @default(true) // 是否激活
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([isActive])
   @@index([sortOrder])
@@ -330,15 +386,30 @@ model DataSource {
   id           String           @id @default(uuid())
   sourceName   String           @unique // 采集源名称（如 "Polymarket", "Augur"）
   status       DataSourceStatus @default(ACTIVE) // 状态
-  lastSyncTime DateTime?        // 最后同步时间
+  lastSyncTime DateTime? // 最后同步时间
   itemsCount   Int              @default(0) // 采集到的项目数量
   multiplier   Float            @default(1.0) // 数据权重系数（用于计算总和）
   config       String?          @default("{}") // 配置信息（JSON 字符串）
-  errorMessage String?          // 错误信息（如果状态为 ERROR）
+  errorMessage String? // 错误信息（如果状态为 ERROR）
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
   @@index([status])
   @@index([sourceName])
   @@map("data_sources")
+}
+
+// 采集器任务状态记录
+model ScraperTask {
+  id          String   @id @default(cuid())
+  name        String   @unique // 例如 "Polymarket_Main"
+  lastRunTime DateTime @default(now())
+  status      String   @default("NORMAL") // NORMAL, ABNORMAL, STOPPED
+  message     String? // 存储报错信息
+  frequency   Int      @default(10) // 运行频率（分钟）
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([status])
+  @@map("scraper_tasks")
 }

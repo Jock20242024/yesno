@@ -147,6 +147,18 @@ export default function AdminSidebar() {
             </Link>
 
             <Link
+              href="/admin/settlement"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                pathname === "/admin/settlement"
+                  ? "bg-primary text-white shadow-sm hover:bg-blue-600"
+                  : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
+              }`}
+            >
+              <span className="material-symbols-outlined">account_balance_wallet</span>
+              <p className="text-sm font-medium leading-normal">结算监控中心</p>
+            </Link>
+
+            <Link
               href="/admin/categories"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                 pathname === "/admin/categories"
@@ -192,6 +204,18 @@ export default function AdminSidebar() {
             >
               <span className="material-symbols-outlined">precision_manufacturing</span>
               <p className="text-sm font-medium leading-normal">自动化工厂 (Market Factory)</p>
+            </Link>
+
+            <Link
+              href="/admin/operations/odds"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                pathname === "/admin/operations/odds"
+                  ? "bg-primary text-white shadow-sm hover:bg-blue-600"
+                  : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
+              }`}
+            >
+              <span className="material-symbols-outlined">gauge</span>
+              <p className="text-sm font-medium leading-normal">赔率管理</p>
             </Link>
 
             {/* 报表与日志分组 */}

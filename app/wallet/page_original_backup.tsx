@@ -125,7 +125,8 @@ export default function WalletPage() {
     
     // 优先级 2: 使用 user.balance（格式化后的字符串，如 "$1000.00"）
     if (user?.balance) {
-      const parsedFromUser = parseFloat(user.balance.replace(/[$,]/g, ''));
+      // 🔥 修复：统一使用 String(user?.balance || 0).replace(...)
+      const parsedFromUser = parseFloat(String(user?.balance || 0).replace(/[$,]/g, ''));
       if (!isNaN(parsedFromUser) && parsedFromUser >= 0) {
         const knownTestValues = [2450.32, 1900.46, 1900.45, 2437.799, 2437.8, 145.0];
         if (!knownTestValues.includes(parsedFromUser)) {

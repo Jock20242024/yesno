@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// 🔥 强制 API 实时刷新：禁用静态缓存
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 /**
  * 获取激活的全局指标（公开 API）
@@ -12,7 +14,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    // 获取所有激活的全局指标
+    // 获取所有激活的全局指标（包含手动覆盖和偏移字段）
     const stats = await prisma.globalStat.findMany({
       where: {
         isActive: true,
@@ -21,81 +23,39 @@ export async function GET() {
         { sortOrder: 'asc' },
         { createdAt: 'asc' },
       ],
+      select: {
+        id: true,
+        label: true,
+        value: true,
+        unit: true,
+        icon: true,
+        sortOrder: true,
+        isActive: true,
+        manualOffset: true,
+        overrideValue: true,
+      },
     });
 
-    // 从采集源实时计算统计数据
-    let calculatedStats: any = {};
-    try {
-      // 获取所有激活的采集源
-      const activeSources = await prisma.dataSource.findMany({
-        where: {
-          status: 'ACTIVE',
-        },
-      });
-
-      // 计算总和（考虑权重系数）
-      let totalVolume24h = 0;
-      let totalMarkets = 0;
-
-      for (const source of activeSources) {
-        const weightedValue = source.itemsCount * source.multiplier;
-        
-        if (source.sourceName === 'Polymarket') {
-          // Polymarket 的 itemsCount 是市场数量，可以估算交易量
-          totalVolume24h += weightedValue * 1000000; // 假设每个市场平均 100万交易量
-          totalMarkets += source.itemsCount;
-        }
-      }
-
-      // 获取已发布的本地市场数量
-      const localMarkets = await prisma.market.count({
-        where: {
-          reviewStatus: 'PUBLISHED',
-          status: 'OPEN',
-        },
-      });
-
-      totalMarkets += localMarkets;
-
-      // 计算 24H 活跃交易者
-      const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const activeTraders = await prisma.order.groupBy({
-        by: ['userId'],
-        where: {
-          createdAt: {
-            gte: last24Hours,
-          },
-        },
-      });
-
-      calculatedStats = {
-        volume24h: totalVolume24h,
-        totalMarkets,
-        activeTraders24h: activeTraders.length,
-      };
-    } catch (error) {
-      console.warn('⚠️ [Stats API] 计算统计数据失败，使用默认值:', error);
-    }
-
-    // 映射实时计算的数据到对应指标
+    // 🔥 简化逻辑：脚本 B 已经直接写入中文标签，API 只需要原样返回 GlobalStat 数据
     const statsWithCalculated = stats.map(stat => {
-      let value = stat.value;
-
-      // 根据 label 匹配实时计算的数据
-      if (calculatedStats) {
-        if (stat.label.includes('24H 交易量') || stat.label.includes('交易量')) {
-          value = calculatedStats.volume24h || stat.value;
-        } else if (stat.label.includes('进行中事件') || stat.label.includes('事件')) {
-          value = calculatedStats.totalMarkets || stat.value;
-        } else if (stat.label.includes('活跃交易者')) {
-          value = calculatedStats.activeTraders24h || stat.value;
-        }
+      // 如果设置了 overrideValue，直接使用 overrideValue，不进行自动计算
+      let baseValue = stat.value;
+      
+      if (stat.overrideValue !== null && stat.overrideValue !== undefined) {
+        // 如果设置了手动固定值，直接使用
+        baseValue = stat.overrideValue;
+      } else {
+        // 🔥 直接使用 GlobalStat 表中的值（脚本 B 已计算并更新到中文标签）
+        baseValue = stat.value || 0;
       }
+      
+      // 应用手动偏移量（如果有）
+      const finalValue = baseValue + (stat.manualOffset || 0);
 
       return {
         id: stat.id,
         label: stat.label,
-        value,
+        value: finalValue,
         unit: stat.unit,
         icon: stat.icon,
         sortOrder: stat.sortOrder,

@@ -32,7 +32,8 @@ export const DBService = {
       orderBy: { createdAt: 'desc' },
     });
     
-    console.log(`[DBService.getAllUsers] Prisma returned ${dbUsers.length} users`);
+    // 🔥 性能优化：删除高频查询的日志
+    // console.log(`[DBService.getAllUsers] Prisma returned ${dbUsers.length} users`);
     
     return dbUsers.map((dbUser) => ({
       id: dbUser.id,
@@ -193,70 +194,198 @@ export const DBService = {
    */
   async getAllMarkets(categorySlug?: string, includePending: boolean = false): Promise<Market[]> {
     // 构建查询条件
-    const where: any = {};
-    
+    const where: any = {
+      isActive: true, // 🔥 只返回未删除的市场
+    };
+
     // 🔥 默认只返回已发布的市场（除非 explicitly 指定 includePending）
     if (!includePending) {
       where.reviewStatus = 'PUBLISHED';
     }
     
-    // 🔥 支持通过多对多关系筛选分类
+    // 🔥 支持通过多对多关系筛选分类（使用 ID 集合进行物理隔离查询）
     if (categorySlug) {
-      // 查找对应的分类
-      const category = await prisma.category.findFirst({
+      // 1. 先获取当前分类及其直属子分类 ID
+      const category = await prisma.category.findUnique({
         where: { slug: categorySlug },
+        include: { children: { select: { id: true } } }
       });
       
-      if (category) {
-        where.categories = {
-          some: {
-            categoryId: category.id,
-          },
-        };
+      // 2. 严禁"裸奔"：如果 Slug 没对上，直接返回空数组，不准返回全量市场
+      if (!category) {
+        console.warn(`⚠️ [DBService] 分类 ${categorySlug} 不存在，返回空数组`);
+        return [];
+      }
+      
+      // 3. 🔥 修复 ID 匹配：确保即使没有子分类，categoryIds 也能正确包含当前分类 ID
+      // 即使 children 为空或 undefined，至少也会包含 category.id
+      const childrenIds = category.children?.map(c => c.id) || [];
+      const categoryIds = [category.id, ...childrenIds];
+      
+      // 4. 使用这个 ID 集合进行查询
+      where.categories = {
+        some: {
+          categoryId: { in: categoryIds }
+        }
+      };
+      
+      const childCount = categoryIds.length - 1; // 减去父类本身
+      if (childCount > 0) {
+        console.log(`✅ [DBService] 分类 '${categorySlug}' (ID: ${category.id})，查询包含 ${categoryIds.length} 个分类的市场（父类 + ${childCount} 个子分类）`);
+      } else {
+        console.log(`✅ [DBService] 分类 '${categorySlug}' (ID: ${category.id})，查询仅该分类的市场（无子分类，categoryIds=[${category.id}]）`);
       }
     }
 
-    const dbMarkets = await prisma.market.findMany({
-      where,
-      include: {
-        categories: {
-          include: {
-            category: {
-              select: {
-                name: true,
-                slug: true,
+    let dbMarkets;
+    try {
+      dbMarkets = await prisma.market.findMany({
+        where,
+        include: {
+          categories: {
+            include: {
+              category: {
+                select: {
+                  name: true,
+                  slug: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        // 🔥 添加交易量排序逻辑：按 totalVolume 降序排列，交易量最大的市场排在最前面
+        orderBy: { totalVolume: 'desc' },
+      });
+      console.log(`✅ [DBService] getAllMarkets 查询成功，返回 ${dbMarkets.length} 个市场`);
+    } catch (dbError) {
+      console.error('❌ [DBService] getAllMarkets 数据库查询失败:');
+      console.error('查询条件:', JSON.stringify(where, null, 2));
+      console.error('错误类型:', dbError instanceof Error ? dbError.constructor.name : typeof dbError);
+      console.error('错误消息:', dbError instanceof Error ? dbError.message : String(dbError));
+      console.error('错误堆栈:', dbError instanceof Error ? dbError.stack : 'N/A');
+      throw dbError;
+    }
 
-    return dbMarkets.map((dbMarket) => ({
-      id: dbMarket.id,
-      title: dbMarket.title,
-      description: dbMarket.description,
-      closingDate: dbMarket.closingDate.toISOString(),
-      resolvedOutcome: dbMarket.resolvedOutcome as Outcome | undefined,
-      status: dbMarket.status as MarketStatus,
-      totalVolume: dbMarket.totalVolume,
-      totalYes: dbMarket.totalYes,
-      totalNo: dbMarket.totalNo,
-      feeRate: dbMarket.feeRate,
-      category: dbMarket.categories[0]?.category?.name || dbMarket.category || undefined,
-      categorySlug: dbMarket.categories[0]?.category?.slug || dbMarket.categorySlug || undefined,
-      createdAt: dbMarket.createdAt.toISOString(),
-      // 添加 isHot 字段（用于前端筛选）
-      ...(dbMarket.isHot !== undefined && { isHot: dbMarket.isHot } as any),
-      // 添加 volume 字段（用于排序，兼容性字段）
-      volume: dbMarket.totalVolume || 0,
-      totalVolume: dbMarket.totalVolume || 0,
-      // 添加 yesPercent 字段（用于显示）
-      yesPercent: dbMarket.totalYes && dbMarket.totalNo
-        ? Math.round((dbMarket.totalYes / (dbMarket.totalYes + dbMarket.totalNo)) * 100)
-        : 50,
-    }));
+    // 🔥 安全映射：处理每个市场对象，确保新字段有默认值
+    return dbMarkets.map((dbMarket) => {
+      try {
+        // 🔥 安全处理新字段：确保 source、externalVolume 等字段有默认值（旧数据可能是 null）
+        const source = dbMarket.source || 'INTERNAL';
+        const externalVolume = dbMarket.externalVolume ?? 0;
+        const internalVolume = dbMarket.internalVolume ?? 0;
+        const manualOffset = dbMarket.manualOffset ?? 0;
+        const isActive = dbMarket.isActive ?? true; // 默认 true（向后兼容）
+        
+        // 🔥 处理 BigInt 类型：确保所有数值字段都是 Number 类型（不是 BigInt 或 null）
+        const convertToNumber = (value: any): number => {
+          if (value === null || value === undefined) return 0;
+          // 处理 BigInt 类型
+          if (typeof value === 'bigint') {
+            try {
+              return Number(value);
+            } catch {
+              return 0;
+            }
+          }
+          // 处理字符串
+          if (typeof value === 'string') {
+            const parsed = parseFloat(value);
+            return isNaN(parsed) ? 0 : parsed;
+          }
+          // 处理数字
+          const num = Number(value);
+          return isNaN(num) || !isFinite(num) ? 0 : num;
+        };
+
+        const safeTotalVolume = convertToNumber(dbMarket.totalVolume);
+        const safeTotalYes = convertToNumber(dbMarket.totalYes);
+        const safeTotalNo = convertToNumber(dbMarket.totalNo);
+        const safeFeeRate = convertToNumber(dbMarket.feeRate) || 0.05; // 如果为 0，使用默认值 0.05
+        const safeExternalVolume = convertToNumber(externalVolume);
+        const safeInternalVolume = convertToNumber(internalVolume);
+        const safeManualOffset = convertToNumber(manualOffset);
+
+        // 🔥 计算 yesPercent 和 noPercent（安全处理）
+        let safeYesPercent = 50;
+        let safeNoPercent = 50;
+        if (safeTotalYes > 0 || safeTotalNo > 0) {
+          const totalAmount = safeTotalYes + safeTotalNo;
+          const calculatedYes = Math.round((safeTotalYes / totalAmount) * 100);
+          const calculatedNo = Math.round((safeTotalNo / totalAmount) * 100);
+          safeYesPercent = isNaN(calculatedYes) || !isFinite(calculatedYes) ? 50 : calculatedYes;
+          safeNoPercent = isNaN(calculatedNo) || !isFinite(calculatedNo) ? 50 : calculatedNo;
+        }
+
+        return {
+          id: dbMarket.id,
+          title: dbMarket.title,
+          description: dbMarket.description,
+          closingDate: dbMarket.closingDate.toISOString(),
+          resolvedOutcome: dbMarket.resolvedOutcome as Outcome | undefined,
+          status: dbMarket.status as MarketStatus,
+          totalVolume: safeTotalVolume, // 🔥 确保是 Number 类型
+          totalYes: safeTotalYes, // 🔥 确保是 Number 类型
+          totalNo: safeTotalNo, // 🔥 确保是 Number 类型
+          feeRate: safeFeeRate, // 🔥 确保是 Number 类型
+          category: dbMarket.categories[0]?.category?.name || dbMarket.category || undefined,
+          categorySlug: dbMarket.categories[0]?.category?.slug || dbMarket.categorySlug || undefined,
+          createdAt: dbMarket.createdAt.toISOString(),
+          // 添加 isHot 字段（用于前端筛选）
+          ...(dbMarket.isHot !== undefined && { isHot: dbMarket.isHot } as any),
+          // 添加 volume 字段（用于排序，兼容性字段）
+          volume: safeTotalVolume, // 🔥 确保是 Number 类型
+          totalVolume: safeTotalVolume, // 🔥 确保是 Number 类型（重复但保持一致）
+          // 🔥 添加 yesPercent 和 noPercent 字段（用于显示）
+          yesPercent: safeYesPercent, // 🔥 确保是有效的数字
+          noPercent: safeNoPercent, // 🔥 确保是有效的数字
+          // 🔥 添加原始数据字段（从数据库直接读取）
+          outcomePrices: dbMarket.outcomePrices || null,
+          image: dbMarket.image || null,
+          iconUrl: dbMarket.iconUrl || null,
+          initialPrice: dbMarket.initialPrice ? Number(dbMarket.initialPrice) : null,
+          volume24h: dbMarket.volume24h ? Number(dbMarket.volume24h) : null,
+          // 🔥 添加新字段（安全处理 null 值，确保是 Number 类型）
+          source: source as 'POLYMARKET' | 'INTERNAL',
+          externalVolume: safeExternalVolume, // 🔥 确保是 Number 类型
+          internalVolume: safeInternalVolume, // 🔥 确保是 Number 类型
+          manualOffset: safeManualOffset, // 🔥 确保是 Number 类型
+          isActive,
+          // 🔥 工厂市场关键字段：确保包含 templateId、isFactory 和 period，用于聚合去重
+          templateId: (dbMarket as any).templateId || null,
+          isFactory: (dbMarket as any).isFactory || false,
+          period: (dbMarket as any).period || null,
+        } as any; // 使用 as any 避免类型检查错误（因为 Market 接口可能还没有这些字段）
+      } catch (mapError) {
+        console.error('❌ [DBService] getAllMarkets 映射单个市场失败 (ID:', dbMarket.id, '):');
+        console.error('错误类型:', mapError instanceof Error ? mapError.constructor.name : typeof mapError);
+        console.error('错误消息:', mapError instanceof Error ? mapError.message : String(mapError));
+        console.error('错误堆栈:', mapError instanceof Error ? mapError.stack : 'N/A');
+        // 返回一个安全的默认对象，避免整个查询失败
+        return {
+          id: dbMarket.id,
+          title: dbMarket.title || '未知市场',
+          description: dbMarket.description || '',
+          closingDate: dbMarket.closingDate.toISOString(),
+          status: dbMarket.status as MarketStatus,
+          totalVolume: dbMarket.totalVolume || 0,
+          totalYes: dbMarket.totalYes || 0,
+          totalNo: dbMarket.totalNo || 0,
+          feeRate: dbMarket.feeRate || 0.05,
+          category: undefined,
+          categorySlug: undefined,
+          createdAt: dbMarket.createdAt.toISOString(),
+          source: 'INTERNAL' as 'POLYMARKET' | 'INTERNAL',
+          externalVolume: 0,
+          internalVolume: 0,
+          manualOffset: 0,
+          isActive: true,
+          // 🔥 工厂市场关键字段：错误情况下也提供默认值
+          templateId: null,
+          isFactory: false,
+          period: null,
+        } as any;
+      }
+    });
   },
 
   /**
@@ -265,72 +394,162 @@ export const DBService = {
    * @returns Promise<Market | null> 市场对象
    */
   async findMarketById(marketId: string): Promise<Market | null> {
-    const dbMarket = await prisma.market.findUnique({
-      where: { id: marketId },
-    });
+    try {
+      // 🔥 统一"身份证"校验逻辑：支持双重查找（slug 或 id）
+      // 由于目前 Market 表没有 slug 字段，先用 ID 查找，如果将来添加了 slug 字段，可以同时支持
+      const dbMarket = await prisma.market.findFirst({
+        where: {
+          OR: [
+            { id: marketId }, // 🔥 先尝试按 ID 匹配（兼容没有 slug 的手动市场）
+            // 如果将来添加了 slug 字段，取消注释下面这行：
+            // { slug: marketId }, // 🔥 支持按 slug 匹配
+          ],
+          reviewStatus: 'PUBLISHED', // 🔥 确保只展示已发布的
+          isActive: true, // 🔥 只返回未删除的市场
+        },
+      });
 
-    if (!dbMarket) return null;
+      if (!dbMarket) {
+        // 🔥 性能优化：删除高频查询失败的日志（仅在开发环境输出）
+        // console.log('⚠️ [DBService] findMarketById: 市场未找到或已删除, ID:', marketId);
+        return null;
+      }
 
-    return {
-      id: dbMarket.id,
-      title: dbMarket.title,
-      description: dbMarket.description,
-      closingDate: dbMarket.closingDate.toISOString(),
-      resolvedOutcome: dbMarket.resolvedOutcome as Outcome | undefined,
-      status: dbMarket.status as MarketStatus,
-      totalVolume: dbMarket.totalVolume,
-      totalYes: dbMarket.totalYes,
-      totalNo: dbMarket.totalNo,
-      feeRate: dbMarket.feeRate,
-      category: dbMarket.category || undefined,
-      categorySlug: dbMarket.categorySlug || undefined,
-      createdAt: dbMarket.createdAt.toISOString(),
-    };
+      // 🔥 安全处理新字段：确保 source、externalVolume 等字段有默认值（旧数据可能是 null）
+      const source = dbMarket.source || 'INTERNAL';
+      const externalVolume = dbMarket.externalVolume ?? 0;
+      const internalVolume = dbMarket.internalVolume ?? 0;
+      const manualOffset = dbMarket.manualOffset ?? 0;
+
+      return {
+        id: dbMarket.id,
+        title: dbMarket.title,
+        description: dbMarket.description,
+        closingDate: dbMarket.closingDate.toISOString(),
+        resolvedOutcome: dbMarket.resolvedOutcome as Outcome | undefined,
+        status: dbMarket.status as MarketStatus,
+        totalVolume: dbMarket.totalVolume,
+        totalYes: dbMarket.totalYes,
+        totalNo: dbMarket.totalNo,
+        feeRate: dbMarket.feeRate,
+        category: dbMarket.category || undefined,
+        categorySlug: dbMarket.categorySlug || undefined,
+        createdAt: dbMarket.createdAt.toISOString(),
+        // 🔥 添加新字段（安全处理 null 值）
+        source: source as 'POLYMARKET' | 'INTERNAL',
+        externalVolume,
+        internalVolume,
+        manualOffset,
+        isActive: dbMarket.isActive ?? true, // 默认 true（向后兼容）
+      } as any; // 使用 as any 避免类型检查错误（因为 Market 接口可能还没有这些字段）
+    } catch (error) {
+      console.error('❌ [DBService] findMarketById 查询失败, ID:', marketId);
+      console.error('错误类型:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('错误消息:', error instanceof Error ? error.message : String(error));
+      console.error('错误堆栈:', error instanceof Error ? error.stack : 'N/A');
+      throw error;
+    }
   },
 
   /**
    * 添加新市场
    * @param market 市场对象
-   * @param options 可选参数（category, categorySlug, reviewStatus）
+   * @param options 可选参数（category, categorySlug, categoryId, reviewStatus, isHot）
    * @returns Promise<Market> 创建的市场对象
    */
   async addMarket(
     market: Market,
-    options?: { category?: string; categorySlug?: string; reviewStatus?: 'PENDING' | 'PUBLISHED' | 'REJECTED' }
+    options?: { 
+      category?: string; 
+      categorySlug?: string; 
+      categoryId?: string; // 🔥 分类 ID（用于创建 MarketCategory 关联）
+      reviewStatus?: 'PENDING' | 'PUBLISHED' | 'REJECTED';
+      isHot?: boolean; // 🔥 热门标记
+    }
   ): Promise<Market> {
-    const dbMarket = await prisma.market.create({
-      data: {
+    try {
+      // 🔥 重构数据构造逻辑：确保包含所有必填字段，防止 Prisma 报错
+      const marketCreateData: any = {
+        // 基本字段
         title: market.title,
-        description: market.description,
+        description: market.description || '',
         closingDate: new Date(market.closingDate),
-        resolvedOutcome: market.resolvedOutcome,
-        status: market.status,
-        totalVolume: market.totalVolume,
-        totalYes: market.totalYes,
-        totalNo: market.totalNo,
-        feeRate: market.feeRate,
-        category: options?.category || market.category || null,
-        categorySlug: options?.categorySlug || market.categorySlug || null,
+        status: market.status || 'OPEN',
+        // 🔥 修复 undefined 报错：必须传 null，不能传 undefined（Prisma 不接受 undefined）
+        resolvedOutcome: market.resolvedOutcome ?? null,
+        // 🔥 补全缺失的必填字段（根据 schema.prisma 要求）
+        source: 'INTERNAL' as const, // 自主上架默认为 INTERNAL
+        isActive: true, // 默认为启用
+        externalVolume: 0, // 初始外部交易量
+        internalVolume: market.totalVolume || 0, // 初始内部交易量
+        manualOffset: 0, // 初始偏移量
+        // 其他字段
+        isHot: Boolean(options?.isHot || false), // 热门标记
+        totalVolume: market.totalVolume || 0, // 向后兼容字段
+        totalYes: market.totalYes || 0,
+        totalNo: market.totalNo || 0,
+        feeRate: market.feeRate || 0.05,
+        category: options?.category || market.category || null, // 兼容字段
+        categorySlug: options?.categorySlug || market.categorySlug || null, // 兼容字段
         // 如果未指定 reviewStatus，默认为 PUBLISHED（管理员手动创建）
-        reviewStatus: options?.reviewStatus || 'PUBLISHED',
-      },
-    });
+        reviewStatus: (options?.reviewStatus || 'PUBLISHED') as 'PENDING' | 'PUBLISHED' | 'REJECTED',
+      };
 
-    return {
-      id: dbMarket.id,
-      title: dbMarket.title,
-      description: dbMarket.description,
-      closingDate: dbMarket.closingDate.toISOString(),
-      resolvedOutcome: dbMarket.resolvedOutcome as Outcome | undefined,
-      status: dbMarket.status as MarketStatus,
-      totalVolume: dbMarket.totalVolume,
-      totalYes: dbMarket.totalYes,
-      totalNo: dbMarket.totalNo,
-      feeRate: dbMarket.feeRate,
-      category: dbMarket.category || undefined,
-      categorySlug: dbMarket.categorySlug || undefined,
-      createdAt: dbMarket.createdAt.toISOString(),
-    };
+      // 🔥 处理分类关联（如果提供了 categoryId）
+      // 使用嵌套 create 创建 MarketCategory 中间表记录
+      if (options?.categoryId) {
+        marketCreateData.categories = {
+          create: {
+            categoryId: options.categoryId,
+          },
+        };
+      }
+      
+      console.log('💾 [DBService] addMarket 准备创建市场，数据:', JSON.stringify(marketCreateData, null, 2));
+      
+      // 🔥 管理员权限：允许通过 DBService 创建市场（用于后台管理）
+      // 为新市场生成 templateId（使用 manual- 前缀标识手动创建）
+      const crypto = await import('crypto');
+      const templateId = `manual-${crypto.randomUUID()}`;
+      marketCreateData.templateId = templateId;
+      
+      const dbMarket = await prisma.market.create({
+        data: marketCreateData,
+      });
+
+      console.log('✅ [DBService] addMarket 成功创建市场:', {
+        id: dbMarket.id,
+        title: dbMarket.title,
+        source: dbMarket.source,
+        isActive: dbMarket.isActive,
+        isHot: dbMarket.isHot,
+        categoryId: options?.categoryId,
+        templateId: templateId,
+      });
+
+      return {
+        id: dbMarket.id,
+        title: dbMarket.title,
+        description: dbMarket.description,
+        closingDate: dbMarket.closingDate.toISOString(),
+        resolvedOutcome: dbMarket.resolvedOutcome as Outcome | undefined,
+        status: dbMarket.status as MarketStatus,
+        totalVolume: Number(dbMarket.totalVolume), // 🔥 确保是 Number 类型（不是 BigInt）
+        totalYes: Number(dbMarket.totalYes), // 🔥 确保是 Number 类型
+        totalNo: Number(dbMarket.totalNo), // 🔥 确保是 Number 类型
+        feeRate: Number(dbMarket.feeRate), // 🔥 确保是 Number 类型
+        category: dbMarket.category || undefined,
+        categorySlug: dbMarket.categorySlug || undefined,
+        createdAt: dbMarket.createdAt.toISOString(),
+      };
+    } catch (dbError) {
+      console.error('❌ [DBService] addMarket 创建市场失败:');
+      console.error('错误类型:', dbError instanceof Error ? dbError.constructor.name : typeof dbError);
+      console.error('错误消息:', dbError instanceof Error ? dbError.message : String(dbError));
+      console.error('错误堆栈:', dbError instanceof Error ? dbError.stack : 'N/A');
+      console.dir(dbError, { depth: null, colors: true });
+      throw dbError; // 重新抛出，让调用方处理
+    }
   },
 
   /**
@@ -351,6 +570,10 @@ export const DBService = {
       if (data.totalYes !== undefined) updateData.totalYes = data.totalYes;
       if (data.totalNo !== undefined) updateData.totalNo = data.totalNo;
       if (data.feeRate !== undefined) updateData.feeRate = data.feeRate;
+      // 🔥 支持 image 字段更新
+      if ((data as any).image !== undefined) updateData.image = (data as any).image;
+      // 🔥 支持 externalId 字段更新
+      if ((data as any).externalId !== undefined) updateData.externalId = (data as any).externalId;
 
       const dbMarket = await prisma.market.update({
         where: { id: marketId },

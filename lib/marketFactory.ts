@@ -1,11 +1,20 @@
 /**
- * 市场工厂服务
+ * 市场工厂服务（已废弃，请使用 lib/factory/engine.ts）
  * 自动化创建市场的核心逻辑
+ * 
+ * @deprecated 请使用 lib/factory/engine.ts 中的新实现
  */
 
 import prisma from '@/lib/prisma';
 import { getPrice } from '@/lib/oracle';
 import { MarketStatus } from '@/types/data';
+
+// 🔥 重新导出新引擎的函数，保持向后兼容
+export { 
+  shouldCreateMarket, 
+  createMarketFromTemplate, 
+  checkAndCreateMarkets 
+} from './factory/engine';
 
 interface MarketTemplate {
   id: string;
@@ -42,41 +51,13 @@ function getNextPeriodTime(periodMinutes: number): Date {
   return nextTime;
 }
 
-/**
- * 检查是否应该创建新的市场
- * @param template 模板
- * @returns 是否应该创建新市场
- */
-export async function shouldCreateMarket(template: MarketTemplate): Promise<boolean> {
-  if (!template.isActive) {
-    return false;
-  }
-
-  // 计算下一个周期的时间点
-  const nextPeriodTime = getNextPeriodTime(template.period);
-  const now = new Date();
-  
-  // 计算距离下一个周期的时间（秒）
-  const secondsUntilNextPeriod = (nextPeriodTime.getTime() - now.getTime()) / 1000;
-  
-  // 如果距离下一个周期的时间小于等于提前时间，则应该创建
-  const shouldCreate = secondsUntilNextPeriod <= template.advanceTime && secondsUntilNextPeriod > 0;
-
-  console.log(`🔍 [MarketFactory] 模板 ${template.name}:`, {
-    now: now.toISOString(),
-    nextPeriodTime: nextPeriodTime.toISOString(),
-    secondsUntilNextPeriod: secondsUntilNextPeriod.toFixed(2),
-    advanceTime: template.advanceTime,
-    shouldCreate,
-  });
-
-  return shouldCreate;
-}
+// 🔥 注意：shouldCreateMarket 已从 ./factory/engine 重新导出，不再在此定义
 
 /**
- * 为模板创建新的市场
+ * 为模板创建新的市场（已废弃，使用 engine.ts 中的新实现）
+ * @deprecated 请使用 lib/factory/engine.ts 中的 createMarketFromTemplate
  */
-export async function createMarketFromTemplate(template: MarketTemplate): Promise<string> {
+async function createMarketFromTemplateOld(template: MarketTemplate): Promise<string> {
   try {
     console.log(`🏗️ [MarketFactory] 开始为模板 ${template.name} 创建市场...`);
 
@@ -105,9 +86,9 @@ export async function createMarketFromTemplate(template: MarketTemplate): Promis
       // 如果 Market 模型有 strikePrice 字段，可以在这里添加
     };
 
-    // 5. 使用 DBService 创建市场
-    // 注意：这里需要调用实际的 API 或直接使用 DBService
-    // 为了简化，我们直接调用内部逻辑
+    // 5. 使用 DBService 创建市场（已废弃的旧实现）
+    // 注意：此函数已废弃，请使用 lib/factory/engine.ts 中的新实现
+    const { DBService } = await import('./dbService');
     const newMarket = await DBService.addMarket(
       {
         id: `M-${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`,
@@ -148,9 +129,10 @@ export async function createMarketFromTemplate(template: MarketTemplate): Promis
 }
 
 /**
- * 检查所有激活的模板并创建市场
+ * 检查所有激活的模板并创建市场（已废弃，使用 engine.ts 中的新实现）
+ * @deprecated 请使用 lib/factory/engine.ts 中的 checkAndCreateMarkets
  */
-export async function checkAndCreateMarkets(): Promise<void> {
+async function checkAndCreateMarketsOld(): Promise<void> {
   try {
     console.log('🔄 [MarketFactory] 开始检查模板...');
 
@@ -165,7 +147,9 @@ export async function checkAndCreateMarkets(): Promise<void> {
 
     for (const template of templates) {
       try {
-        const shouldCreate = await shouldCreateMarket(template);
+        // 🔥 使用重新导出的 shouldCreateMarket
+        const { shouldCreateMarket } = await import('./factory/engine');
+        const shouldCreate = await shouldCreateMarket(template as any);
         
         if (shouldCreate) {
           // 检查是否已经创建过（避免重复创建）

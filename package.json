@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "cron:market-factory": "ts-node --compiler-options {\"module\":\"commonjs\"} scripts/market-factory-cron.ts"
+    "cron:market-factory": "ts-node --compiler-options {\"module\":\"commonjs\"} scripts/market-factory-cron.ts",
+    "clean:markets": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/reset-markets.ts",
+    "diagnose-file": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/diagnose-to-file.ts",
+    "fix:eth-icon": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/fix-eth-icon.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"commonjs\"} prisma/seed.ts"
@@ -16,9 +19,12 @@
     "@prisma/client": "^6.0.0",
     "@types/canvas-confetti": "^1.9.0",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^5.66.2",
     "canvas-confetti": "^1.9.4",
+    "dayjs": "^1.11.19",
     "downloadjs": "^1.4.7",
     "html-to-image": "^1.11.13",
+    "ioredis": "^5.8.2",
     "lucide-react": "^0.294.0",
     "next": "^14.0.0",
     "next-auth": "^5.0.0-beta.30",
@@ -29,7 +35,8 @@
     "react-dom": "^18.2.0",
     "recharts": "^3.5.1",
     "sonner": "^2.0.7",
-    "swr": "^2.3.8"
+    "swr": "^2.3.8",
+    "vaul": "^1.1.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

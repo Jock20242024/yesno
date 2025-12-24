@@ -1,15 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMarketDetail } from "@/hooks/useAdminData";
 
-const ADMIN_SECRET_TOKEN = "ADMIN_SECRET_TOKEN";
+const ADMIN_SECRET_TOKEN = "ADMIN_SECRET_TOKEN"; // 保留用于 resolve API（如果该 API 仍使用 token 验证）
 
 export default function MarketEditPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const marketId = params.market_id as string;
+  
+  // 🚀 读取 backTo 参数（回程票）
+  const backTo = searchParams.get('backTo') || '/admin/markets/list';
 
   // 获取市场详情
   const { market, isLoading, error } = useMarketDetail(marketId);
@@ -19,16 +23,77 @@ export default function MarketEditPage() {
     title: "",
     description: "",
     closingDate: "",
+    image: "",
+    externalId: "", // 🔥 添加 externalId 字段
+    categoryIds: [] as string[], // 🔥 分类ID数组（多选）
+    isHot: false, // 🔥 热门标记
+    reviewStatus: "PENDING" as "PENDING" | "PUBLISHED" | "REJECTED", // 🔥 审核状态
   });
   const [isUpdating, setIsUpdating] = useState(false);
+  const [allCategories, setAllCategories] = useState<Array<{ id: string; name: string; slug: string }>>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+
+  // 🔥 强力修复：改用前端 /api/categories 接口来取分类数据
+  useEffect(() => {
+    const fetchCategories = async () => {
+      setIsLoadingCategories(true);
+      try {
+        const response = await fetch("/api/categories");
+        const result = await response.json();
+        // 🔥 处理 /api/categories 返回格式：{ success: true, data: [...] }
+        const data = result.success && result.data ? result.data : (Array.isArray(result) ? result : []);
+        if (Array.isArray(data) && data.length > 0) {
+          // 🔥 绑定逻辑：确保绑定的是 category.id 而不是 slug
+          // 扁平化处理：如果有 children，也要包含进去
+          const allCats: Array<{ id: string; name: string; slug: string }> = [];
+          data.forEach((cat: any) => {
+            if (cat.id) {
+              allCats.push({
+                id: cat.id, // value 是 id
+                name: cat.name, // label 是 name
+                slug: cat.slug,
+              });
+            }
+            // 如果有子分类，也添加进去
+            if (cat.children && Array.isArray(cat.children)) {
+              cat.children.forEach((child: any) => {
+                if (child.id) {
+                  allCats.push({
+                    id: child.id,
+                    name: child.name,
+                    slug: child.slug,
+                  });
+                }
+              });
+            }
+          });
+          setAllCategories(allCats);
+          console.log(`✅ [MarketEdit] 成功加载 ${allCats.length} 个分类（从 /api/categories）`);
+        } else {
+          console.error("❌ [MarketEdit] 分类 API 返回格式错误或无数据:", result);
+        }
+      } catch (error) {
+        console.error("❌ [MarketEdit] 获取分类列表失败:", error);
+      } finally {
+        setIsLoadingCategories(false);
+      }
+    };
+    fetchCategories();
+  }, []);
 
   // 当市场数据加载完成后，填充表单
   useEffect(() => {
     if (market) {
+      const marketCategories = (market as any).categories || [];
       setFormData({
         title: market.title || "",
         description: market.description || "",
         closingDate: market.endTime ? new Date(market.endTime).toISOString().slice(0, 16) : "",
+        image: (market as any).image || "",
+        externalId: (market as any).externalId || "", // 🔥 填充 externalId
+        categoryIds: marketCategories.map((cat: any) => cat.id) || [], // 🔥 填充分类ID数组
+        isHot: (market as any).isHot || false, // 🔥 填充热门标记
+        reviewStatus: (market as any).reviewStatus || "PENDING", // 🔥 填充审核状态
       });
     }
   }, [market]);
@@ -38,12 +103,37 @@ export default function MarketEditPage() {
   const [isResolving, setIsResolving] = useState(false);
 
   // 处理表单输入变化
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
+
+  // 处理分类多选变化
+  const handleCategoryChange = (categoryId: string, checked: boolean) => {
+    setFormData((prev) => {
+      if (checked) {
+        return {
+          ...prev,
+          categoryIds: [...prev.categoryIds, categoryId],
+        };
+      } else {
+        return {
+          ...prev,
+          categoryIds: prev.categoryIds.filter(id => id !== categoryId),
+        };
+      }
+    });
   };
 
   // 处理市场更新
@@ -59,16 +149,22 @@ export default function MarketEditPage() {
     setIsUpdating(true);
     try {
       // API 调用：发送 PUT 请求到更新 API
+      // 🔥 修复：添加 credentials: 'include' 以传递 Session Cookie
       const response = await fetch(`/api/admin/markets/${marketId}`, {
         method: "PUT",
+        credentials: 'include', // 🔥 关键：确保传递 Session Cookie
         headers: {
-          Authorization: `Bearer ${ADMIN_SECRET_TOKEN}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           title: formData.title.trim(),
           description: formData.description.trim(),
           endTime: formData.closingDate ? new Date(formData.closingDate).toISOString() : undefined,
+          image: formData.image.trim() || null,
+          externalId: formData.externalId.trim() || null, // 🔥 添加 externalId 字段
+          categoryIds: formData.categoryIds, // 🔥 分类ID数组
+          isHot: formData.isHot, // 🔥 热门标记
+          reviewStatus: formData.reviewStatus, // 🔥 审核状态
         }),
       });
 
@@ -127,9 +223,9 @@ export default function MarketEditPage() {
 
       const result = await response.json();
       if (result.success) {
-        // 成功反馈：显示成功通知并重定向到市场列表页
+        // 成功反馈：显示成功通知并重定向到市场列表页（使用 backTo 参数）
         alert(`市场已成功结算为 "${resolutionOutcome}"`);
-        router.push("/admin/markets/list");
+        router.push(backTo);
       } else {
         throw new Error(result.error || "结算失败");
       }
@@ -171,7 +267,7 @@ export default function MarketEditPage() {
           <p className="text-sm text-[#637588] dark:text-[#9da8b9] mt-1">查看市场详情并进行结算操作</p>
         </div>
         <button
-          onClick={() => router.push("/admin/markets/list")}
+          onClick={() => router.push(backTo)}
           className="px-4 py-2 bg-white dark:bg-[#101822] border border-[#d1d5db] dark:border-[#3e4e63] text-[#111418] dark:text-white rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-[#283545] transition-colors text-sm font-medium"
         >
           返回列表
@@ -197,7 +293,7 @@ export default function MarketEditPage() {
             </span>
             <p className="text-red-500">{error || "市场不存在"}</p>
             <button
-              onClick={() => router.push("/admin/markets/list")}
+              onClick={() => router.push(backTo)}
               className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium mt-4"
             >
               返回市场列表
@@ -209,20 +305,6 @@ export default function MarketEditPage() {
       {/* 正常内容：只在有数据且不在加载时显示 */}
       {!isLoading && market && (
         <>
-          {/* 页面标题 */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-[#111418] dark:text-white">市场编辑与结算</h1>
-              <p className="text-sm text-[#637588] dark:text-[#9da8b9] mt-1">查看市场详情并进行结算操作</p>
-            </div>
-            <button
-              onClick={() => router.push("/admin/markets/list")}
-              className="px-4 py-2 bg-white dark:bg-[#101822] border border-[#d1d5db] dark:border-[#3e4e63] text-[#111418] dark:text-white rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-[#283545] transition-colors text-sm font-medium"
-            >
-              返回列表
-            </button>
-          </div>
-
           {/* 两栏布局 */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* 左侧：市场基本信息 */}
@@ -267,6 +349,71 @@ export default function MarketEditPage() {
                 />
               </div>
 
+              {/* 市场头像 URL */}
+              <div>
+                <label className="block text-sm font-medium text-[#637588] dark:text-[#9da8b9] mb-1">
+                  头像 URL (image)
+                </label>
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <input
+                      type="url"
+                      name="image"
+                      value={formData.image}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="https://example.com/image.jpg"
+                    />
+                    <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">
+                      输入市场头像的完整 URL 地址
+                    </p>
+                  </div>
+                  {/* 图片预览 */}
+                  {formData.image && (
+                    <div className="flex-shrink-0">
+                      <div className="w-24 h-24 rounded-lg border border-[#d1d5db] dark:border-[#3e4e63] overflow-hidden bg-[#f3f4f6] dark:bg-[#1a1f2e] flex items-center justify-center relative">
+                        <img
+                          src={formData.image}
+                          alt="预览"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // 图片加载失败时显示占位符
+                            const img = e.target as HTMLImageElement;
+                            img.style.display = 'none';
+                            const parent = img.parentElement;
+                            if (parent && !parent.querySelector('.error-placeholder')) {
+                              const placeholder = document.createElement('div');
+                              placeholder.className = 'error-placeholder flex items-center justify-center w-full h-full';
+                              placeholder.innerHTML = '<span class="text-xs text-[#637588] dark:text-[#9da8b9] text-center px-2">图片加载失败</span>';
+                              parent.appendChild(placeholder);
+                            }
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1 text-center">预览</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 外部市场ID (externalId) */}
+              <div>
+                <label className="block text-sm font-medium text-[#637588] dark:text-[#9da8b9] mb-1">
+                  外部市场ID (externalId)
+                </label>
+                <input
+                  type="text"
+                  name="externalId"
+                  value={formData.externalId}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  placeholder="请输入 Polymarket 的 market slug 或 ID"
+                />
+                <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">
+                  请输入 Polymarket 的 market slug 或 ID，用于赔率自动同步
+                </p>
+              </div>
+
               {/* 市场描述 */}
               <div>
                 <label className="block text-sm font-medium text-[#637588] dark:text-[#9da8b9] mb-1">市场描述</label>
@@ -286,15 +433,85 @@ export default function MarketEditPage() {
                 <p className="text-sm font-mono text-[#111418] dark:text-white">{market.id}</p>
               </div>
 
-              {/* 分类 */}
+              {/* 🔥 分类选择器（多选下拉框） */}
               <div>
-                <label className="block text-sm font-medium text-[#637588] dark:text-[#9da8b9] mb-1">分类</label>
-                <p className="text-sm text-[#111418] dark:text-white">{market.category}</p>
+                <label className="block text-sm font-medium text-[#637588] dark:text-[#9da8b9] mb-2">
+                  分类标签 <span className="text-red-500">*</span>
+                </label>
+                {isLoadingCategories ? (
+                  <p className="text-sm text-[#637588] dark:text-[#9da8b9]">加载分类中...</p>
+                ) : (
+                  <div className="border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] p-3 max-h-48 overflow-y-auto">
+                    {allCategories.length === 0 ? (
+                      <p className="text-sm text-[#637588] dark:text-[#9da8b9]">暂无分类</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {allCategories.map((category) => (
+                          <label key={category.id} className="flex items-center gap-2 cursor-pointer hover:bg-[#f3f4f6] dark:hover:bg-[#283545] p-2 rounded">
+                            <input
+                              type="checkbox"
+                              checked={formData.categoryIds.includes(category.id)}
+                              onChange={(e) => handleCategoryChange(category.id, e.target.checked)}
+                              className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2"
+                            />
+                            <span className="text-sm text-[#111418] dark:text-white">{category.name}</span>
+                            <span className="text-xs text-[#637588] dark:text-[#9da8b9]">({category.slug})</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">
+                  可以为市场分配多个分类标签，例如同时选择"加密货币"和"热门"
+                </p>
               </div>
 
-              {/* 状态 */}
+              {/* 🔥 热门开关 */}
+              <div className="flex items-center justify-between p-4 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822]">
+                <div>
+                  <label className="block text-sm font-medium text-[#111418] dark:text-white mb-1">
+                    设为热门 (Featured)
+                  </label>
+                  <p className="text-xs text-[#637588] dark:text-[#9da8b9]">
+                    热门市场会在首页和"热门"分类中优先显示
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="isHot"
+                    checked={formData.isHot}
+                    onChange={handleInputChange}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                </label>
+              </div>
+
+              {/* 🔥 状态切换 */}
               <div>
-                <label className="block text-sm font-medium text-[#637588] dark:text-[#9da8b9] mb-1">状态</label>
+                <label className="block text-sm font-medium text-[#637588] dark:text-[#9da8b9] mb-1">
+                  审核状态
+                </label>
+                <select
+                  name="reviewStatus"
+                  value={formData.reviewStatus}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="PENDING">草稿（待审核）</option>
+                  <option value="PUBLISHED">已发布</option>
+                  <option value="REJECTED">已下架</option>
+                </select>
+                <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">
+                  草稿：仅在后台可见；已发布：前端可见；已下架：前端不可见
+                </p>
+              </div>
+
+              {/* 市场状态（只读） */}
+              <div>
+                <label className="block text-sm font-medium text-[#637588] dark:text-[#9da8b9] mb-1">市场状态</label>
                 <span
                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                     market.status === "OPEN"
@@ -306,6 +523,9 @@ export default function MarketEditPage() {
                 >
                   {market.status === "OPEN" ? "进行中" : market.status === "RESOLVED" ? "已结算" : market.status}
                 </span>
+                <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">
+                  市场状态（进行中/已结算）由系统自动管理，无法手动修改
+                </p>
               </div>
 
               {/* 结算结果 */}

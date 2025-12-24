@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Clock, TrendingUp } from "lucide-react";
 import { MarketEvent } from "@/lib/data";
+import dayjs from "@/lib/dayjs"; // 🔥 使用全局初始化的 dayjs
 import {
   Bitcoin,
   Building2,
@@ -38,6 +39,8 @@ interface MarketHeaderProps {
   status?: MarketStatus;
   result?: MarketResult;
   closingDate?: string; // ISO 8601 格式的关闭时间
+  period?: number | null; // 🔥 周期（分钟数），用于计算时间区间
+  isFactory?: boolean; // 🔥 是否为工厂市场
 }
 
 // 倒计时计算函数
@@ -58,17 +61,60 @@ function calculateCountdown(closingDate: string): { days: number; hours: number;
   return { days, hours, minutes, seconds, isExpired: false };
 }
 
-export default function MarketHeader({ event, status = "open", result = null, closingDate }: MarketHeaderProps) {
+export default function MarketHeader({ event, status = "open", result = null, closingDate, period, isFactory }: MarketHeaderProps) {
+  // 🔥 逻辑守卫：确保 event 存在
+  if (!event || !event.id) {
+    return (
+      <div className="text-center py-4 text-gray-400">加载中...</div>
+    );
+  }
+
   const IconComponent = iconMap[event.icon] || Bitcoin;
-  const isResolved = status === "closed" && result !== null;
+  
+  // 🔥 修复状态判断：对于工厂市场，如果 closingDate 已过期，即使状态还是 OPEN，也应该视为"已结束"
+  const isExpired = closingDate ? new Date(closingDate).getTime() <= Date.now() : false;
+  const isResolved = (status === "closed" || (isFactory && isExpired)) && result !== null;
   const isYesWon = result === "YES_WON";
+  // 🔥 工厂市场：即使状态是 OPEN，如果时间已过期，也显示为已结束
+  const displayStatus = isFactory && isExpired && status === "open" ? "closed" : status;
   
   // 倒计时状态
   const [countdown, setCountdown] = useState<{ days: number; hours: number; minutes: number; seconds: number; isExpired: boolean } | null>(null);
   
+  // 🔥 计算时间区间：StartTime = EndTime - 周期时间（参考 Polymarket 风格）
+  // 🔥 动态使用用户本地时区，确保与导航按钮时间完全对齐
+  const getTimeInterval = (): string | null => {
+    if (!closingDate || !isFactory || !period) return null;
+    
+    try {
+      // 🔥 动态获取用户时区（仅用于时间转换，不显示）
+      const userTimeZone = typeof window !== 'undefined' 
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone 
+        : 'Asia/Shanghai';
+      
+      // 后端返回的 closingDate 视为 UTC，转换为用户本地时区
+      const endTime = dayjs(closingDate).tz(userTimeZone);
+      const startTime = endTime.subtract(period, 'minute'); // 减去周期（分钟）
+      
+      // 🔥 使用 dayjs 格式化用户本地时区
+      const dateStr = startTime.format('M月D日');
+      const startTimeStr = startTime.format('HH:mm');
+      const endTimeStr = endTime.format('HH:mm');
+      
+      // 🔥 规范化格式：删除地理位置字符串，只显示简洁的时间格式
+      return `${dateStr}，当地时间 ${startTimeStr}–${endTimeStr}`;
+    } catch (error) {
+      console.error('计算时间区间失败:', error);
+      return null;
+    }
+  };
+  
+  const timeInterval = getTimeInterval();
+  
   // 计算倒计时
   useEffect(() => {
-    if (!closingDate || isResolved) {
+    // 🔥 修复：对于工厂市场，如果已过期但状态还是 open，也停止倒计时
+    if (!closingDate || isResolved || (isFactory && isExpired)) {
       setCountdown(null);
       return;
     }
@@ -76,13 +122,17 @@ export default function MarketHeader({ event, status = "open", result = null, cl
     const updateCountdown = () => {
       const result = calculateCountdown(closingDate);
       setCountdown(result);
+      // 🔥 如果倒计时过期，停止更新
+      if (result.isExpired) {
+        setCountdown(null);
+      }
     };
 
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
 
     return () => clearInterval(interval);
-  }, [closingDate, isResolved]);
+  }, [closingDate, isResolved, isFactory, isExpired]);
 
   return (
     <div className="flex flex-col gap-4 mb-8">
@@ -120,12 +170,18 @@ export default function MarketHeader({ event, status = "open", result = null, cl
         </div>
       </div>
       <div>
-        <h1 className="text-2xl md:text-3xl lg:text-[32px] font-bold text-white leading-tight mb-4">
+        <h1 className="text-2xl md:text-3xl lg:text-[32px] font-bold text-white leading-tight mb-2">
           {event.title}
         </h1>
+        {/* 🔥 时间区间显示（参考 Polymarket 风格） */}
+        {timeInterval && (
+          <div className="mb-3 text-sm text-pm-text-dim font-medium">
+            {timeInterval}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 text-xs font-medium text-pm-text-dim">
-          {/* 如果市场已结束，显示"已结束"标签 */}
-          {isResolved ? (
+          {/* 🔥 如果市场已结束（包括工厂市场时间过期），显示"已结束"标签 */}
+          {isResolved || (isFactory && isExpired) ? (
             <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-pm-card border border-pm-border text-white shadow-sm ring-1 ring-white/5">
               <Clock className="w-[18px] h-[18px] text-pm-text-dim" />
               <span className="font-bold text-sm text-pm-text-dim">已结束</span>

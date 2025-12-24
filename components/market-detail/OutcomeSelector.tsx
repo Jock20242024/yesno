@@ -55,9 +55,10 @@ export default function OutcomeSelector({
               </div>
             </div>
           </div>
+          {/* 🔥 交易区尺寸缩小：YES/NO按钮缩小 */}
           <button
             onClick={() => handleTrade("yes")}
-            className="relative z-10 bg-pm-green hover:bg-green-400 text-pm-bg font-bold py-2.5 px-6 rounded-lg mr-3 transition-colors shadow-lg shadow-pm-green/20"
+            className="relative z-10 bg-pm-green hover:bg-green-400 text-pm-bg font-bold py-2 px-4 text-sm rounded-lg mr-2 transition-colors shadow-lg shadow-pm-green/20"
           >
             {isLoggedIn ? "买入" : "登录以交易"}
           </button>
@@ -70,26 +71,28 @@ export default function OutcomeSelector({
         {/* No Option */}
         <div className="group relative flex items-center justify-between p-1 rounded-xl bg-pm-card border border-pm-border hover:border-pm-red/50 transition-all cursor-pointer overflow-hidden">
           <div className="flex-1 flex items-center justify-between p-3 relative z-10">
-            <div className="flex items-center gap-4">
-              <div className="size-10 rounded-full bg-pm-card-hover border border-pm-border flex items-center justify-center text-pm-red shadow-inner">
-                <X className="w-5 h-5 font-bold" />
+            {/* 🔥 交易区尺寸缩小：NO选项缩小 */}
+            <div className="flex items-center gap-3">
+              <div className="size-8 rounded-full bg-pm-card-hover border border-pm-border flex items-center justify-center text-pm-red shadow-inner">
+                <X className="w-4 h-4 font-bold" />
               </div>
-              <span className="font-bold text-lg text-pm-text-dim group-hover:text-white transition-colors">
+              <span className="font-bold text-base text-pm-text-dim group-hover:text-white transition-colors">
                 No
               </span>
             </div>
-            <div className="flex items-center gap-8 mr-4">
+            <div className="flex items-center gap-6 mr-3">
               <div className="text-right">
-                <div className="font-mono font-bold text-pm-red text-lg">
+                <div className="font-mono font-bold text-pm-red text-base">
                   {noPrice}
                 </div>
                 <div className="text-xs font-medium text-pm-red">-1.2%</div>
               </div>
             </div>
           </div>
+          {/* 🔥 交易区尺寸缩小：NO按钮缩小 */}
           <button
             onClick={() => handleTrade("no")}
-            className="relative z-10 bg-pm-card-hover border border-pm-border hover:bg-pm-red hover:text-white hover:border-pm-red text-pm-text-dim font-bold py-2.5 px-6 rounded-lg mr-3 transition-all"
+            className="relative z-10 bg-pm-card-hover border border-pm-border hover:bg-pm-red hover:text-white hover:border-pm-red text-pm-text-dim font-bold py-2 px-4 text-sm rounded-lg ml-2 transition-all"
           >
             {isLoggedIn ? "买入" : "登录以交易"}
           </button>

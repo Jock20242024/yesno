@@ -1,539 +1,354 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter, useParams } from "next/navigation";
-import { Loader2, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
-import MarketHeader from "@/components/market-detail/MarketHeader";
-import PriceChart from "@/components/market-detail/PriceChart";
-import OrderBook from "@/components/market-detail/OrderBook";
-import TradeSidebar, { TradeSidebarRef } from "@/components/market-detail/TradeSidebar";
-import UserPositionCard from "@/components/market-detail/UserPositionCard";
-import { useStore } from "@/app/context/StoreContext";
-import { useAuth } from "@/components/providers/AuthProvider";
-import { useNotification } from "@/components/providers/NotificationProvider";
-import { Market } from "@/types/api";
-import { MarketEvent } from "@/lib/data";
-import { formatUSD } from "@/lib/utils";
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import useSWR from 'swr';
+import dayjs from '@/lib/dayjs';
+import MarketHeader from '@/components/market-detail/MarketHeader';
+import PriceChart from '@/components/market-detail/PriceChart';
+import TimeNavigationBar from '@/components/market-detail/TimeNavigationBar';
+import OrderBook from '@/components/market-detail/OrderBook';
+import TradeSidebar, { TradeSidebarRef } from '@/components/market-detail/TradeSidebar';
+import { Market } from '@/types/api';
 
-// 新的持仓接口：支持同时持有 YES 和 NO
-interface UserPosition {
-  yesShares: number;
-  noShares: number;
-  yesAvgPrice: number;
-  noAvgPrice: number;
-}
+const fetcher = async (url: string) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("Market not found");
+    }
+    throw new Error("Failed to fetch market");
+  }
+  const result = await response.json();
+  if (result.success && result.data) {
+    return result.data;
+  }
+  throw new Error("Invalid response format");
+};
 
 export default function MarketDetailPage() {
-  const params = useParams();
+  const { id } = useParams() as { id: string };
   const router = useRouter();
-  const id = params.id as string;
-  // 架构加固：Page 级组件允许使用 Context，但需要防御性处理
-  const { positions: storePositions } = useStore();
-  const { currentUser, isLoading: authLoading } = useAuth();
-  const { addNotification } = useNotification();
-  
-  // 移除 early return，确保初始 render 直接返回 UI
-  
-  // API 数据状态
-  const [marketData, setMarketData] = useState<Market | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // 用户仓位状态（从 API 交易返回）
-  // 注意：这个 state 用于存储从交易成功回调中返回的单个持仓（YES 或 NO）
-  const [apiTradePosition, setApiTradePosition] = useState<{
-    outcome: 'YES' | 'NO';
-    shares: number;
-    avgPrice: number;
-    totalValue: number;
-  } | null>(null);
-  
-  // UI 状态
-  const [tradeTab, setTradeTab] = useState<"buy" | "sell">("buy");
-  const [detailTab, setDetailTab] = useState<"orderbook" | "comments" | "holders" | "rules">("orderbook");
-  const [tradeAmount, setTradeAmount] = useState("");
   const tradeSidebarRef = useRef<TradeSidebarRef>(null);
   
-  // 管理员结算状态
-  const [isResolving, setIsResolving] = useState(false);
-  const [showResolveOptions, setShowResolveOptions] = useState(false);
-  
-  // 检查是否为管理员（优先使用 role 字段）
-  const isAdmin = currentUser?.role === "admin" || currentUser?.isAdmin || currentUser?.email === "admin@admin.com";
+  // 1. 彻底消灭白屏报错（水合保护）
+  const [isMounted, setIsMounted] = useState(false);
+  const landingDone = useRef(false);
 
-  // 获取市场数据
-  const fetchMarket = async () => {
-    setIsLoading(true);
-    setError(null);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
-    try {
-      const response = await fetch(`/api/markets/${id}`);
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error("Market not found");
+  // 🔥 实时同步：对于工厂市场，每5秒自动刷新赔率数据（确保与 Polymarket 实时同步）
+  const { data: marketData, isLoading, error } = useSWR<Market>(
+    id ? `/api/markets/${id}` : null,
+    fetcher,
+    {
+      refreshInterval: (data) => {
+        // 🔥 性能优化：页面不可见时暂停轮询
+        if (typeof document !== 'undefined' && document.hidden) {
+          return 0; // 页面不可见时暂停
         }
-        throw new Error("Failed to fetch market");
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        setMarketData(result.data);
         
-        // 修复详情页订单列表：从 API 获取用户持仓数据
-        // 如果 API 返回了用户持仓数据，使用它；否则从 Store 获取
-        if (result.data.userPosition) {
-          // API 返回了用户持仓，使用它
-          console.log('📊 [MarketDetailPage] 从 API 获取用户持仓:', result.data.userPosition);
-        } else {
-          // API 没有返回用户持仓，使用 Store 数据（向后兼容）
-          console.log('📊 [MarketDetailPage] API 未返回用户持仓，使用 Store 数据');
+        // 🔥 如果是工厂市场，无论是否有externalId，都每5秒刷新一次（实时同步赔率）
+        // 这样即使暂时没有externalId，一旦匹配到就能立即显示
+        if (data && (data as any).isFactory) {
+          return 5000; // 5秒
         }
-      } else {
-        throw new Error("Invalid response format");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error fetching market data.");
-      console.error("Error fetching market:", err);
-    } finally {
-      setIsLoading(false);
+        // 其他市场每30秒刷新一次
+        return 30000; // 30秒
+      },
+      revalidateOnFocus: false, // 🔥 性能优化：窗口聚焦时不自动重新验证（减少请求）
+      revalidateOnReconnect: true, // 网络重连时重新验证
     }
-  };
+  );
 
-  // 组件加载时获取数据
-  useEffect(() => {
-    if (id) {
-      fetchMarket();
-    }
-  }, [id]);
-
-  // 修复详情页订单列表：优先使用从 API 获取的用户持仓数据
-  // 从 API 数据中获取用户持仓（如果可用）
-  // 这是从市场详情 API 返回的完整持仓数据（包含 YES 和 NO）
-  const apiUserPosition: UserPosition | null = marketData?.userPosition 
-    ? {
-        yesShares: marketData.userPosition.yesShares || 0,
-        noShares: marketData.userPosition.noShares || 0,
-        yesAvgPrice: marketData.userPosition.yesAvgPrice || 0,
-        noAvgPrice: marketData.userPosition.noAvgPrice || 0,
-      }
-    : null;
-  
-  // 从 Store 实时查找当前市场的持仓（作为后备）
-  const yesPosition = storePositions.find(p => p.marketId === id && p.outcome === 'YES');
-  const noPosition = storePositions.find(p => p.marketId === id && p.outcome === 'NO');
-  
-  // 转换为 UserPosition 格式（Store 数据）
-  const storeUserPosition: UserPosition | null = (yesPosition || noPosition) ? {
-    yesShares: yesPosition?.shares || 0,
-    noShares: noPosition?.shares || 0,
-    yesAvgPrice: yesPosition?.avgPrice || 0,
-    noAvgPrice: noPosition?.avgPrice || 0,
-  } : null;
-  
-  // 优先使用 API 返回的持仓数据，如果没有则使用 Store 数据
-  const userPosition: UserPosition | null = apiUserPosition || storeUserPosition;
-
-  // 当用户手动切换 Tab 时（从 sell 切换到 buy），清空输入
-  useEffect(() => {
-    if (tradeTab === "buy") {
-      setTradeAmount("");
-    }
-  }, [tradeTab]);
-
-  // 格式化交易量（移到 return 之前，确保始终可用）
-
-  // 格式化交易量
-  // ========== 修复：格式化交易量，处理 undefined/null 值 ==========
-  const formatVolume = (volume?: number | null): string => {
-    // 安全检查：处理 undefined、null 或无效值
-    if (volume === undefined || volume === null || isNaN(volume)) {
-      return "$0.00"; // 返回安全的默认值
+  // 🔥 关键修复：所有 hooks 必须在早期返回之前调用
+  // 计算显示价格和百分比（使用安全默认值）
+  const displayYesPercent = useMemo(() => {
+    if (!marketData) return 50;
+    if (marketData.status === "RESOLVED") {
+      return marketData.winningOutcome === "YES" ? 100 : 0;
     }
     
-    const volumeNum = Number(volume);
-    if (isNaN(volumeNum) || volumeNum < 0) {
-      return "$0.00";
+    // 优先使用 API 返回的 yesPercent（API 已经解析了 outcomePrices）
+    if (marketData.yesPercent && marketData.yesPercent !== 50) {
+      return marketData.yesPercent;
     }
     
-    // 格式化逻辑
-    if (volumeNum >= 1000000) {
-      return `$${(volumeNum / 1000000).toFixed(1)}M`;
-    } else if (volumeNum >= 1000) {
-      return `$${(volumeNum / 1000).toFixed(1)}K`;
+    // 兜底逻辑：如果 API 返回的 yesPercent 是默认值 50，但 outcomePrices 存在，尝试在前端解析
+    const outcomePrices = (marketData as any).outcomePrices;
+    if (outcomePrices) {
+      try {
+        const parsed = typeof outcomePrices === 'string' ? JSON.parse(outcomePrices) : outcomePrices;
+        
+        let yesPrice: number | null = null;
+        
+        // 支持数组格式：[0.7, 0.3]
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          yesPrice = parseFloat(String(parsed[0]));
+        }
+        // 支持对象格式：{ YES: 0.7, NO: 0.3 }
+        else if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          if ('YES' in parsed) {
+            yesPrice = parseFloat(String(parsed.YES));
+          } else if ('yes' in parsed) {
+            yesPrice = parseFloat(String(parsed.yes));
+          }
+        }
+        
+        if (yesPrice !== null && !isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1) {
+          return yesPrice * 100;
+        }
+      } catch (e) {
+        console.warn('⚠️ [Market Detail Page] 解析 outcomePrices 失败:', e);
+      }
     }
-    return `$${volumeNum.toLocaleString()}`;
+    
+    return marketData.yesPercent || 50;
+  }, [marketData]);
+
+  const displayNoPercent = useMemo(() => {
+    if (!marketData) return 50;
+    if (marketData.status === "RESOLVED") {
+      return marketData.winningOutcome === "NO" ? 100 : 0;
+    }
+    
+    // 优先使用 API 返回的 noPercent
+    if (marketData.noPercent && marketData.noPercent !== 50) {
+      return marketData.noPercent;
+    }
+    
+    // 兜底逻辑：如果 API 返回的 noPercent 是默认值 50，但 outcomePrices 存在，尝试在前端解析
+    const outcomePrices = (marketData as any).outcomePrices;
+    if (outcomePrices) {
+      try {
+        const parsed = typeof outcomePrices === 'string' ? JSON.parse(outcomePrices) : outcomePrices;
+        
+        let noPrice: number | null = null;
+        
+        // 支持数组格式：[0.7, 0.3]
+        if (Array.isArray(parsed) && parsed.length >= 2) {
+          noPrice = parseFloat(String(parsed[1]));
+        }
+        // 支持对象格式：{ YES: 0.7, NO: 0.3 }
+        else if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          if ('NO' in parsed) {
+            noPrice = parseFloat(String(parsed.NO));
+          } else if ('no' in parsed) {
+            noPrice = parseFloat(String(parsed.no));
+          }
+        }
+        
+        if (noPrice !== null && !isNaN(noPrice) && noPrice >= 0 && noPrice <= 1) {
+          return noPrice * 100;
+        }
+      } catch (e) {
+        console.warn('⚠️ [Market Detail Page] 解析 outcomePrices 失败:', e);
+      }
+    }
+    
+    return 100 - displayYesPercent;
+  }, [marketData, displayYesPercent]);
+
+  // 生成图表数据（使用安全默认值）
+  const priceData = useMemo(() => {
+    const data = [];
+    const now = Date.now();
+    const hours = 24;
+    const baseValue = marketData ? (marketData.yesPercent / 100 || 0.5) : 0.5;
+    
+    for (let i = hours; i >= 0; i--) {
+      const time = new Date(now - i * 60 * 60 * 1000);
+      const variation = (Math.sin(i / 3) * 0.1) + (Math.random() * 0.05);
+      const value = Math.max(0.3, Math.min(0.9, baseValue + variation));
+      
+      data.push({
+        time: time.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+        value: value,
+        timestamp: time.getTime(),
+      });
+    }
+    
+    return data;
+  }, [marketData]);
+
+  // formatVolume 函数（纯函数，不依赖 hooks）
+  const formatVolume = (volume?: number | string | null): string => {
+    const { formatCurrency } = require('@/lib/utils');
+    return formatCurrency(volume, { compact: true, decimals: 1, showDecimals: true });
   };
 
-  // 这些变量已在条件渲染块内计算，不再提前计算
-
-  // 处理交易成功回调
-  // 修复交易状态管理：下注成功后，刷新详情页订单列表，并根据用户持仓情况禁用或修改交易按钮状态
-  const handleTradeSuccess = async (data: {
-    updatedMarketPrice: { yesPercent: number; noPercent: number };
-    userPosition: { outcome: 'YES' | 'NO'; shares: number; avgPrice: number; totalValue: number };
-  }) => {
-    // 更新市场价格
-    setMarketData((prev) => {
-      if (!prev) return prev;
+  // 创建 MarketEvent 对象（使用安全默认值）
+  const marketEvent = useMemo(() => {
+    if (!marketData) {
       return {
-        ...prev,
-        yesPercent: data.updatedMarketPrice.yesPercent,
-        noPercent: data.updatedMarketPrice.noPercent,
+        id: 1,
+        rank: 1,
+        title: '',
+        category: '加密货币',
+        categorySlug: 'crypto',
+        icon: 'Bitcoin',
+        iconColor: 'bg-[#f7931a]',
+        yesPercent: 50,
+        noPercent: 50,
+        deadline: new Date().toISOString().split("T")[0],
+        volume: '$0',
       };
-    });
-
-    // 更新用户仓位（从交易成功回调）
-    setApiTradePosition(data.userPosition);
-    
-    // 重新获取市场数据以同步最新的持仓信息
-    // 这将确保 API 返回的用户持仓数据（如 {yesShares: 190, noShares: 0, yesAvgPrice: 1, noAvgPrice: 0}）正确显示
-    await fetchMarket();
-    
-    // 修复交易状态管理：根据用户持仓情况，自动切换到卖出 Tab（如果有持仓）
-    // 如果没有持仓，保持在买入 Tab
-    if (data.userPosition.shares > 0) {
-      // 有持仓时，可以切换到卖出 Tab（可选，根据 UX 需求）
-      // setTradeTab("sell");
     }
-  };
+    return {
+      id: parseInt(marketData.id.replace(/-/g, '').substring(0, 10), 16) || 1,
+      rank: 1,
+      title: marketData.title,
+      category: (marketData as any).category?.name || (marketData as any).category || '加密货币',
+      categorySlug: (marketData as any).category?.slug || 'crypto',
+      icon: (marketData as any).icon || 'Bitcoin',
+      iconColor: (marketData as any).iconColor || 'bg-[#f7931a]',
+      yesPercent: displayYesPercent,
+      noPercent: displayNoPercent,
+      deadline: new Date(marketData.endTime).toISOString().split("T")[0],
+      volume: formatVolume(marketData.totalVolume),
+    };
+  }, [marketData, displayYesPercent, displayNoPercent]);
 
-  const handleSell = () => {
-    setTradeTab("sell");
-    tradeSidebarRef.current?.switchToSell();
-  };
-
-  // 快速卖出：切换到卖出 Tab 并自动填充最大份额
-  const handleQuickSell = (outcome: "yes" | "no") => {
-    if (!userPosition) return;
+  // 🔥 移除自动跳转逻辑：允许用户自由选择查看未来场次和已结束场次
+  // 之前的自动跳转逻辑会强制跳回当前进行中的场次，阻止用户查看其他场次
+  // 现在改为仅在首次从外部链接进入时（没有 landingDone 标记）才自动跳转到活跃场次
+  // 一旦用户手动选择了场次，就不再自动跳转
+  useEffect(() => {
+    // 如果已经手动选择过场次，不再自动跳转
+    if (!isMounted || !marketData?.slots?.length || landingDone.current) return;
     
-    setTradeTab("sell");
-    tradeSidebarRef.current?.switchToSell();
-    const shares = outcome === "yes" ? userPosition.yesShares : userPosition.noShares;
-    setTradeAmount(shares.toString());
-  };
-
-  // 处理市场结算
-  const handleResolveMarket = async (resolutionOutcome: "YES" | "NO" | "Invalid") => {
-    if (!marketData || isResolving) return;
-
-    setIsResolving(true);
-    setShowResolveOptions(false);
-
-    try {
-      // 添加管理员 Token 验证（从 localStorage 获取或使用预设 Token）
-      const adminToken = localStorage.getItem('adminToken') || 'ADMIN_SECRET_TOKEN';
-      const response = await fetch(`/api/admin/resolve/${marketData.id}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${adminToken}`,
-        },
-        body: JSON.stringify({
-          resolutionOutcome,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        addNotification({
-          type: "success",
-          title: "市场已结算！",
-          message: `结算结果: ${resolutionOutcome === "Invalid" ? "无效" : resolutionOutcome}`,
-        });
-
-        // 更新市场数据
-        setMarketData((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            status: "RESOLVED",
-            winningOutcome: resolutionOutcome === "Invalid" ? null : resolutionOutcome,
-            updatedAt: new Date().toISOString(),
-          };
-        });
-
-        // 重新获取市场数据以确保同步
-        await fetchMarket();
-      } else {
-        addNotification({
-          type: "error",
-          title: "结算失败",
-          message: result.error || "请稍后重试",
-        });
+    // 检查是否是从外部链接直接进入的（URL 中的 id 不在 slots 列表中）
+    const isExternalLink = !(marketData as any).slots.some((s: any) => s.id === id);
+    
+    // 只有从外部链接进入时，才自动跳转到活跃场次
+    if (isExternalLink) {
+      const activeSlot = (marketData as any).slots.find((s: any) => 
+        dayjs.utc().isBetween(dayjs.utc(s.startTime), dayjs.utc(s.endTime))
+      );
+      
+      if (activeSlot && id !== activeSlot.id) {
+        landingDone.current = true;
+        router.replace(`/markets/${activeSlot.id}`);
       }
-    } catch (error) {
-      console.error("Market resolution error:", error);
-      addNotification({
-        type: "error",
-        title: "结算失败",
-        message: "网络错误，请稍后重试",
-      });
-    } finally {
-      setIsResolving(false);
     }
-  };
+  }, [isMounted, marketData, id, router]);
+
+
+  // 物理解决水合报错
+  if (!isMounted) {
+    return <div className="min-h-screen bg-black" />;
+  }
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-black overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="text-center py-20 text-white">加载中...</div>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !marketData) {
+    return (
+      <main className="min-h-screen bg-black overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="text-center py-20">
+            <h1 className="text-2xl font-bold mb-4 text-white">市场未找到</h1>
+            <p className="text-gray-400">{error?.message || "Market not found"}</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // 计算市场状态（在早期返回之后，但这是普通变量，不是 hooks）
+  const marketStatus: "open" | "closed" = marketData.status === "OPEN" ? "open" : "closed";
+  const marketResult: "yes" | "no" | null = marketData.status === "RESOLVED" 
+    ? (marketData.winningOutcome === "YES" ? "yes" : "no")
+    : null;
+
+
 
   return (
-      <main className="flex-1 w-full max-w-[1200px] mx-auto p-8 flex flex-row gap-8">
-      {/* 加载状态：显示空状态，不阻塞渲染 */}
-      {isLoading && (
-        <div className="flex flex-col items-center justify-center py-20 w-full">
-          <Loader2 className="w-8 h-8 animate-spin text-pm-green mb-4" />
-          <p className="text-white text-lg font-medium">Loading Market Details...</p>
-        </div>
-      )}
-
-      {/* 错误状态：显示空状态，不阻塞渲染 */}
-      {(error || !marketData) && !isLoading && (
-        <div className="flex flex-col items-center justify-center py-20 w-full">
-          <h1 className="text-2xl font-bold text-white mb-4">Market not found</h1>
-          <p className="text-zinc-500 mb-6">
-            {error || "The market you're looking for doesn't exist."}
-          </p>
-          <button
-            onClick={() => router.push("/")}
-            className="px-6 py-3 bg-pm-green hover:bg-green-400 text-pm-bg font-bold rounded-xl transition-colors"
-          >
-            返回首页
-          </button>
-        </div>
-      )}
-
-      {/* 正常内容：只在有数据且不在加载时显示 */}
-      {!isLoading && marketData && (() => {
-        // 创建 MarketEvent 对象用于 MarketHeader
-        const marketEvent: MarketEvent = {
-          id: parseInt(marketData.id),
-          rank: 1,
-          title: marketData.title,
-          category: marketData.category,
-          categorySlug: marketData.categorySlug,
-          icon: "Bitcoin",
-          iconColor: "bg-[#f7931a]",
-          yesPercent: marketData.yesPercent,
-          noPercent: marketData.noPercent,
-          deadline: new Date(marketData.endTime).toISOString().split("T")[0],
-          imageUrl: marketData.imageUrl,
-          volume: formatVolume(marketData.volume),
-          comments: marketData.commentsCount,
-        };
-
-        // 转换状态格式用于 MarketHeader
-        const marketStatus = marketData.status === "OPEN" ? "open" : "closed";
-        const marketResult = marketData.winningOutcome === "YES" ? "YES_WON" : 
-                             marketData.winningOutcome === "NO" ? "NO_WON" : null;
-        
-        // 计算费率（默认 2%，已结束市场 1%）
-        const feeRate = marketData.status === "RESOLVED" ? 0.01 : 0.02;
-
-        return (
-          <>
-      <div className="flex-1 flex flex-col">
-        {/* Market Header */}
-        <MarketHeader 
-          event={marketEvent} 
-          status={marketStatus} 
-          result={marketResult}
+    <main className="min-h-screen bg-black">
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* MarketHeader */}
+        <MarketHeader
+          event={marketEvent}
+          status={marketStatus}
+          result={marketResult === "yes" ? "YES_WON" : marketResult === "no" ? "NO_WON" : null}
           closingDate={marketData.endTime}
+          period={(marketData as any)?.period || null}
+          isFactory={!!(marketData as any)?.templateId}
         />
 
-        {/* 管理员结算 UI */}
-        {isAdmin && marketData.status === "OPEN" && (
-          <div className="mb-6 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-bold text-amber-400">管理员操作</span>
-                <span className="text-xs text-amber-400/80">结算市场</span>
-              </div>
-              {!showResolveOptions ? (
-                <button
-                  onClick={() => setShowResolveOptions(true)}
-                  disabled={isResolving}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-sm"
-                >
-                  结算市场
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleResolveMarket("YES")}
-                    disabled={isResolving}
-                    className="px-4 py-2 bg-pm-green hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-sm flex items-center gap-2"
-                  >
-                    {isResolving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        处理中...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        YES 获胜
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleResolveMarket("NO")}
-                    disabled={isResolving}
-                    className="px-4 py-2 bg-pm-red hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-sm flex items-center gap-2"
-                  >
-                    {isResolving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        处理中...
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-4 h-4" />
-                        NO 获胜
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleResolveMarket("Invalid")}
-                    disabled={isResolving}
-                    className="px-4 py-2 bg-zinc-600 hover:bg-zinc-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors text-sm flex items-center gap-2"
-                  >
-                    {isResolving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        处理中...
-                      </>
-                    ) : (
-                      <>
-                        <AlertTriangle className="w-4 h-4" />
-                        无效
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setShowResolveOptions(false)}
-                    disabled={isResolving}
-                    className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-sm"
-                  >
-                    取消
-                  </button>
-                </div>
-              )}
+        {/* 2. 物理修复 Sticky 交易区（左动右不动） */}
+        <div className="flex flex-col lg:flex-row gap-6 mt-6 items-start">
+          {/* 左侧区域 */}
+          <div className="flex-1 lg:flex-[2] space-y-4 w-full">
+            {/* K线图 */}
+            <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative">
+              <PriceChart
+                yesPercent={displayYesPercent}
+                marketStatus={marketStatus}
+                marketResult={marketResult}
+                slots={(marketData as any)?.slots || []}
+                currentMarketId={marketData.id}
+                period={(marketData as any)?.period || null}
+                templateId={(marketData as any)?.templateId || (marketData as any)?.template?.id || null}
+                height={320}
+                data={priceData}
+                hideNavigation={true}
+                isFactory={!!((marketData as any)?.isFactory || (marketData as any)?.templateId)}
+              />
             </div>
-          </div>
-        )}
 
-        {/* 用户仓位显示区域（从交易成功回调） */}
-        {apiTradePosition && (
-          <div className="mb-6 p-4 rounded-xl border border-pm-border bg-pm-card">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-pm-text-dim uppercase tracking-wider">
-                  Your Position
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-bold">
-                    {apiTradePosition.shares.toFixed(2)} {apiTradePosition.outcome} shares
-                  </span>
-                  <span className="text-pm-text-dim text-sm">
-                    @ {formatUSD(apiTradePosition.avgPrice)}
-                  </span>
-                </div>
+            {/* 场次导航 */}
+            {(marketData as any)?.period && (
+              <div className="py-2 border-b border-gray-800">
+                <TimeNavigationBar
+                  slots={(marketData as any)?.slots || []}
+                  currentMarketId={marketData.id}
+                  period={(marketData as any)?.period || null}
+                  templateId={(marketData as any)?.templateId || (marketData as any)?.template?.id || null}
+                />
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-xs text-pm-text-dim uppercase tracking-wider">
-                  Total Value
-                </span>
-                <span className="text-pm-green font-bold text-lg">
-                  {formatUSD(apiTradePosition.totalValue)}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Price Chart */}
-        <div className="flex-1">
-          <PriceChart 
-            yesPercent={marketData.yesPercent} 
-            marketStatus={marketStatus} 
-            marketResult={marketResult} 
-          />
+            {/* 详情 Tabs */}
+            <OrderBook
+              activeTab="orderbook"
+              onTabChange={() => {}}
+              marketTitle={marketData.title}
+              endDate={new Date(marketData.endTime).toISOString().split("T")[0]}
+              userOrders={(marketData as any).userOrders || []}
+              marketId={marketData.id}
+            />
+          </div>
+
+          {/* 右侧交易区：粘性固定 */}
+          <div className="sticky top-4 h-fit z-10 w-full lg:w-auto">
+            <TradeSidebar
+              ref={tradeSidebarRef}
+              yesPercent={displayYesPercent}
+              noPercent={displayNoPercent}
+              marketId={marketData.id}
+              userPosition={(marketData as any)?.userPosition || null}
+              marketTitle={marketData.title}
+              marketStatus={marketData.status}
+              winningOutcome={marketData.winningOutcome}
+              activeTab="buy"
+              onTabChange={() => {}}
+              amount=""
+              onAmountChange={() => {}}
+              feeRate={marketData.feeRate || 0.02}
+            />
+          </div>
         </div>
-
-        {/* User Position Card - 显示所有持仓 */}
-        {userPosition && (
-          <>
-            {userPosition.yesShares > 0 && (
-              <UserPositionCard
-                position={{
-                  shares: userPosition.yesShares,
-                  avgPrice: userPosition.yesAvgPrice,
-                  currentPrice: marketData.status === "RESOLVED" 
-                    ? (marketData.winningOutcome === "YES" ? 1.0 : 0.0)
-                    : marketData.yesPercent / 100,
-                  outcome: "yes",
-                }}
-                onSell={handleSell}
-                onSellClick={() => handleQuickSell("yes")}
-                marketTitle={marketData.title}
-                marketStatus={marketData.status}
-                winningOutcome={marketData.winningOutcome}
-              />
-            )}
-            {userPosition.noShares > 0 && (
-              <UserPositionCard
-                position={{
-                  shares: userPosition.noShares,
-                  avgPrice: userPosition.noAvgPrice,
-                  currentPrice: marketData.status === "RESOLVED"
-                    ? (marketData.winningOutcome === "NO" ? 1.0 : 0.0)
-                    : marketData.noPercent / 100,
-                  outcome: "no",
-                }}
-                onSell={handleSell}
-                onSellClick={() => handleQuickSell("no")}
-                marketTitle={marketData.title}
-                marketStatus={marketData.status}
-                winningOutcome={marketData.winningOutcome}
-              />
-            )}
-          </>
-        )}
-
-        {/* Order Book / Tabs */}
-        {/* 修复详情页订单列表：传递用户订单数据 */}
-        <OrderBook 
-          activeTab={detailTab}
-          onTabChange={setDetailTab}
-          marketTitle={marketData.title}
-          endDate={new Date(marketData.endTime).toISOString().split("T")[0]}
-          userOrders={marketData.userOrders || []}
-          marketId={marketData.id}
-        />
       </div>
-
-      {/* Trade Sidebar */}
-      <div className="w-[380px]">
-        <TradeSidebar
-          ref={tradeSidebarRef}
-          yesPercent={marketData.yesPercent}
-          noPercent={marketData.noPercent}
-          marketId={marketData.id}
-          userPosition={userPosition}
-          marketTitle={marketData.title}
-          marketStatus={marketData.status}
-          winningOutcome={marketData.winningOutcome}
-          activeTab={tradeTab}
-          onTabChange={setTradeTab}
-          amount={tradeAmount}
-          onAmountChange={setTradeAmount}
-          feeRate={feeRate}
-          onTradeSuccess={handleTradeSuccess}
-        />
-      </div>
-          </>
-        );
-      })()}
     </main>
   );
 }

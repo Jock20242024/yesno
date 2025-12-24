@@ -14,6 +14,7 @@ export interface FilterOption {
   id: string;
   label: string;
   icon: LucideIcon;
+  count?: number; // 🔥 该筛选选项下的市场数量
 }
 
 export interface CategoryFiltersConfig {

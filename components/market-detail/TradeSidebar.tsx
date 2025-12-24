@@ -55,7 +55,23 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   feeRate = 0, // 默认费率为 0，如果父组件没传的话
   onTradeSuccess,
 }, ref) => {
+  // 🔥 逻辑守卫：确保必要数据存在
+  if (!marketId) {
+    return (
+      <div className="w-full bg-pm-card rounded-xl border border-pm-border p-6">
+        <div className="text-pm-text-dim text-center py-8">加载交易面板数据中...</div>
+      </div>
+    );
+  }
+  
+  // 🔥 逻辑守卫：确保百分比数据有效
+  const safeYesPercent = typeof yesPercent === 'number' && !isNaN(yesPercent) ? Math.max(0, Math.min(100, yesPercent)) : 50;
+  const safeNoPercent = typeof noPercent === 'number' && !isNaN(noPercent) ? Math.max(0, Math.min(100, noPercent)) : 50;
+  
   const { isLoggedIn, user, currentUser, updateBalance } = useAuth();
+  
+  // 🔥 在组件内部使用安全的值，替换原来的 yesPercent 和 noPercent
+  // 注意：这里我们需要在后续代码中使用 safeYesPercent 和 safeNoPercent
   const { addNotification } = useNotification();
   const { executeTrade, balance: storeBalance, updateBalance: updateStoreBalance } = useStore();
   const [isLoading, setIsLoading] = useState(false);
@@ -86,13 +102,24 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       return;
     }
     
+    // 🔥 解决 WalletContext 报错：增加 currentUser 判定
+    if (!currentUser) {
+      return;
+    }
+    
+    // 🔥 修复：先判断 updateBalance 函数是否存在
+    if (typeof updateBalance !== 'function') {
+      console.warn('⚠️ [TradeSidebar] WalletContext 未就绪，跳过余额更新');
+      return;
+    }
+    
     // 只在首次挂载时初始化，避免死循环
     if (!hasInitialized.current) {
       hasInitialized.current = true;
       lastBalanceRef.current = storeBalance;
       // 只在首次挂载时同步一次，避免触发循环
-      const currentBalanceStr = user.balance.replace(/[$,]/g, '');
-      const currentBalance = parseFloat(currentBalanceStr) || 0;
+      // 🔥 修复：安全处理 balance，使用 String().replace() 防错处理
+      const currentBalance = parseFloat(String(user.balance || 0).replace(/[$,]/g, '')) || 0;
       // 如果余额差异较大，才更新
       if (Math.abs(storeBalance - currentBalance) > 0.01) {
         updateBalance(formatUSD(storeBalance));
@@ -212,7 +239,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
 
     return (
       <div className="w-full lg:w-[380px] flex-shrink-0">
-        <div className="sticky top-24 flex flex-col gap-4 bg-pm-card border border-pm-border p-6 rounded-2xl">
+        <div className="flex flex-col gap-4 bg-pm-card border border-pm-border p-6 rounded-2xl">
           <h2 className="text-xl font-bold text-white mb-2">市场已结束</h2>
           
           {isWinner ? (
@@ -252,8 +279,8 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   }
 
   // 2. 如果市场进行中 (OPEN) -> 显示正常交易面板
-  const yesPrice = yesPercent / 100;
-  const noPrice = noPercent / 100;
+  const yesPrice = safeYesPercent / 100;
+  const noPrice = safeNoPercent / 100;
   const selectedPrice = selectedOutcome === "yes" ? yesPrice : noPrice;
   const amountNum = parseFloat(amount) || 0;
   
@@ -378,10 +405,21 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     return 0;
   }, [activeTab, amountNum, estReturn, FEE_RATE, userPosition, selectedOutcome, selectedPrice]);
 
+  // 🔥 检查 WalletContext 是否就绪
+  const isWalletReady = React.useMemo(() => {
+    return isLoggedIn && (currentUser !== null || user !== null);
+  }, [isLoggedIn, currentUser, user]);
+
   // 数据源追踪：优先使用 AuthContext 的余额（从 API 获取的真实值），而不是 Store 的余额
   // 修复：确保使用正确的可用余额（$1000.00），而不是错误的 $1,900.46
   const availableBalance = React.useMemo(() => {
-    if (!isLoggedIn) return 0;
+    if (!isLoggedIn) return null; // 返回 null 表示未登录，显示加载状态
+    
+    // 🔥 如果 WalletContext 未就绪，返回 null 以显示加载状态
+    if (!isWalletReady) {
+      console.log('💰 [TradeSidebar] WalletContext 未就绪，返回 null 显示加载状态');
+      return null;
+    }
     
     // 优先级 1: 使用 currentUser.balance（从 /api/auth/me 获取的最新数字值）
     if (currentUser?.balance !== undefined && currentUser.balance !== null) {
@@ -392,9 +430,10 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       }
     }
     
-    // 优先级 2: 使用 user.balance（格式化后的字符串，如 "$1000.00"）
-    if (user?.balance) {
-      const parsedFromUser = parseFloat(user.balance.replace(/[$,]/g, ''));
+    // 优先级 2: 使用 user.balance（可能是格式化后的字符串如 "$1000.00" 或数字）
+    if (user?.balance !== undefined && user?.balance !== null) {
+      // 🔥 修复：安全处理 balance，使用 String().replace() 防错处理
+      const parsedFromUser = parseFloat(String(user.balance || 0).replace(/[$,]/g, ''));
       if (!isNaN(parsedFromUser) && parsedFromUser >= 0) {
         console.log('💰 [TradeSidebar] 使用 user.balance:', parsedFromUser);
         return parsedFromUser;
@@ -410,24 +449,25 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       return storeBalance;
     }
     
-    // 如果 storeBalance 是测试值，记录警告并返回 0
+    // 如果 storeBalance 是测试值，记录警告并返回 null（显示加载状态）
     if (knownTestValues.includes(storeBalance)) {
       console.warn('⚠️ [TradeSidebar] 检测到旧的测试余额值，忽略:', storeBalance);
+      return null; // 返回 null 显示加载状态，而不是 0
     }
     
-    // 默认返回 0
-    console.log('💰 [TradeSidebar] 使用默认余额: 0');
-    return 0;
-  }, [isLoggedIn, currentUser?.balance, user?.balance, storeBalance]);
+    // WalletContext 就绪但余额还未加载，返回 null 显示加载状态
+    console.log('💰 [TradeSidebar] WalletContext 就绪但余额未加载，显示加载状态');
+    return null;
+  }, [isLoggedIn, isWalletReady, currentUser?.balance, user?.balance, storeBalance]);
 
   // 可用份额（卖出模式）
   const availableShares = activeTab === "sell" && userPosition
     ? (selectedOutcome === "yes" ? userPosition.yesShares : userPosition.noShares)
     : 0;
 
-  // 余额/份额校验
+  // 余额/份额校验（availableBalance 为 null 时不进行校验，避免误判）
   const isInsufficientBalance = activeTab === "buy"
-    ? amountNum > availableBalance
+    ? availableBalance !== null && availableBalance !== undefined && amountNum > availableBalance
     : amountNum > availableShares;
 
   const handleTrade = async () => {
@@ -459,7 +499,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       try {
         toast.error(activeTab === "buy" ? "余额不足" : "份额不足", {
           description: activeTab === "buy"
-            ? `您的余额不足，当前余额: ${formatUSD(availableBalance)}`
+            ? `您的余额不足，当前余额: ${availableBalance !== null ? formatUSD(availableBalance) : '加载中...'}`
             : `您持有的 ${selectedOutcome === "yes" ? "Yes" : "No"} 份额不足，当前持有 ${availableShares.toFixed(2)} 份额`,
           duration: 3000,
         });
@@ -567,7 +607,12 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             }).format(result.data.updatedBalance);
+            // 🔥 修复：先判断 updateBalance 函数是否存在
+            if (typeof updateBalance === 'function') {
             updateBalance(formattedBalance);
+            } else {
+              console.warn('⚠️ [TradeSidebar] WalletContext 未就绪，跳过余额更新');
+            }
           }
 
           // 计算更新的市场价格百分比
@@ -686,8 +731,9 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   };
 
   return (
-    <div className="w-full lg:w-[380px] flex-shrink-0">
-      <div className="flex flex-col gap-4 bg-pm-card border border-pm-border p-6 rounded-2xl lg:sticky lg:top-24">
+    /* 🔥 交易区尺寸缩小：整体宽度和padding都减小 */
+    <div className="w-full lg:w-[320px] flex-shrink-0">
+      <div className="flex flex-col gap-3 bg-pm-card border border-pm-border p-4 rounded-2xl">
         {/* Buy/Sell Tabs */}
         <div className="flex bg-pm-bg p-1 rounded-lg border border-pm-border">
           <button
@@ -712,53 +758,53 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           </button>
         </div>
 
-        {/* Outcome Selection */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Outcome Selection - 🔥 交易区尺寸缩小 */}
+        <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => setSelectedOutcome("yes")}
-            className={`relative flex flex-col items-center justify-center py-3 px-4 rounded-xl border-2 transition-all ${
+            className={`relative flex flex-col items-center justify-center py-2 px-3 rounded-lg border-2 transition-all ${
               selectedOutcome === "yes"
                 ? "border-pm-green bg-pm-green/10"
                 : "border-pm-border bg-transparent hover:border-pm-text-dim/50"
             }`}
           >
-            <span className={`text-lg font-black uppercase tracking-wide ${
+            <span className={`text-base font-black uppercase tracking-wide ${
               selectedOutcome === "yes" ? "text-pm-green" : "text-pm-text-dim"
             }`}>
               Yes
             </span>
-            <span className={`text-xs font-mono font-bold mt-1 ${
+            <span className={`text-xs font-mono font-bold mt-0.5 ${
               selectedOutcome === "yes" ? "text-white" : "text-pm-text-dim"
             }`}>
               {formatUSD(yesPrice)}
             </span>
             {selectedOutcome === "yes" && (
-              <div className="absolute -top-2 -right-2 bg-pm-bg rounded-full">
-                <CheckCircle2 className="w-5 h-5 text-pm-green bg-white rounded-full" />
+              <div className="absolute -top-1.5 -right-1.5 bg-pm-bg rounded-full">
+                <CheckCircle2 className="w-4 h-4 text-pm-green bg-white rounded-full" />
               </div>
             )}
           </button>
           <button
             onClick={() => setSelectedOutcome("no")}
-            className={`flex flex-col items-center justify-center py-3 px-4 rounded-xl border-2 transition-all ${
+            className={`flex flex-col items-center justify-center py-2 px-3 rounded-lg border-2 transition-all ${
               selectedOutcome === "no"
                 ? "border-pm-red bg-pm-red/10"
                 : "border-pm-border bg-transparent hover:border-pm-text-dim/50"
             }`}
           >
-            <span className={`text-lg font-black uppercase tracking-wide ${
+            <span className={`text-base font-black uppercase tracking-wide ${
               selectedOutcome === "no" ? "text-pm-red" : "text-pm-text-dim"
             }`}>
               No
             </span>
-            <span className={`text-xs font-mono font-bold mt-1 ${
+            <span className={`text-xs font-mono font-bold mt-0.5 ${
               selectedOutcome === "no" ? "text-white" : "text-pm-text-dim"
             }`}>
               {formatUSD(noPrice)}
             </span>
             {selectedOutcome === "no" && (
-              <div className="absolute -top-2 -right-2 bg-pm-bg rounded-full">
-                <CheckCircle2 className="w-5 h-5 text-pm-green bg-white rounded-full" />
+              <div className="absolute -top-1.5 -right-1.5 bg-pm-bg rounded-full">
+                <CheckCircle2 className="w-4 h-4 text-pm-green bg-white rounded-full" />
               </div>
             )}
           </button>
@@ -772,9 +818,15 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           <span className="text-pm-text-dim flex items-center gap-1">
             可用:{" "}
             {activeTab === "buy" ? (
-              <span className="text-white font-mono">
-                {formatUSD(availableBalance)} USD
-              </span>
+              availableBalance === null ? (
+                <span className="text-white font-mono">
+                  ---
+                </span>
+              ) : (
+                <span className="text-white font-mono">
+                  {formatUSD(availableBalance)} USD
+                </span>
+              )
             ) : (
               <span className="text-white font-mono">
                 {availableShares.toFixed(2)} {selectedOutcome === "yes" ? "Yes" : "No"}

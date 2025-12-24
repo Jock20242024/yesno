@@ -42,25 +42,7 @@ export default function AdminHeader() {
           </div>
         </label>
 
-        {/* 右侧按钮组 */}
-        <div className="flex gap-2 items-center">
-          <button className="relative flex size-10 cursor-pointer items-center justify-center overflow-hidden rounded-full hover:bg-gray-100 dark:hover:bg-[#283545] transition-colors text-[#111418] dark:text-white">
-            <span className="material-symbols-outlined">notifications</span>
-            <span className="absolute top-2.5 right-2.5 size-2 bg-[#ef4444] rounded-full border-2 border-white dark:border-[#18232e]"></span>
-          </button>
-
-          <button className="flex size-10 cursor-pointer items-center justify-center overflow-hidden rounded-full hover:bg-gray-100 dark:hover:bg-[#283545] transition-colors text-[#111418] dark:text-white">
-            <span className="material-symbols-outlined">settings</span>
-          </button>
-
-          {/* 用户头像 */}
-          <div
-            className="ml-2 bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-[#e5e7eb] dark:border-[#283545]"
-            style={{
-              backgroundImage: `url("https://lh3.googleusercontent.com/aida-public/AB6AXuALmRVENrtdE1njVcx1VImuNtzXFRvmlupCLSjoRbMbecRMZXkGgAwrhy7WtgrOexqJ8sGqwN8i_yAOLzmYUnvlSwVvLB7v_EBy7pR_J-DcCpz_ZcTG-1J8l8-ukBBexR9G7gEOOtKu3BAu4ywlBf2a1V6C80Xs-tjOc8y8qwYJuQo5yQFZybIBTLp6ki1IThyyJX9loXTSctcvc2WPZbdFECyFFtOp5C7pFATu3iwjgM8QEcKUzWOXIljYN1HSQs2hrfrX3n8IZkQ")`,
-            }}
-          />
-        </div>
+        {/* 右侧按钮组 - 已删除头像、通知、设置图标 */}
       </div>
     </header>
   );

@@ -58,6 +58,11 @@ const nextConfig = {
   //   // 启用服务器组件优化
   //   serverComponentsExternalPackages: [],
   // },
+  
+  // 🔥 启用 instrumentation hook（用于启动定时任务）
+  experimental: {
+    instrumentationHook: true,
+  },
 };
 
 module.exports = nextConfig;

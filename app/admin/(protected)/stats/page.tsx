@@ -11,6 +11,8 @@ interface GlobalStat {
   icon: string | null;
   sortOrder: number;
   isActive: boolean;
+  manualOffset?: number; // 手动偏移量（可选，如果不存在则从API获取）
+  overrideValue?: number; // 手动固定值（可选，如果存在则覆盖自动计算的值）
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +32,9 @@ interface DataSource {
 export default function StatsManagementPage() {
   const [stats, setStats] = useState<GlobalStat[]>([]);
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
+  const [globalStatsTask, setGlobalStatsTask] = useState<any | null>(null);
+  const [externalMarketsCount, setExternalMarketsCount] = useState<number>(0);
+  const [isTogglingGlobalStats, setIsTogglingGlobalStats] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStat, setEditingStat] = useState<GlobalStat | null>(null);
@@ -41,6 +46,8 @@ export default function StatsManagementPage() {
     icon: "",
     sortOrder: "",
     isActive: true,
+    manualOffset: "",
+    overrideValue: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -88,6 +95,78 @@ export default function StatsManagementPage() {
     }
   };
 
+  // 获取"全网数据计算"任务状态和 external_active_markets_count
+  const fetchGlobalStatsCalcStatus = async () => {
+    try {
+      // 获取 ScraperTask 状态
+      const taskResponse = await fetch("/api/admin/scrapers/status", {
+        credentials: 'include',
+      });
+      
+      if (taskResponse.ok) {
+        const taskResult = await taskResponse.json();
+        if (taskResult.success) {
+          const task = taskResult.data?.find((t: any) => 
+            t.name === 'GlobalStats_Calc' || t.name.includes('GlobalStats')
+          );
+          setGlobalStatsTask(task || null);
+        }
+      }
+
+      // 获取 external_active_markets_count 数值
+      const statsResponse = await fetch("/api/admin/stats", {
+        credentials: 'include',
+      });
+      
+      if (statsResponse.ok) {
+        const statsResult = await statsResponse.json();
+        if (statsResult.success && statsResult.data) {
+          const externalStat = statsResult.data.find((stat: GlobalStat) => 
+            stat.label === 'external_active_markets_count' || stat.label.includes('外部活跃市场')
+          );
+          if (externalStat) {
+            setExternalMarketsCount(externalStat.value || 0);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("获取全网数据计算状态失败:", error);
+    }
+  };
+
+  // 开启/关闭脚本 B
+  const handleToggleGlobalStats = async (action: 'enable' | 'disable') => {
+    try {
+      setIsTogglingGlobalStats(true);
+      
+      const response = await fetch("/api/admin/scrapers/global-stats/toggle", {
+        method: "POST",
+        credentials: 'include',
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`✅ ${result.message}`);
+        // 刷新状态
+        await fetchGlobalStatsCalcStatus();
+        await fetchStats(); // 刷新指标列表（因为 isActive 可能改变了）
+      } else {
+        alert(`❌ 操作失败: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("开启/关闭脚本 B 失败:", error);
+      alert("操作失败，请稍后重试");
+    } finally {
+      setIsTogglingGlobalStats(false);
+    }
+  };
+
+
   // 手动运行采集
   const handleRunScraper = async (sourceName: string) => {
     try {
@@ -100,15 +179,15 @@ export default function StatsManagementPage() {
 
       const result = await response.json();
 
-      if (result.success) {
-        alert(`✅ ${result.message}`);
-        // 刷新采集源列表
-        await fetchDataSources();
-        // 刷新指标列表（因为可能更新了 GlobalStat）
-        await fetchStats();
-      } else {
-        alert(`❌ 采集失败: ${result.error}`);
-      }
+                if (result.success) {
+                  alert(`✅ ${result.message}`);
+                  // 刷新采集源列表
+                  await fetchDataSources();
+                  // 刷新指标列表
+                  await fetchStats();
+                } else {
+                  alert(`❌ 采集失败: ${result.error}`);
+                }
     } catch (error) {
       console.error("运行采集失败:", error);
       alert("运行采集失败，请稍后重试");
@@ -120,6 +199,14 @@ export default function StatsManagementPage() {
   useEffect(() => {
     fetchStats();
     fetchDataSources();
+    fetchGlobalStatsCalcStatus();
+    
+    // 每 30 秒自动刷新一次
+    const interval = setInterval(() => {
+      fetchGlobalStatsCalcStatus();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   // 打开编辑对话框
@@ -132,6 +219,8 @@ export default function StatsManagementPage() {
       icon: stat.icon || "",
       sortOrder: stat.sortOrder.toString(),
       isActive: stat.isActive,
+      manualOffset: (stat.manualOffset || 0).toString(),
+      overrideValue: stat.overrideValue ? stat.overrideValue.toString() : "",
     });
     setIsDialogOpen(true);
   };
@@ -146,6 +235,8 @@ export default function StatsManagementPage() {
       icon: "",
       sortOrder: "",
       isActive: true,
+      manualOffset: "",
+      overrideValue: "",
     });
     setIsDialogOpen(true);
   };
@@ -161,6 +252,8 @@ export default function StatsManagementPage() {
       icon: "",
       sortOrder: "",
       isActive: true,
+      manualOffset: "",
+      overrideValue: "",
     });
   };
 
@@ -191,6 +284,8 @@ export default function StatsManagementPage() {
           icon: formData.icon || null,
           sortOrder: formData.sortOrder ? parseInt(formData.sortOrder) : 0,
           isActive: formData.isActive,
+          overrideValue: formData.overrideValue ? parseFloat(formData.overrideValue) : null,
+          manualOffset: formData.manualOffset ? parseFloat(formData.manualOffset) : 0,
         }),
       });
 
@@ -338,6 +433,76 @@ export default function StatsManagementPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e5e7eb] dark:divide-[#283545]">
+                  {/* 🔥 硬编码：手动添加"全网数据计算 (脚本 B)"行 */}
+                  <tr className="hover:bg-[#f9fafb] dark:hover:bg-[#283545] transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-[#111418] dark:text-white">全网数据计算 (脚本 B)</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-sm font-medium ${
+                        globalStatsTask?.healthStatus === 'NORMAL' 
+                          ? 'text-green-500 dark:text-green-400' 
+                          : 'text-red-500 dark:text-red-400'
+                      }`}>
+                        {globalStatsTask?.healthStatus === 'NORMAL' ? '激活' : 
+                         globalStatsTask?.healthStatus === 'ABNORMAL' ? '错误' : '停用'}
+                      </span>
+                      {globalStatsTask?.message && globalStatsTask?.healthStatus === 'ABNORMAL' && (
+                        <div className="text-xs text-red-500 dark:text-red-400 mt-1 truncate max-w-xs">
+                          {globalStatsTask.message}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#637588] dark:text-[#9da8b9]">
+                      {globalStatsTask?.lastRunTime ? formatLastSyncTime(globalStatsTask.lastRunTime) : '从未同步'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#111418] dark:text-white">
+                      {externalMarketsCount.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#111418] dark:text-white">
+                      —
+                    </td>
+                    <td className="px-4 py-3">
+                      {/* 🔥 根据状态显示开启/关闭按钮 */}
+                      {/* 如果状态是'停用'(STOPPED)或'异常'(ABNORMAL)或不存在，显示"开启"按钮 */}
+                      {globalStatsTask?.status === 'STOPPED' || 
+                       globalStatsTask?.status === 'ABNORMAL' ||
+                       globalStatsTask?.healthStatus === 'ABNORMAL' || 
+                       !globalStatsTask ? (
+                        // 停用/异常状态：显示"开启"按钮（绿色）
+                        <button
+                          onClick={() => handleToggleGlobalStats('enable')}
+                          disabled={isTogglingGlobalStats}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isTogglingGlobalStats ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              处理中...
+                            </>
+                          ) : (
+                            '开启'
+                          )}
+                        </button>
+                      ) : (
+                        // 激活/正常状态：显示"关闭"按钮（灰色）
+                        <button
+                          onClick={() => handleToggleGlobalStats('disable')}
+                          disabled={isTogglingGlobalStats}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isTogglingGlobalStats ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              处理中...
+                            </>
+                          ) : (
+                            '关闭'
+                          )}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
                   {dataSources.map((source) => (
                     <tr key={source.id} className="hover:bg-[#f9fafb] dark:hover:bg-[#283545] transition-colors">
                       <td className="px-4 py-3">
@@ -397,13 +562,15 @@ export default function StatsManagementPage() {
           <h1 className="text-2xl font-bold text-[#111418] dark:text-white">全局指标管理</h1>
           <p className="text-sm text-[#637588] dark:text-[#9da8b9] mt-1">管理数据中心页面显示的全局指标</p>
         </div>
-        <button
-          onClick={handleAddClick}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm text-sm font-medium whitespace-nowrap"
-        >
-          <Plus className="w-4 h-4" />
-          添加新指标
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleAddClick}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm text-sm font-medium whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            添加新指标
+          </button>
+        </div>
       </div>
 
       {/* 指标列表表格 */}
@@ -462,9 +629,17 @@ export default function StatsManagementPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-[#111418] dark:text-white">
+                        <div className="text-sm text-[#111418] dark:text-white font-medium">
                           {stat.value.toLocaleString()}
+                          {stat.unit && <span className="ml-1 text-xs text-[#637588] dark:text-[#9da8b9]">{stat.unit}</span>}
                         </div>
+                        {((stat.manualOffset && stat.manualOffset !== 0) || (stat.overrideValue !== undefined && stat.overrideValue !== null)) && (
+                          <div className="text-xs text-yellow-500 dark:text-yellow-400 mt-1">
+                            {stat.overrideValue !== undefined && stat.overrideValue !== null 
+                              ? '✓ 已设置手动固定值' 
+                              : `偏移: ${(stat.manualOffset || 0) > 0 ? '+' : ''}${stat.manualOffset || 0}`}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-[#111418] dark:text-white">
@@ -548,7 +723,7 @@ export default function StatsManagementPage() {
 
               <div>
                 <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
-                  数值
+                  数值（自动计算）
                 </label>
                 <input
                   type="number"
@@ -557,7 +732,45 @@ export default function StatsManagementPage() {
                   onChange={(e) => setFormData({ ...formData, value: e.target.value })}
                   className="block w-full px-4 py-2.5 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white placeholder-[#9da8b9] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm"
                   placeholder="0"
+                  disabled={!!formData.overrideValue}
                 />
+                <p className="mt-1 text-xs text-[#637588] dark:text-[#9da8b9]">
+                  如果不设置"手动固定值"，则使用此值（会被自动计算覆盖）
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                  手动固定值（覆盖自动计算）
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={formData.overrideValue}
+                  onChange={(e) => setFormData({ ...formData, overrideValue: e.target.value, value: e.target.value || formData.value })}
+                  className="block w-full px-4 py-2.5 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white placeholder-[#9da8b9] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm"
+                  placeholder="留空则使用自动计算值"
+                />
+                <p className="mt-1 text-xs text-[#637588] dark:text-[#9da8b9]">
+                  设置后将固定显示此值，不会被自动计算覆盖。留空则恢复自动计算。
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#111418] dark:text-white mb-2">
+                  手动偏移量
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={formData.manualOffset}
+                  onChange={(e) => setFormData({ ...formData, manualOffset: e.target.value })}
+                  className="block w-full px-4 py-2.5 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white placeholder-[#9da8b9] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm"
+                  placeholder="例如：1000000 表示在自动计算值基础上+100万"
+                />
+                <p className="mt-1 text-xs text-[#637588] dark:text-[#9da8b9]">
+                  在自动计算值基础上增减的数值（正数表示增加，负数表示减少）
+                </p>
               </div>
 
               <div>

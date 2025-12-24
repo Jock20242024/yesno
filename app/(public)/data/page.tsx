@@ -87,12 +87,13 @@ export default async function DataPage() {
 
   try {
     // 获取热门市场 Top 10（按 totalVolume 降序排序）
-    // 只返回已发布（PUBLISHED）的热门市场
+    // 不过滤 PENDING 状态，直接展示数据库中 totalVolume 最高的前 10 个事件
     const hotMarkets = await prisma.market.findMany({
       where: {
         status: 'OPEN',
-        isHot: true, // 只获取热门市场
-        reviewStatus: 'PUBLISHED', // 只显示已审核通过的市场
+        isActive: true, // 🔥 只返回未删除的市场
+        // 移除 reviewStatus 过滤，不过滤 PENDING 状态
+        // 移除 isHot 过滤，直接按交易量排序
       },
       orderBy: {
         totalVolume: 'desc', // 按交易量降序排序
@@ -114,11 +115,11 @@ export default async function DataPage() {
       },
     });
 
-    // 将数据库数据转换为前端需要的格式
+    // 将数据库数据转换为前端需要的格式（优先使用中文标题）
     hotMarketsData = hotMarkets.map(market => ({
       id: market.id,
-      title: market.title,
-      description: market.description || '',
+      title: market.titleZh || market.title, // 优先使用中文标题
+      description: market.descriptionZh || market.description || '',
       category: market.categories[0]?.category?.name || '未分类',
       categorySlug: market.categories[0]?.category?.slug || 'all',
       icon: market.categories[0]?.category?.icon || 'Bitcoin',

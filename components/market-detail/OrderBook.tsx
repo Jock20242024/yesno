@@ -24,6 +24,15 @@ export default function OrderBook({
   userOrders = [], // 修复详情页订单列表：使用从 API 获取的用户订单
   marketId,
 }: OrderBookProps) {
+  // 🔥 逻辑守卫：确保必要数据存在
+  if (!marketId) {
+    return (
+      <div className="flex-1 bg-pm-card rounded-xl border border-pm-border p-4">
+        <div className="text-pm-text-dim text-center py-8">加载订单数据中...</div>
+      </div>
+    );
+  }
+
   // 修复详情页订单列表：如果提供了用户订单，使用它们；否则使用模拟数据
   // API 调用：确认该组件调用了正确的 API，并且能够正确接收和渲染下注成功后生成的持仓记录
   const orders = userOrders.length > 0 

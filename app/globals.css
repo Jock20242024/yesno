@@ -48,6 +48,32 @@
     scrollbar-width: none;
   }
   
+  /* 火焰跳动动画 - 使用 !important 确保优先级 */
+  @keyframes flame-jump {
+    0%, 100% {
+      transform: scale(1) translateY(0);
+    }
+    25% {
+      transform: scale(1.15) translateY(-3px);
+    }
+    50% {
+      transform: scale(1.1) translateY(-1px);
+    }
+    75% {
+      transform: scale(1.2) translateY(-4px);
+    }
+  }
+  
+  .flame-icon-wrapper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .flame-icon {
+    animation: flame-jump 1.5s ease-in-out infinite !important;
+  }
+  
   /* 强制所有输入框允许文本选择 - 使用最高优先级 */
   input[type="text"],
   input[type="email"],
@@ -64,6 +90,12 @@
     -moz-user-select: text !important;
     -ms-user-select: text !important;
     cursor: text !important;
+  }
+  
+  /* 🔥 强制图表容器高度 */
+  #chart-container {
+    height: 320px !important;
+    min-height: 320px !important;
   }
 }
 

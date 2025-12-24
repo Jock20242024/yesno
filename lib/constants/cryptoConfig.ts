@@ -43,6 +43,7 @@ export function generateMockAddress(networkId: string): string {
 
 // 解析手续费字符串为数字
 export function parseFee(feeString: string): number {
-  return parseFloat(feeString.replace(/[$,\s]/g, "")) || 0;
+  // 🔥 修复：确保在调用 replace 之前先转换为字符串
+  return parseFloat(String(feeString || '').replace(/[$,\s]/g, "")) || 0;
 }
 

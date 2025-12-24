@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { LineChart, TrendingUp, Users, DollarSign, Activity, BarChart, LucideIcon, Globe, Shield } from "lucide-react";
+import { LineChart, TrendingUp, Users, DollarSign, Activity, BarChart, LucideIcon, Globe, Shield, Zap, Trophy } from "lucide-react";
 
 interface HotMarket {
   id: string;
@@ -144,6 +144,7 @@ const mockHotMarkets: HotMarket[] = [
 ];
 
 export default function DataClient({ hotMarkets, stats }: DataClientProps) {
+  const router = useRouter();
   const [globalStats, setGlobalStats] = useState<GlobalStat[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
 
@@ -168,20 +169,52 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
     fetchGlobalStats();
   }, []);
 
-  // 如果真实数据为空，使用 Mock 数据
-  const displayMarkets = hotMarkets.length > 0 ? hotMarkets : mockHotMarkets;
+  // 判断是否使用真实数据（如果 hotMarkets 为空，且包含 mock 数据的 ID，则认为使用了 mock 数据）
+  const isUsingMockData = hotMarkets.length > 0 && hotMarkets.some(m => m.id.startsWith('mock-'));
+  const displayMarkets = hotMarkets.length > 0 && !isUsingMockData ? hotMarkets : mockHotMarkets;
+  const isRealDataEmpty = hotMarkets.length === 0 || isUsingMockData;
   const formatNumber = (num: number) => {
     if (num >= 1000000) {
       // 显示为整数，如 $42M
       const millions = Math.round(num / 1000000);
-      return `$${millions}M`;
+      return `${millions}M`;
     }
     if (num >= 1000) {
       // 显示为整数，如 $285K
       const thousands = Math.round(num / 1000);
-      return `$${thousands}K`;
+      return `${thousands}K`;
     }
-    return `$${Math.round(num).toLocaleString()}`;
+    return Math.round(num).toLocaleString();
+  };
+
+  // 获取实时数据卡片的图标颜色和样式
+  const getStatCardStyle = (label: string) => {
+    const lowerLabel = label.toLowerCase();
+    if (lowerLabel.includes('交易量') || lowerLabel.includes('24h')) {
+      return {
+        iconColor: 'text-green-400',
+        iconBg: 'bg-green-400/20',
+        iconGlow: 'shadow-green-400/20',
+      };
+    } else if (lowerLabel.includes('持仓') || lowerLabel.includes('tvl') || lowerLabel.includes('锁仓')) {
+      return {
+        iconColor: 'text-cyan-400',
+        iconBg: 'bg-cyan-400/20',
+        iconGlow: 'shadow-cyan-400/20',
+      };
+    } else if (lowerLabel.includes('活跃') || lowerLabel.includes('交易者') || lowerLabel.includes('用户')) {
+      return {
+        iconColor: 'text-purple-400',
+        iconBg: 'bg-purple-400/20',
+        iconGlow: 'shadow-purple-400/20',
+      };
+    } else {
+      return {
+        iconColor: 'text-primary',
+        iconBg: 'bg-primary/20',
+        iconGlow: 'shadow-primary/20',
+      };
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -204,7 +237,7 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
     <div className="min-h-screen bg-black text-white">
       <div className="layout-container flex h-full grow flex-col w-full lg:max-w-[1440px] lg:mx-auto px-4 lg:px-10 py-8">
         {/* Hero Section - 深色半透明背景 */}
-        <section className="relative flex flex-col md:flex-row justify-between items-end gap-6 mb-10 pb-8 border-b border-border-dark">
+        <section className="relative flex flex-col md:flex-row justify-between items-end gap-6 mb-3 pb-2 border-b border-border-dark">
           {/* 深色半透明背景 */}
           <div className="absolute inset-0 -mx-4 lg:-mx-10 -mt-8 bg-gradient-to-b from-surface-dark/50 to-transparent rounded-lg -z-10" />
           
@@ -232,34 +265,46 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
           </div>
         </section>
 
-        {/* 主要内容区域 - 70/30 分栏 */}
+        {/* 主要内容区域 - 80/20 分栏 */}
         <div className="grid grid-cols-1 lg:grid-cols-10 gap-8 items-start">
-          {/* 左侧：全网热门事件 Top 10 - 70% 宽度 */}
-          <div className="lg:col-span-7">
+          {/* 左侧：全网热门事件 Top 10 - 80% 宽度 */}
+          <div className="lg:col-span-8">
             <div className="bg-surface-dark rounded-lg border border-border-dark p-6">
               <h2 className="text-xl font-bold text-white mb-4">
                 全网热门事件 Top 10
               </h2>
 
+              {/* 空数据提示 */}
+              {isRealDataEmpty && (
+                <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <p className="text-yellow-400 text-sm">
+                    ⚠️ 当前显示的是占位数据。数据采集脚本正在运行，请稍后再试。
+                  </p>
+                </div>
+              )}
+
               {/* 紧凑表格布局 */}
               <div className="overflow-x-auto -mx-6 px-6">
                 <table className="w-full border-collapse">
-                  {/* 表头 - 灰色文字 */}
+                  {/* 表头 - 精美的表头设计 */}
                   <thead>
-                    <tr className="border-b border-border-dark">
-                      <th className="px-3 py-2.5 text-left text-xs font-medium text-text-secondary uppercase tracking-wider w-16">
-                        排名
+                    <tr className="border-b-2 border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
+                      <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider w-16">
+                        <div className="flex items-center gap-1.5">
+                          <Trophy className="w-4 h-4 text-primary" />
+                          <span>排名</span>
+                        </div>
                       </th>
-                      <th className="px-3 py-2.5 text-left text-xs font-medium text-text-secondary uppercase tracking-wider min-w-[240px]">
+                      <th className="px-3 py-3 pl-8 text-left text-xs font-bold text-primary uppercase tracking-wider min-w-[280px]">
                         事件
                       </th>
-                      <th className="px-3 py-2.5 text-left text-xs font-medium text-text-secondary uppercase tracking-wider min-w-[200px]">
+                      <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider min-w-[200px]">
                         预测概率
                       </th>
-                      <th className="px-3 py-2.5 text-left text-xs font-medium text-text-secondary uppercase tracking-wider w-32">
+                      <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider w-24">
                         截止日期
                       </th>
-                      <th className="px-3 py-2.5 text-right text-xs font-medium text-text-secondary uppercase tracking-wider w-28">
+                      <th className="px-3 py-3 text-right text-xs font-bold text-primary uppercase tracking-wider w-32">
                         交易量
                       </th>
                     </tr>
@@ -282,15 +327,30 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
                             router.push(`/markets/${market.id}`);
                           }}
                         >
-                          {/* 排名 - 紧凑圆形 */}
+                          {/* 排名 - 带奖杯图标的精美设计 */}
                           <td className="px-3 py-2.5">
-                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary font-bold text-xs">
-                              {rankNumber}
+                            <div className="flex items-center gap-2">
+                              {/* 前三名显示特殊颜色和奖杯 */}
+                              {rankNumber <= 3 ? (
+                                <div className={`flex items-center justify-center w-7 h-7 rounded-full font-bold text-xs ${
+                                  rankNumber === 1 
+                                    ? 'bg-gradient-to-br from-yellow-400/30 to-yellow-600/30 text-yellow-400 border border-yellow-400/50 shadow-lg shadow-yellow-400/20' 
+                                    : rankNumber === 2
+                                    ? 'bg-gradient-to-br from-gray-300/30 to-gray-500/30 text-gray-300 border border-gray-300/50 shadow-lg shadow-gray-300/20'
+                                    : 'bg-gradient-to-br from-orange-400/30 to-orange-600/30 text-orange-400 border border-orange-400/50 shadow-lg shadow-orange-400/20'
+                                }`}>
+                                  <Trophy className="w-3.5 h-3.5" />
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary font-bold text-xs">
+                                  {rankNumber}
+                                </div>
+                              )}
                             </div>
                           </td>
 
                           {/* 事件（含图标）- 可点击 */}
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-2.5 pl-8">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-base flex-shrink-0 leading-none">{iconDisplay}</span>
                               <h3 className="font-bold text-white text-sm leading-tight truncate hover:text-primary transition-colors">
@@ -327,10 +387,10 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
                             </div>
                           </td>
 
-                          {/* 交易量 - 蓝色加粗 */}
+                          {/* 交易量 - 亮蓝色加粗，右对齐 */}
                           <td className="px-3 py-2.5 text-right">
-                            <div className="text-sm font-bold text-primary whitespace-nowrap">
-                              {formatNumber(market.volume)}
+                            <div className="text-sm font-bold text-blue-400 whitespace-nowrap">
+                              ${formatNumber(market.volume)}
                             </div>
                           </td>
                         </tr>
@@ -342,9 +402,9 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
             </div>
           </div>
 
-          {/* 右侧：预测市场实时数据 - 30% 宽度 */}
-          <div className="lg:col-span-3">
-            <div className="bg-surface-dark rounded-lg border border-border-dark p-6 sticky top-24">
+          {/* 右侧：预测市场实时数据 - 20% 宽度（最大280px） */}
+          <div className="lg:col-span-2">
+            <div className="bg-surface-dark rounded-lg border border-border-dark p-6 sticky top-24 max-w-[280px]">
               <h2 className="text-xl font-bold text-white mb-6">
                 实时数据
               </h2>
@@ -357,58 +417,58 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
                 ) : (globalStats.length === 0 ? (
                   // 默认占位符数据（当 GlobalStat 表中没有数据时显示）
                   <>
-                    <div className="bg-surface-dark border border-border-dark rounded-lg p-4">
+                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                          <DollarSign className="w-5 h-5 text-primary" />
+                        <div className="w-10 h-10 rounded-lg bg-green-400/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-green-400/20">
+                          <DollarSign className="w-5 h-5 text-green-400" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-text-secondary mb-1">24H 交易量</div>
-                          <div className="text-xl font-bold text-white">$142.5M</div>
+                          <div className="text-xs text-gray-400 mb-1">24H 交易量</div>
+                          <div className="text-2xl font-black text-white leading-none">$142.5M</div>
                         </div>
                       </div>
                     </div>
-                    <div className="bg-surface-dark border border-border-dark rounded-lg p-4">
+                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                          <Activity className="w-5 h-5 text-primary" />
+                        <div className="w-10 h-10 rounded-lg bg-cyan-400/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-cyan-400/20">
+                          <Activity className="w-5 h-5 text-cyan-400" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-text-secondary mb-1">全网持仓量</div>
-                          <div className="text-xl font-bold text-white">$892.3M</div>
+                          <div className="text-xs text-gray-400 mb-1">全网持仓量</div>
+                          <div className="text-2xl font-black text-white leading-none">$892.3M</div>
                         </div>
                       </div>
                     </div>
-                    <div className="bg-surface-dark border border-border-dark rounded-lg p-4">
+                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                          <BarChart className="w-5 h-5 text-primary" />
+                        <div className="w-10 h-10 rounded-lg bg-cyan-400/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-cyan-400/20">
+                          <BarChart className="w-5 h-5 text-cyan-400" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-text-secondary mb-1">总锁仓量 (TVL)</div>
-                          <div className="text-xl font-bold text-white">$1.24B</div>
+                          <div className="text-xs text-gray-400 mb-1">总锁仓量 (TVL)</div>
+                          <div className="text-2xl font-black text-white leading-none">$1.24B</div>
                         </div>
                       </div>
                     </div>
-                    <div className="bg-surface-dark border border-border-dark rounded-lg p-4">
+                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                          <Users className="w-5 h-5 text-primary" />
+                        <div className="w-10 h-10 rounded-lg bg-purple-400/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-400/20">
+                          <Users className="w-5 h-5 text-purple-400" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-text-secondary mb-1">24H 活跃交易者</div>
-                          <div className="text-xl font-bold text-white">12,548</div>
+                          <div className="text-xs text-gray-400 mb-1">24H 活跃交易者</div>
+                          <div className="text-2xl font-black text-white leading-none">12,548</div>
                         </div>
                       </div>
                     </div>
-                    <div className="bg-surface-dark border border-border-dark rounded-lg p-4">
+                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+                        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/20">
                           <TrendingUp className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-text-secondary mb-1">进行中事件</div>
-                          <div className="text-xl font-bold text-white">1,247</div>
+                          <div className="text-xs text-gray-400 mb-1">进行中事件</div>
+                          <div className="text-2xl font-black text-white leading-none">1,247</div>
                         </div>
                       </div>
                     </div>
@@ -422,22 +482,32 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
                         ? (iconValue as LucideIcon)
                         : LineChart;
                     
-                    const displayValue = stat.unit 
-                      ? `${formatNumber(stat.value)} ${stat.unit}`
-                      : formatNumber(stat.value);
+                    // 根据标签获取样式
+                    const cardStyle = getStatCardStyle(stat.label);
+                    
+                    // 格式化显示值（根据标签判断是否需要$符号）
+                    // 去掉所有数值后面的 'USD' 字符串，仅保留前置的 '$' 符号
+                    const labelLower = stat.label.toLowerCase();
+                    const needsDollar = labelLower.includes('交易量') || labelLower.includes('持仓') || labelLower.includes('tvl') || labelLower.includes('锁仓');
+                    const formattedNumber = formatNumber(stat.value);
+                    // 如果 unit 是 'USD'，则不显示，否则显示 unit
+                    const unitToShow = stat.unit && stat.unit.toUpperCase() !== 'USD' ? stat.unit : '';
+                    const displayValue = unitToShow
+                      ? `${needsDollar ? '$' : ''}${formattedNumber} ${unitToShow}`
+                      : `${needsDollar ? '$' : ''}${formattedNumber}`;
                     
                     return (
                       <div
                         key={stat.id}
-                        className="bg-surface-dark border border-border-dark rounded-lg p-4"
+                        className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                            <IconComponent className="w-5 h-5 text-primary" />
+                          <div className={`w-10 h-10 rounded-lg ${cardStyle.iconBg} flex items-center justify-center flex-shrink-0 shadow-lg ${cardStyle.iconGlow}`}>
+                            <IconComponent className={`w-5 h-5 ${cardStyle.iconColor}`} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs text-text-secondary mb-1">{stat.label}</div>
-                            <div className="text-xl font-bold text-white">
+                            <div className="text-xs text-gray-400 mb-1">{stat.label}</div>
+                            <div className="text-2xl font-black text-white leading-none">
                               {displayValue}
                             </div>
                           </div>

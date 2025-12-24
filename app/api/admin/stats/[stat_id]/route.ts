@@ -36,7 +36,7 @@ export async function PUT(
 
     const { stat_id } = await params;
     const body = await request.json();
-    const { label, value, unit, icon, sortOrder, isActive } = body;
+    const { label, value, unit, icon, sortOrder, isActive, overrideValue, manualOffset } = body;
 
     // 检查指标是否存在
     const existingStat = await prisma.globalStat.findUnique({
@@ -60,6 +60,8 @@ export async function PUT(
         ...(icon !== undefined && { icon: icon || null }),
         ...(sortOrder !== undefined && { sortOrder: parseInt(sortOrder) }),
         ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+        ...(overrideValue !== undefined && { overrideValue: overrideValue !== null && overrideValue !== '' ? parseFloat(overrideValue) : null }),
+        ...(manualOffset !== undefined && { manualOffset: parseFloat(manualOffset) || 0 }),
       },
     });
 

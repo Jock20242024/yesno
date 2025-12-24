@@ -95,19 +95,38 @@ export async function PUT(
     // 生成 slug（如果名称改变）
     let slug = existingCategory.slug;
     if (name && name.trim() !== existingCategory.name) {
-      slug = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+      // 🔥 停止使用 Date.now() 做 Slug，使用 父类-名称 格式
+      // 先获取父类 slug（如果需要）
+      let parentSlugForSlug = null;
+      if (existingCategory.parentId) {
+        const parentCat = await prisma.category.findUnique({
+          where: { id: existingCategory.parentId },
+          select: { slug: true },
+        });
+        if (parentCat) {
+          parentSlugForSlug = parentCat.slug;
+        }
+      }
       
-      // 检查新 slug 是否已存在（排除自己）
+      // 生成新的 slug（保留中文字符，只移除文件系统不安全的字符）
+      const namePart = name.trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[<>:"|?*\\]/g, '');
+      
+      slug = parentSlugForSlug ? `${parentSlugForSlug}-${namePart}` : namePart;
+      
+      // 🔥 修复'自残式'查重：检查新 slug 是否已存在（必须排除当前正在编辑的这个 ID）
       const existingSlug = await prisma.category.findFirst({
         where: {
           slug: slug,
-          id: { not: category_id },
+          id: { not: category_id }, // 🔥 必须加上这一行，排除掉自己！
         },
       });
       
       if (existingSlug) {
         return NextResponse.json(
-          { success: false, error: '该分类名称已存在' },
+          { success: false, error: '该分类 slug 已存在' },
           { status: 400 }
         );
       }

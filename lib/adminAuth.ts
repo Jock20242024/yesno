@@ -8,7 +8,6 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from './prisma';
-import { getSession } from './auth-core/sessionStore';
 
 /**
  * Admin Token 验证结果
@@ -27,12 +26,14 @@ interface AdminAuthResult {
  */
 export async function verifyAdminToken(request?: Request | NextRequest): Promise<AdminAuthResult> {
   try {
-    // 从 Cookie 读取 auth_core_session
+    // 🔥 P0修复：从 Cookie 读取 adminToken（与admin登录API设置的Cookie名称一致）
     const cookieStore = await cookies();
-    const sessionId = cookieStore.get('auth_core_session')?.value;
+    const adminToken = cookieStore.get('adminToken')?.value;
 
-    // 检查 session 是否存在
-    if (!sessionId) {
+    // 检查 adminToken 是否存在
+    if (!adminToken) {
+      // 🔥 性能优化：删除高频认证检查的日志（仅在开发环境输出）
+      // console.log('❌ [AdminAuth] adminToken Cookie 不存在');
       return {
         success: false,
         error: 'Unauthorized. Admin access required.',
@@ -40,17 +41,45 @@ export async function verifyAdminToken(request?: Request | NextRequest): Promise
       };
     }
 
-    // 调用 sessionStore.getSession(sessionId)
-    const userId = await getSession(sessionId);
+    // 🔥 性能优化：删除高频认证解析的日志
+    // console.log('🔍 [AdminAuth] 开始解析 adminToken:', adminToken.substring(0, 50) + '...');
 
-    // 若 session 不存在，返回 401
-    if (!userId) {
+    // 解析 adminToken：格式为 admin-token-{userId}-{timestamp}-{random}
+    // 例如：admin-token-e6311bd7-f882-491f-86d0-d5222785be34-1234567890-abc123
+    // UUID 格式：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (36个字符，包含4个连字符)
+    
+    // 更可靠的解析方式：查找 "admin-token-" 前缀后的UUID（36个字符）
+    const prefix = 'admin-token-';
+    if (!adminToken.startsWith(prefix)) {
+      // 🔥 性能优化：删除高频验证失败的日志（仅在开发环境输出）
+      // console.log('❌ [AdminAuth] Token 格式错误：缺少 admin-token- 前缀');
       return {
         success: false,
-        error: 'Session expired or invalid.',
+        error: 'Invalid admin token format.',
         statusCode: 401,
       };
     }
+
+    // 提取前缀后的内容
+    const afterPrefix = adminToken.substring(prefix.length);
+    
+    // UUID 总是36个字符，从位置0开始提取
+    const userId = afterPrefix.substring(0, 36);
+    
+    // 验证 UUID 格式
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidPattern.test(userId)) {
+      // 🔥 性能优化：删除高频验证失败的日志（仅在开发环境输出）
+      // console.log('❌ [AdminAuth] UUID 格式验证失败:', userId);
+      return {
+        success: false,
+        error: 'Invalid user ID format in admin token.',
+        statusCode: 401,
+      };
+    }
+
+    // 🔥 性能优化：删除高频认证成功的日志
+    // console.log('✅ [AdminAuth] 成功解析 userId:', userId);
 
     // 从数据库验证用户是否存在且为管理员
     const user = await prisma.user.findUnique({
@@ -58,6 +87,8 @@ export async function verifyAdminToken(request?: Request | NextRequest): Promise
     });
 
     if (!user) {
+      // 🔥 性能优化：删除高频验证失败的日志（仅在开发环境输出）
+      // console.log('❌ [AdminAuth] 用户不存在:', userId);
       return {
         success: false,
         error: 'Admin user not found.',
@@ -67,6 +98,8 @@ export async function verifyAdminToken(request?: Request | NextRequest): Promise
 
     // 验证用户是否为管理员
     if (!user.isAdmin) {
+      // 🔥 性能优化：删除高频验证失败的日志（仅在开发环境输出）
+      // console.log('❌ [AdminAuth] 用户不是管理员:', userId);
       return {
         success: false,
         error: 'User is not an administrator.',
@@ -76,6 +109,8 @@ export async function verifyAdminToken(request?: Request | NextRequest): Promise
 
     // 验证账户是否被禁用
     if (user.isBanned) {
+      // 🔥 性能优化：删除高频验证失败的日志（仅在开发环境输出）
+      // console.log('❌ [AdminAuth] 管理员账户已被禁用:', userId);
       return {
         success: false,
         error: 'Admin account is banned.',
@@ -84,11 +119,15 @@ export async function verifyAdminToken(request?: Request | NextRequest): Promise
     }
 
     // 验证通过
+    // 🔥 性能优化：删除高频认证成功的日志
+    // console.log('✅ [AdminAuth] 权限验证成功，userId:', userId);
     return {
       success: true,
       userId: user.id,
     };
-  } catch (error) {
+  } catch (error: any) {
+    console.error('❌ [AdminAuth] 权限验证异常:', error);
+    console.error('❌ [AdminAuth] 错误堆栈:', error?.stack);
     return {
       success: false,
       error: 'Internal server error during token verification.',

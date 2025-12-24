@@ -91,21 +91,30 @@ export abstract class ScraperEngine {
   async execute(): Promise<ScrapeResult> {
     try {
       console.log(`🚀 [Scraper] 开始采集: ${this.sourceName}`);
+      console.log(`📋 [Scraper] 采集源标识符: ${this.sourceName}`);
+
+      // 验证采集源是否存在
+      const dataSource = await this.getOrCreateDataSource();
+      console.log(`✅ [Scraper] 采集源记录验证: ID=${dataSource.id}, Status=${dataSource.status}`);
 
       // 1. 获取原始数据
+      console.log(`📡 [Scraper] ${this.sourceName} 开始获取原始数据...`);
       const rawData = await this.fetch();
-      console.log(`✅ [Scraper] ${this.sourceName} 获取数据成功`);
+      console.log(`✅ [Scraper] ${this.sourceName} 获取数据成功，原始数据量: ${Array.isArray(rawData) ? rawData.length : 'N/A'}`);
 
       // 2. 标准化数据
+      console.log(`🔄 [Scraper] ${this.sourceName} 开始标准化数据...`);
       const normalizedData = this.normalize(rawData);
       console.log(`✅ [Scraper] ${this.sourceName} 标准化完成，共 ${normalizedData.length} 条`);
 
       // 3. 保存到数据库
+      console.log(`💾 [Scraper] ${this.sourceName} 开始保存到数据库...`);
       const itemsCount = await this.save(normalizedData);
       console.log(`✅ [Scraper] ${this.sourceName} 保存完成，共 ${itemsCount} 条`);
 
       // 4. 更新采集源状态
       await this.updateDataSourceStatus('ACTIVE', itemsCount);
+      console.log(`✅ [Scraper] ${this.sourceName} 采集流程完成，状态已更新`);
 
       return {
         success: true,
@@ -113,19 +122,33 @@ export abstract class ScraperEngine {
         data: normalizedData,
       };
     } catch (error) {
-      console.error(`❌ [Scraper] ${this.sourceName} 采集失败:`, error);
+      // 详细错误日志
+      console.error(`❌ [Scraper] ${this.sourceName} 采集失败:`);
+      console.error(`   错误类型: ${error?.constructor?.name || 'Unknown'}`);
+      console.error(`   错误消息: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`   错误堆栈: ${error instanceof Error ? error.stack : 'N/A'}`);
+      console.error(`   完整错误对象:`, error);
+
+      const errorMessage = error instanceof Error 
+        ? `${error.name}: ${error.message}` 
+        : String(error);
 
       // 更新为错误状态
-      await this.updateDataSourceStatus(
-        'ERROR',
-        undefined,
-        error instanceof Error ? error.message : String(error)
-      );
+      try {
+        await this.updateDataSourceStatus(
+          'ERROR',
+          undefined,
+          errorMessage.substring(0, 500) // 限制错误消息长度
+        );
+        console.log(`✅ [Scraper] ${this.sourceName} 错误状态已更新到数据库`);
+      } catch (updateError) {
+        console.error(`❌ [Scraper] 更新错误状态失败:`, updateError);
+      }
 
       return {
         success: false,
         itemsCount: 0,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
       };
     }
   }

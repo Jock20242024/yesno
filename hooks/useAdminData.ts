@@ -428,6 +428,8 @@ export function useAdminMarkets(queryParams?: {
   status?: string;
   page?: number;
   limit?: number;
+  showDetails?: boolean; // 🔥 下钻功能：是否显示详细场次
+  source?: string; // 🚀 第一步：添加 source 参数（factory 或 manual）
 }) {
   const [markets, setMarkets] = useState<Market[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -450,6 +452,8 @@ export function useAdminMarkets(queryParams?: {
         if (queryParams?.status) params.append("status", queryParams.status);
         if (queryParams?.page) params.append("page", queryParams.page.toString());
         if (queryParams?.limit) params.append("limit", queryParams.limit.toString());
+        if (queryParams?.showDetails) params.append("showDetails", "true"); // 🔥 下钻功能
+        if (queryParams?.source) params.append("source", queryParams.source); // 🚀 第一步：添加 source 参数
 
         const response = await fetch(`/api/admin/markets?${params.toString()}`, {
           method: "GET",
@@ -480,7 +484,17 @@ export function useAdminMarkets(queryParams?: {
     };
 
     fetchMarkets();
-  }, [queryParams?.search, queryParams?.status, queryParams?.page, queryParams?.limit]);
+    
+    // 🚀 自动刷新：每30秒刷新一次数据（特别是工厂市场，状态会随时间变化）
+    // 这样"已结束"数量会随着时间推移自动增加
+    const intervalId = setInterval(() => {
+      fetchMarkets();
+    }, 30000); // 30秒刷新一次
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [queryParams?.search, queryParams?.status, queryParams?.page, queryParams?.limit, queryParams?.showDetails, queryParams?.source]);
 
   return { markets, isLoading, error, pagination };
 }

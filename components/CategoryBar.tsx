@@ -3,25 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Flame,
-  Home,
-  Building2,
-  Bitcoin,
-  Trophy,
-  DollarSign,
-  Cpu,
-  LineChart,
-  LucideIcon,
-  Film,
-  Globe,
-  Coins,
-  Activity,
-  Mic,
-  Flag,
-  Rocket,
-  Bot,
-} from "lucide-react";
+import * as Icons from "lucide-react";
+import { LucideIcon } from "lucide-react";
 
 interface CategoryItem {
   slug: string;
@@ -46,44 +29,32 @@ interface ApiCategory {
   }>;
 }
 
-// 图标映射表：将字符串映射到 Lucide 图标组件
-const iconMap: Record<string, LucideIcon> = {
-  Bitcoin,
-  Building2,
-  Trophy,
-  DollarSign,
-  Cpu,
-  Film,
-  Globe,
-  Coins,
-  Activity,
-  Mic,
-  Flag,
-  Rocket,
-  Bot,
-  // 默认图标
-  Default: Home,
+// 🔥 动态获取图标组件：从 Lucide 库中直接获取，支持所有图标
+const getIconComponent = (iconName: string | null | undefined): LucideIcon => {
+  // 如果没有提供图标名称，返回默认的 Home 图标
+  if (!iconName) {
+    return Icons.Home;
+  }
+  
+  // 尝试从 Lucide 库中直接获取组件（支持所有图标）
+  const IconComponent = (Icons as any)[iconName] as LucideIcon;
+  
+  // 如果找到了就返回，找不到就返回默认的 Home 图标
+  if (IconComponent) {
+    return IconComponent;
+  }
+  
+  // 如果找不到，返回默认图标
+  return Icons.Home;
 };
 
-// 固定分类（系统内置）- 这三个菜单必须始终显示在导航栏最前面
+// 固定分类（系统内置）- 只保留"数据"，"热门"从数据库获取
 const fixedCategories: CategoryItem[] = [
   {
     slug: "data",
     label: "数据",
-    icon: LineChart,
+    icon: Icons.LineChart,
     isHighlight: false,
-  },
-  {
-    slug: "hot",
-    label: "热门",
-    icon: Flame,
-    isHighlight: true,
-  },
-  {
-    slug: "all",
-    label: "所有市场",
-    icon: Home,
-    isHighlight: true,
   },
 ];
 
@@ -92,31 +63,31 @@ const defaultCategories: CategoryItem[] = [
   {
     slug: "crypto",
     label: "加密货币",
-    icon: Bitcoin,
+    icon: Icons.Bitcoin,
     isHighlight: false,
   },
   {
     slug: "politics",
     label: "政治",
-    icon: Building2,
+    icon: Icons.Building2,
     isHighlight: false,
   },
   {
     slug: "sports",
     label: "体育",
-    icon: Trophy,
+    icon: Icons.Trophy,
     isHighlight: false,
   },
   {
     slug: "finance",
     label: "金融",
-    icon: DollarSign,
+    icon: Icons.DollarSign,
     isHighlight: false,
   },
   {
     slug: "technology",
     label: "科技",
-    icon: Cpu,
+    icon: Icons.Cpu,
     isHighlight: false,
   },
 ];
@@ -152,14 +123,21 @@ export default function CategoryBar() {
                 return aOrder - bOrder;
               })
               .map((cat: ApiCategory) => {
-                // 根据 icon 字符串获取对应的图标组件
-                const IconComponent = cat.icon ? (iconMap[cat.icon] || iconMap.Default) : iconMap.Default;
+                // 🔥 动态获取图标组件：优先使用 slug="hot" 的判断，否则使用数据库中的 icon 字段
+                let IconComponent: LucideIcon;
+                if (cat.slug === "hot") {
+                  // 如果是"热门"分类，强制使用 Flame 图标
+                  IconComponent = Icons.Flame;
+                } else {
+                  // 其他分类：从数据库的 icon 字段动态获取图标
+                  IconComponent = getIconComponent(cat.icon);
+                }
 
                 return {
                   slug: cat.slug,
                   label: cat.name,
                   icon: IconComponent,
-                  isHighlight: false,
+                  isHighlight: cat.slug === "hot", // 热门分类高亮显示
                 };
               });
 
@@ -195,10 +173,8 @@ export default function CategoryBar() {
       return pathname === "/data";
     }
     if (slug === "hot") {
-      return pathname === "/category/hot";
-    }
-    if (slug === "all") {
-      return pathname === "/category/all";
+      // 🔥 修复：热门应该跳转到分类页面，而不是 /data
+      return pathname === "/category/hot" || pathname === "/markets?category=hot";
     }
     return pathname === `/category/${slug}`;
   };
@@ -231,7 +207,7 @@ export default function CategoryBar() {
             );
           }
 
-          // 热门 - 固定样式
+          // 热门 - 从数据库获取，使用特殊样式（火焰跳动效果）
           if (category.slug === "hot") {
             return (
               <Link
@@ -243,25 +219,16 @@ export default function CategoryBar() {
                     : "bg-primary/10 border-primary/50 text-primary shadow-[0_0_12px_-3px_rgba(236,156,19,0.3)] hover:bg-primary/20 hover:border-primary"
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                <span>{category.label}</span>
-              </Link>
-            );
-          }
-
-          // 所有市场 - 固定样式
-          if (category.slug === "all") {
-            return (
-              <Link
-                key={category.slug}
-                href="/category/all"
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs min-w-max transition-all duration-200 ${
-                  isActive
-                    ? "bg-white/20 text-white border-b-2 border-pm-green"
-                    : "bg-white/10 text-white hover:bg-white/20"
-                }`}
-              >
-                <Icon className="w-4 h-4 fill-current" />
+                <div className="flame-icon-wrapper">
+                  <Icon 
+                    className="w-4 h-4 flame-icon" 
+                    style={{
+                      color: '#f97316',
+                      filter: 'drop-shadow(0 0 8px rgba(249, 115, 22, 1)) drop-shadow(0 0 4px rgba(239, 68, 68, 0.8))',
+                      strokeWidth: 2.5,
+                    }}
+                  />
+                </div>
                 <span>{category.label}</span>
               </Link>
             );

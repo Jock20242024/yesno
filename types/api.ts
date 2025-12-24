@@ -34,7 +34,8 @@ export interface Market {
   categorySlug: string;
   yesPercent: number;
   noPercent: number;
-  volume: number; // 交易量（美元），例如 42000000 表示 $42M
+  volume?: number; // 交易量（美元），向后兼容字段
+  displayVolume?: number; // 🔥 新的展示交易量字段（优先使用）
   commentsCount: number; // 评论数量，例如 124
   endTime: string; // ISO 8601 格式，例如 "2024-12-31T23:59:59Z"
   status: MarketStatus; // 市场状态
@@ -46,6 +47,11 @@ export interface Market {
   resolutionCriteria?: string; // 结算规则说明
   userPosition?: UserPosition | null; // ✅ 修复：添加用户持仓字段（API 返回）
   userOrders?: any[]; // ✅ 修复：添加用户订单列表字段（API 返回）
+  // 🔥 新增字段：交易量详细分解
+  source?: 'POLYMARKET' | 'INTERNAL';
+  externalVolume?: number;
+  internalVolume?: number;
+  manualOffset?: number;
 }
 
 /**

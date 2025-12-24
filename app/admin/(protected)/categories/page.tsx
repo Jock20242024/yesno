@@ -46,23 +46,29 @@ export default function CategoriesManagementPage() {
   const fetchCategories = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/admin/categories", {
+      console.log('🖥️ [Categories Page] 开始获取分类列表...');
+      
+      const res = await fetch('/api/admin/categories', {
         credentials: 'include',
+        cache: 'no-store' // 🔥 确保不读缓存
       });
+      
+      console.log('🖥️ [Categories Page] API 响应状态:', res.status, res.statusText);
 
-      const data = await response.json();
+      const result = await res.json();
+      console.log('🖥️ 后台页面接收到的分类数据:', result);
 
-      if (data.success && data.data) {
-        const categoriesWithCount = data.data.map((cat: Category) => ({
-          ...cat,
-          marketCount: 0, // 暂时设为 0，后续可以从 API 获取
-        }));
-        setCategories(categoriesWithCount);
+      if (result.success && Array.isArray(result.data)) {
+        // ✅ 正确提取数组
+        setCategories(result.data);
+        console.log("✅ 成功加载分类数量:", result.data.length);
       } else {
-        console.error("获取分类列表失败:", data.error);
+        console.error("❌ 接口返回错误结构:", result);
+        setCategories([]); // 🔥 确保设置为空数组
       }
-    } catch (error) {
-      console.error("获取分类列表失败:", error);
+    } catch (err) {
+      console.error("❌ 网络请求失败:", err);
+      setCategories([]); // 🔥 确保设置为空数组
     } finally {
       setIsLoading(false);
     }

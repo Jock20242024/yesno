@@ -12,15 +12,6 @@ interface Category {
   status: string;
 }
 
-// 默认分类（fallback）
-const defaultCategories: Category[] = [
-  { id: '1', name: '加密货币', slug: 'crypto', icon: 'Bitcoin', displayOrder: 0, status: 'active' },
-  { id: '2', name: '政治', slug: 'politics', icon: 'Building2', displayOrder: 1, status: 'active' },
-  { id: '3', name: '体育', slug: 'sports', icon: 'Trophy', displayOrder: 2, status: 'active' },
-  { id: '4', name: '金融', slug: 'finance', icon: 'DollarSign', displayOrder: 3, status: 'active' },
-  { id: '5', name: '科技', slug: 'tech', icon: 'Cpu', displayOrder: 4, status: 'active' },
-];
-
 export default function MarketCreationPage() {
   const [formData, setFormData] = useState({
     marketName: "",
@@ -38,7 +29,7 @@ export default function MarketCreationPage() {
     isHot: false, // 是否热门
   });
   
-  const [categories, setCategories] = useState<Category[]>(defaultCategories); // 🔥 初始化为默认分类
+  const [categories, setCategories] = useState<Category[]>([]); // 🔥 统一从数据库读取，不使用硬编码
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [timeRemaining, setTimeRemaining] = useState<string>("");
 
@@ -54,24 +45,21 @@ export default function MarketCreationPage() {
         const data = await response.json();
 
         if (data.success && data.data) {
-          // 如果 API 返回了分类，使用 API 的数据
+          // 🔥 统一从数据库读取分类，不使用硬编码的默认分类
           if (data.data.length > 0) {
             setCategories(data.data);
             console.log(`✅ [CreateMarket] 已加载 ${data.data.length} 个分类`);
           } else {
-            // Fallback：如果数据库为空，使用默认分类
-            console.warn('⚠️ [CreateMarket] 数据库为空，使用默认分类');
-            setCategories(defaultCategories);
+            console.warn('⚠️ [CreateMarket] 数据库中没有分类数据，请先在后台创建分类');
+            setCategories([]);
           }
         } else {
           console.error("❌ [CreateMarket] 获取分类列表失败:", data.error);
-          // Fallback：API 错误时使用默认分类
-          setCategories(defaultCategories);
+          setCategories([]);
         }
       } catch (error) {
         console.error("❌ [CreateMarket] 获取分类列表失败:", error);
-        // Fallback：API 调用失败时使用默认分类
-        setCategories(defaultCategories);
+        setCategories([]);
       } finally {
         setIsLoadingCategories(false);
       }
@@ -81,8 +69,36 @@ export default function MarketCreationPage() {
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    // 🔥 处理 checkbox 类型（如 isHot）
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData((prev) => ({ ...prev, [name]: checked }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
+  };
+
+  // 🔥 处理分类切换（多选）- 使用 categoryId 而不是 slug
+  const handleCategoryToggle = (categoryId: string) => {
+    setFormData((prev) => {
+      const currentCategories = prev.categories || [];
+      const isSelected = currentCategories.includes(categoryId);
+      
+      if (isSelected) {
+        // 如果已选中，则移除
+        return {
+          ...prev,
+          categories: currentCategories.filter((id) => id !== categoryId),
+        };
+      } else {
+        // 如果未选中，则添加
+        return {
+          ...prev,
+          categories: [...currentCategories, categoryId],
+        };
+      }
+    });
   };
 
   // 计算右侧选项初始价（100 - 左侧值）
@@ -152,6 +168,31 @@ export default function MarketCreationPage() {
         endTime = new Date(`${formData.endDate}T23:59:59`).toISOString();
       }
       
+      // 🔥 验证分类 ID 是否有效（确保都是数据库中的真实 UUID）
+      const validCategoryIds = formData.categories.filter((categoryId: string) => {
+        // 验证 categoryId 是否在 categories 列表中存在
+        const existsInCategories = categories.some(cat => cat.id === categoryId);
+        if (!existsInCategories) {
+          console.warn(`⚠️ [CreateMarket] 无效的分类 ID: ${categoryId}`);
+        }
+        return existsInCategories;
+      });
+
+      if (validCategoryIds.length === 0) {
+        alert("请至少选择一个有效的分类");
+        return;
+      }
+
+      // 🔥 使用第一个分类的名称作为主分类（向后兼容 API）
+      const selectedCategoryId = validCategoryIds[0];
+      const selectedCategory = categories.find(cat => cat.id === selectedCategoryId);
+      const categoryName = selectedCategory ? selectedCategory.name : '';
+
+      console.log('📤 [CreateMarket] 提交数据:', {
+        categories: validCategoryIds,
+        categoryName,
+      });
+
       const response = await fetch("/api/admin/markets", {
         method: "POST",
         headers: {
@@ -161,8 +202,9 @@ export default function MarketCreationPage() {
         body: JSON.stringify({
           title: formData.marketName,
           description: formData.description,
-          categories: formData.categories, // 🔥 改为多选数组
-          isHot: formData.isHot, // 🔥 添加热门标记
+          category: categoryName, // 🔥 向后兼容：主分类名称
+          categories: validCategoryIds, // 🔥 发送真实的分类 ID 数组（UUID）
+          isHot: formData.isHot,
           endTime: endTime,
           imageUrl: formData.coverImageUrl || undefined,
           sourceUrl: formData.oracleUrl || undefined,
@@ -238,7 +280,7 @@ export default function MarketCreationPage() {
               ) : (
                 <div className="flex flex-wrap gap-3 p-4 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] min-h-[60px]">
                   {categories.map((cat) => {
-                    const isSelected = formData.categories.includes(cat.slug);
+                    const isSelected = formData.categories.includes(cat.id); // 🔥 使用 id 而不是 slug
                     return (
                       <label
                         key={cat.id}
@@ -251,7 +293,7 @@ export default function MarketCreationPage() {
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => handleCategoryToggle(cat.slug)}
+                          onChange={() => handleCategoryToggle(cat.id)} // 🔥 使用 id 而不是 slug
                           className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2"
                         />
                         <span className="text-sm font-medium">{cat.name}</span>

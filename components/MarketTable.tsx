@@ -19,6 +19,7 @@ import { MarketEvent } from "@/lib/data";
 import { Market } from "@/types/api";
 import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
+import { formatCurrency } from "@/lib/utils";
 
 const iconMap: Record<string, LucideIcon> = {
   Bitcoin,
@@ -41,8 +42,8 @@ interface MarketTableProps {
 function parseVolume(volume?: string): number {
   if (!volume) return 0;
   
-  // 移除 $ 符号和空格
-  const cleaned = volume.replace(/[$,\s]/g, "").toLowerCase();
+  // 🔥 修复：确保在调用 replace 之前先转换为字符串
+  const cleaned = String(volume || '').replace(/[$,\s]/g, "").toLowerCase();
   
   // 提取数字和单位
   const match = cleaned.match(/^([\d.]+)([km]?)$/);
@@ -61,14 +62,24 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
   const [marketData, setMarketData] = useState<Market[]>([]);
   const [isLoading, setIsLoading] = useState(!staticData);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // 获取市场数据
-  const fetchMarkets = async () => {
-    setIsLoading(true);
+  const fetchMarkets = async (pageNum: number = 1, append: boolean = false) => {
+    if (append) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
-      const response = await fetch('/api/markets?pageSize=10');
+      // 🔥 强制实时刷新：禁用缓存，使用 pageSize=100 确保有足够数据
+      const response = await fetch(`/api/markets?page=${pageNum}&pageSize=100`, {
+        cache: 'no-store',
+      });
       
       if (!response.ok) {
         throw new Error('Failed to fetch markets');
@@ -77,7 +88,13 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       const result = await response.json();
       
       if (result.success && result.data) {
-        setMarketData(result.data);
+        if (append) {
+          setMarketData(prev => [...prev, ...result.data]);
+        } else {
+          setMarketData(result.data);
+        }
+        // 🔥 设置 hasMore 状态
+        setHasMore(result.pagination?.hasMore || false);
       } else {
         throw new Error('Invalid response format');
       }
@@ -86,18 +103,63 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       console.error('Error fetching markets:', err);
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  };
+
+  // 加载更多
+  const loadMore = () => {
+    if (!isLoadingMore && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchMarkets(nextPage, true);
     }
   };
 
   // 如果提供了静态数据，使用静态数据；否则从 API 获取
   useEffect(() => {
     if (!staticData) {
-      fetchMarkets();
+      fetchMarkets(1, false);
     }
   }, [staticData]);
 
   // 将 Market 类型转换为 MarketEvent 类型（用于兼容现有 UI）
   const convertMarketToEvent = (market: Market, rank: number): MarketEvent => {
+    // 🔥 优先使用 displayVolume，如果没有则使用 volume 或 totalVolume（向后兼容）
+    const displayVolume = market.displayVolume ?? market.volume ?? market.totalVolume ?? 0;
+    
+    // 🚀 第一优先级：解析 outcomePrices（数据库真实数据）
+    let yesPercent: number = market.yesPercent || 50;
+    let noPercent: number = market.noPercent || 50;
+    
+    try {
+      const outcomePrices = (market as any).outcomePrices;
+      if (outcomePrices) {
+        const prices = typeof outcomePrices === 'string' ? JSON.parse(outcomePrices) : outcomePrices;
+        if (Array.isArray(prices) && prices.length > 0 && prices[0]) {
+          const yesPrice = parseFloat(prices[0]);
+          if (!isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1) {
+            yesPercent = Math.round(yesPrice * 100);
+            noPercent = 100 - yesPercent;
+          }
+        }
+      }
+    } catch (e) {
+      // JSON 解析失败，继续使用默认值
+    }
+    
+    // 🚀 第二优先级：使用 initialPrice（数据库真实数据）
+    if (yesPercent === 50 && noPercent === 50) {
+      const initialPrice = (market as any).initialPrice;
+      if (typeof initialPrice === 'number' && !isNaN(initialPrice) && initialPrice >= 0 && initialPrice <= 1) {
+        yesPercent = Math.round(initialPrice * 100);
+        noPercent = 100 - yesPercent;
+      }
+    }
+    
+    // 🔥 优先使用 image，然后 imageUrl，最后 iconUrl
+    const imageUrl = (market as any).image || market.imageUrl || (market as any).iconUrl || '';
+    
     return {
       id: parseInt(market.id),
       rank,
@@ -106,23 +168,28 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       categorySlug: market.categorySlug,
       icon: 'Bitcoin', // 默认图标，可以根据 category 映射
       iconColor: 'bg-[#f7931a]', // 默认颜色
-      yesPercent: market.yesPercent,
-      noPercent: market.noPercent,
+      yesPercent,
+      noPercent,
       deadline: new Date(market.endTime).toISOString().split('T')[0],
-      imageUrl: market.imageUrl,
-      volume: formatVolume(market.volume),
+      imageUrl,
+      // 🔥 添加原始数据字段（传递给 MarketCard 使用）
+      outcomePrices: (market as any).outcomePrices || null,
+      image: (market as any).image || null,
+      iconUrl: (market as any).iconUrl || null,
+      initialPrice: (market as any).initialPrice || null,
+      volume24h: (market as any).volume24h || null,
+      totalVolume: (market as any).totalVolume || null,
+      externalVolume: (market as any).externalVolume || null,
+      originalId: market.id,
+      volume: formatVolume((market as any).volume24h || displayVolume),
       comments: market.commentsCount,
     };
   };
 
-  // 格式化交易量
-  const formatVolume = (volume: number): string => {
-    if (volume >= 1000000) {
-      return `$${(volume / 1000000).toFixed(1)}m`;
-    } else if (volume >= 1000) {
-      return `$${(volume / 1000).toFixed(1)}k`;
-    }
-    return `$${volume.toLocaleString()}`;
+  // 格式化交易量（使用 formatCurrency 工具函数）
+  const formatVolume = (volume: number | string | null | undefined): string => {
+    // 🔥 使用 formatCurrency 工具函数，安全处理字符串和数字
+    return formatCurrency(volume, { compact: true, decimals: 1 });
   };
 
   // 确定使用的数据源
@@ -268,6 +335,26 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
           </table>
         </div>
       </div>
+      )}
+
+      {/* 加载更多按钮 */}
+      {!isLoading && !error && !staticData && hasMore && (
+        <div className="flex justify-center py-6">
+          <button
+            onClick={loadMore}
+            disabled={isLoadingMore}
+            className="px-6 py-3 bg-pm-card border border-pm-border rounded-xl text-white font-medium hover:bg-pm-card-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                加载中...
+              </>
+            ) : (
+              '加载更多'
+            )}
+          </button>
+        </div>
       )}
     </div>
   );

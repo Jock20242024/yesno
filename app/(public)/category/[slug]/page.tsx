@@ -26,10 +26,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   let pageTitle: string;
 
   // 确定分类名称 - 支持特殊路由和数据库查询
-  if (slug === "all") {
-    categoryName = "所有市场";
-    pageTitle = "所有市场";
-  } else if (slug === "hot" || slug === "trending") {
+  if (slug === "hot" || slug === "trending") {
     categoryName = "热门";
     pageTitle = "热门市场";
   } else {

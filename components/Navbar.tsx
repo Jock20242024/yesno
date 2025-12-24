@@ -132,9 +132,16 @@ export default function Navbar() {
             <>
               <Link
                 href="/rank"
-                className="flex items-center gap-1 text-text-secondary text-xs font-bold hover:text-white transition-colors uppercase tracking-wide"
+                className="flex items-center gap-1 text-text-secondary text-xs font-bold hover:text-white transition-all uppercase tracking-wide group"
               >
-                <Trophy className="w-[18px] h-[18px]" />
+                <Trophy 
+                  className="w-[18px] h-[18px] transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" 
+                  style={{
+                    color: '#eab308',
+                    filter: 'drop-shadow(0 0 4px rgba(234, 179, 8, 0.8)) drop-shadow(0 0 2px rgba(202, 138, 4, 0.6))',
+                    strokeWidth: 2,
+                  }}
+                />
                 排行榜
               </Link>
               <div className="h-5 w-px bg-border-dark" />

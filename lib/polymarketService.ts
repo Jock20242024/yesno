@@ -132,15 +132,17 @@ export async function upsertMarketFromPolymarket(
     ) || 'all';
     
     if (categorySlug !== 'all') {
-      const category = await prisma.category.findFirst({
-        where: { slug: categorySlug, status: 'ACTIVE' },
+      // 🔥 物理切断：只使用 findUnique 查找现有分类，禁止创建
+      const category = await prisma.category.findUnique({
+        where: { slug: categorySlug },
       });
       
       if (category) {
         categoryId = category.id;
+        console.log(`✅ [Polymarket] 找到分类: ${category.id} (slug: ${categorySlug})`);
       } else {
-        // 如果分类不存在，创建默认分类（或使用"未分类"）
-        console.warn(`⚠️ [Polymarket] 分类 ${categorySlug} 不存在，使用默认分类`);
+        // 🔥 兜底逻辑：如果分类不存在，跳过分类关联（市场将出现在"所有市场"中）
+        console.warn(`⚠️ [Polymarket] 未找到分类 '${categorySlug}'，将跳过分类关联（市场将出现在"所有市场"中）`);
       }
     }
 
@@ -227,11 +229,14 @@ export async function upsertMarketFromPolymarket(
         console.log(`🔄 [Polymarket] 更新待审核市场: ${market.title} (${market.id})`);
       }
     } else {
+      // 🔥 审核中心权限：允许创建来自 Polymarket 的事件（待审核）
       // 创建新市场，状态设为 PENDING（待审核）
+      // templateId 将在审核通过时自动生成（使用 poly- 前缀）
       market = await prisma.market.create({
         data: {
           ...marketData,
           reviewStatus: 'PENDING', // 新事件默认为待审核
+          // templateId 留空，审核通过时会自动生成
         },
       });
       console.log(`➕ [Polymarket] 创建新市场（待审核）: ${market.title} (${market.id})`);
