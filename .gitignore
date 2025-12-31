@@ -142,6 +142,13 @@ dist
 .DS_Store
 *.pem
 
+# Editor temporary files
+*.swp
+*.swo
+*~
+.swp
+.swo
+
 # vercel
 .vercel
 
