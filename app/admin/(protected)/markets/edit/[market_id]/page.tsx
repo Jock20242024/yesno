@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMarketDetail } from "@/hooks/useAdminData";
 
-const ADMIN_SECRET_TOKEN = "ADMIN_SECRET_TOKEN"; // 保留用于 resolve API（如果该 API 仍使用 token 验证）
-
 export default function MarketEditPage() {
   const params = useParams();
   const router = useRouter();
@@ -205,12 +203,13 @@ export default function MarketEditPage() {
     setIsResolving(true);
     try {
       // API 调用：发送 POST 请求到结算 API
+      // 🔥 修复：移除 Authorization header，NextAuth 会自动处理认证（通过 Cookie）
       const response = await fetch(`/api/admin/resolve/${marketId}`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${ADMIN_SECRET_TOKEN}`,
           "Content-Type": "application/json",
         },
+        credentials: 'include', // 🔥 确保发送 Cookie
         body: JSON.stringify({
           resolutionOutcome: resolutionOutcome,
         }),

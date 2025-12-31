@@ -14,6 +14,10 @@ import { comparePassword } from "@/services/authService";
 // NextAuth v5 配置对象
 export const authOptions: NextAuthConfig = {
   debug: true,
+  // 🔥 修复：配置自定义登录页面，确保管理员路由跳转到 /admin/login 而不是默认的 /login
+  pages: {
+    signIn: '/admin/login', // 管理员登录页面
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -158,12 +162,41 @@ export const authOptions: NextAuthConfig = {
       return token;
     },
     async session({ session, token }: any) {
-      if (session.user) {
+      if (session.user && token.email) {
         session.user.id = token.sub as string;
-        // 🔥 只保留最简单的映射
-        (session.user as any).isAdmin = token.isAdmin || false;
-        // 🔥 添加 role 字段：传递 role 到 session
-        (session.user as any).role = token.role || 'USER';
+        
+        // 🔥 修复：强制从数据库查询最新的 isAdmin 状态（不依赖 JWT token）
+        try {
+          const dbUser = await prisma.user.findUnique({ 
+            where: { email: token.email as string },
+            select: { id: true, isAdmin: true, isBanned: true }
+          });
+          
+          if (dbUser) {
+            const isAdmin = dbUser.isAdmin === true;
+            (session.user as any).isAdmin = isAdmin;
+            (session.user as any).role = isAdmin ? 'ADMIN' : 'USER';
+            
+            // 🔥 调试日志：打印当前用户的权限状态
+            console.log('🛡️ [Auth-Session] 用户权限验证:', {
+              email: token.email,
+              userId: dbUser.id,
+              isAdmin: isAdmin,
+              isBanned: dbUser.isBanned,
+              role: isAdmin ? 'ADMIN' : 'USER',
+            });
+          } else {
+            // 用户不存在，设置为非管理员
+            (session.user as any).isAdmin = false;
+            (session.user as any).role = 'USER';
+            console.warn('⚠️ [Auth-Session] 用户不存在于数据库:', token.email);
+          }
+        } catch (error) {
+          console.error('❌ [Auth-Session] 数据库查询失败:', error);
+          // 出错时使用 token 中的值作为回退
+          (session.user as any).isAdmin = token.isAdmin || false;
+          (session.user as any).role = token.role || 'USER';
+        }
       }
       return session;
     }

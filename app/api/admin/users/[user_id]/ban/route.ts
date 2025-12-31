@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DBService } from '@/lib/mockData';
-import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
+import { DBService } from '@/lib/dbService'; // 🔥 修复：使用正确的 dbService 而不是 mockData
+import { auth } from '@/lib/authExport'; // 🔥 修复：使用 NextAuth session 验证
 
 /**
  * 管理后台 - 用户禁用/解禁 API
@@ -13,20 +13,35 @@ import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { user_id: string } }
+  { params }: { params: Promise<{ user_id: string }> }
 ) {
   try {
-    // 权限校验：使用统一的 Admin Token 验证函数（从 Cookie 读取）
-    const authResult = await verifyAdminToken(request);
-
-    if (!authResult.success) {
-      return createUnauthorizedResponse(
-        authResult.error || 'Unauthorized. Admin access required.',
-        authResult.statusCode || 401
+    // 🔥 修复：使用 NextAuth session 验证（与 /api/admin/users 保持一致）
+    const session = await auth();
+    
+    if (!session || !session.user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Unauthorized. Admin access required.',
+        },
+        { status: 401 }
       );
     }
 
-    const userId = params.user_id;
+    // @ts-ignore - session.user.isAdmin 在 NextAuth callback 中已设置
+    if (!session.user.isAdmin) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Forbidden: Admin access required.',
+        },
+        { status: 403 }
+      );
+    }
+
+    const { user_id } = await params;
+    const userId = user_id;
     const body = await request.json();
     const { action } = body;
 

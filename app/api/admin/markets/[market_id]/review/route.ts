@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 
 // 临时禁用权限检查，优先确保审核功能能运行
 // TODO: 修复后恢复权限检查 - 其他 admin API 使用以下方式：
-// import { auth } from "@/app/api/auth/[...nextauth]/route";
+// import { auth } from "@/lib/authExport";
 // const session = await auth();
 
 export const dynamic = "force-dynamic";
@@ -71,7 +71,7 @@ export async function POST(
     // TODO: 临时禁用权限检查，优先确保审核功能能运行
     // 修复后恢复权限检查 - 使用以下代码：
     /*
-    import { auth } from "@/app/api/auth/[...nextauth]/route";
+    import { auth } from "@/lib/authExport";
     const session = await auth();
     
     if (!session || !session.user) {

@@ -17,9 +17,14 @@ import {
   Film,
   LucideIcon,
 } from "lucide-react";
+import { EthereumIcon } from "@/components/icons/EthereumIcon";
 
-const iconMap: Record<string, LucideIcon> = {
+// 🔥 扩展 iconMap 类型以支持自定义组件
+type IconComponent = LucideIcon | React.ComponentType<{ className?: string }>;
+
+const iconMap: Record<string, IconComponent> = {
   Bitcoin,
+  Ethereum: EthereumIcon, // 🔥 使用自定义以太坊图标
   Building2,
   Flag,
   Rocket,
@@ -69,7 +74,44 @@ export default function MarketHeader({ event, status = "open", result = null, cl
     );
   }
 
-  const IconComponent = iconMap[event.icon] || Bitcoin;
+  // 🔥 修复：从 event 中提取 icon 和 iconColor，如果没有则根据 symbol/title 动态计算
+  const getIconAndColor = () => {
+    // 优先使用 API 返回的 icon 和 iconColor
+    if ((event as any).icon && (event as any).iconColor) {
+      return {
+        icon: (event as any).icon,
+        iconColor: (event as any).iconColor,
+      };
+    }
+    
+    // 如果没有，根据 symbol/title 动态判断
+    const symbol = (event as any).symbol || '';
+    const title = event.title || '';
+    const symbolUpper = symbol.toUpperCase();
+    const titleUpper = title.toUpperCase();
+    
+    if (symbolUpper.includes('ETH') || titleUpper.includes('ETH') || titleUpper.includes('以太坊') || titleUpper.includes('ETHEREUM')) {
+      return {
+        icon: 'Ethereum',
+        iconColor: 'bg-[#627EEA]', // 以太坊蓝色
+      };
+    }
+    if (symbolUpper.includes('BTC') || titleUpper.includes('BTC') || titleUpper.includes('比特币') || titleUpper.includes('BITCOIN')) {
+      return {
+        icon: 'Bitcoin',
+        iconColor: 'bg-[#f7931a]', // 比特币橙色
+      };
+    }
+    
+    // 默认使用 Bitcoin
+    return {
+      icon: event.icon || 'Bitcoin',
+      iconColor: (event as any).iconColor || 'bg-[#f7931a]',
+    };
+  };
+
+  const { icon, iconColor } = getIconAndColor();
+  const IconComponent = iconMap[icon] || Bitcoin;
   
   // 🔥 修复状态判断：对于工厂市场，如果 closingDate 已过期，即使状态还是 OPEN，也应该视为"已结束"
   const isExpired = closingDate ? new Date(closingDate).getTime() <= Date.now() : false;
@@ -164,7 +206,7 @@ export default function MarketHeader({ event, status = "open", result = null, cl
       <div className="flex items-start gap-4">
       <div className="size-16 rounded-xl bg-white/5 p-1.5 flex-shrink-0 border border-pm-border">
         <div
-          className={`w-full h-full rounded-lg ${event.iconColor} flex items-center justify-center text-white shadow-inner`}
+          className={`w-full h-full rounded-lg ${iconColor} flex items-center justify-center text-white shadow-inner`}
         >
           <IconComponent className="w-10 h-10" />
         </div>

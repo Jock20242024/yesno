@@ -1,68 +1,112 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
+import { formatUSD } from "@/lib/utils";
 
 interface ActivityItem {
   id: string;
   type: "Buy" | "Sell";
   market: string;
-  marketId: number;
-  amount: string;
+  marketId: string;
+  amount: number;
   timestamp: string;
 }
 
-// Mock 数据
-const mockActivities: ActivityItem[] = [
-  {
-    id: "1",
-    type: "Buy",
-    market: "Will Bitcoin reach $100k by end of 2024?",
-    marketId: 1,
-    amount: "$500.00",
-    timestamp: "2 hours ago",
-  },
-  {
-    id: "2",
-    type: "Sell",
-    market: "Will Trump win the 2024 election?",
-    marketId: 2,
-    amount: "$1,200.00",
-    timestamp: "5 hours ago",
-  },
-  {
-    id: "3",
-    type: "Buy",
-    market: "Will Apple stock hit $200 by Q2 2024?",
-    marketId: 3,
-    amount: "$300.00",
-    timestamp: "1 day ago",
-  },
-  {
-    id: "4",
-    type: "Buy",
-    market: "Will Ethereum reach $5k in 2024?",
-    marketId: 4,
-    amount: "$750.00",
-    timestamp: "2 days ago",
-  },
-  {
-    id: "5",
-    type: "Sell",
-    market: "Will the Lakers win the NBA championship?",
-    marketId: 5,
-    amount: "$450.00",
-    timestamp: "3 days ago",
-  },
-];
+interface UserActivityTableProps {
+  userId?: string;
+}
 
 const tabs = [
-  { id: "positions", label: "持仓" },
-  { id: "activity", label: "活跃" },
+  { id: "positions", label: "Positions" },
+  { id: "activity", label: "Activity" },
 ];
 
-export default function UserActivityTable() {
+export default function UserActivityTable({ userId }: UserActivityTableProps) {
   const [activeTab, setActiveTab] = useState("activity");
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchActivities = async () => {
+      if (!userId) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(`/api/users/${userId}`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch user activities");
+        }
+
+        const result = await response.json();
+        if (result.success && result.data && result.data.tradeHistory) {
+          // 转换交易历史为活动列表
+          const activitiesList = await Promise.all(
+            result.data.tradeHistory.map(async (trade: any) => {
+              // 获取市场标题
+              let marketTitle = `Market ${trade.marketId}`;
+              try {
+                const marketResponse = await fetch(`/api/markets/${trade.marketId}`);
+                if (marketResponse.ok) {
+                  const marketResult = await marketResponse.json();
+                  if (marketResult.success && marketResult.data) {
+                    marketTitle = marketResult.data.title;
+                  }
+                }
+              } catch (error) {
+                console.error('Error fetching market title:', error);
+              }
+
+              // 格式化时间
+              const timestamp = new Date(trade.timestamp);
+              const now = new Date();
+              const diffMs = now.getTime() - timestamp.getTime();
+              const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+              const diffDays = Math.floor(diffHours / 24);
+              
+              let timeAgo = '';
+              if (diffHours < 1) {
+                timeAgo = '刚刚';
+              } else if (diffHours < 24) {
+                timeAgo = `${diffHours} 小时前`;
+              } else if (diffDays < 7) {
+                timeAgo = `${diffDays} 天前`;
+              } else {
+                timeAgo = timestamp.toLocaleDateString('zh-CN');
+              }
+
+              return {
+                id: trade.id,
+                type: trade.type === 'buy' ? "Buy" as const : "Sell" as const,
+                market: marketTitle,
+                marketId: trade.marketId,
+                amount: trade.amount || 0,
+                timestamp: timeAgo,
+              };
+            })
+          );
+
+          setActivities(activitiesList);
+        } else {
+          throw new Error("Invalid response format");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error fetching activities.");
+        console.error("Error fetching user activities:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchActivities();
+  }, [userId]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -86,22 +130,47 @@ export default function UserActivityTable() {
       {/* 活动表格 */}
       {activeTab === "activity" && (
         <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
+          <div className="w-full overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  类型
+                    Type
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  市场
+                    Market
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  价值
+                    Value
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {mockActivities.map((activity) => (
+              {isLoading && (
+                <tr>
+                  <td colSpan={3} className="px-6 py-8 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-pm-green" />
+                      <span className="text-zinc-400">加载中...</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!isLoading && error && (
+                <tr>
+                  <td colSpan={3} className="px-6 py-8 text-center text-zinc-400">
+                    {error}
+                  </td>
+                </tr>
+              )}
+              {!isLoading && !error && activities.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-6 py-8 text-center text-zinc-400">
+                    暂无活动记录
+                  </td>
+                </tr>
+              )}
+              {!isLoading && !error && activities.map((activity) => (
                 <tr
                   key={activity.id}
                   className="hover:bg-zinc-800/50 transition-colors"
@@ -114,7 +183,7 @@ export default function UserActivityTable() {
                           : "text-pm-red"
                       }`}
                     >
-                      {activity.type === "Buy" ? "买入" : "卖出"}
+                      {activity.type === "Buy" ? "Buy" : "Sell"}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -127,23 +196,26 @@ export default function UserActivityTable() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <span className="text-sm font-medium text-white">
-                      {activity.amount}
+                      {formatUSD(activity.amount)}
                     </span>
+                    <div className="text-xs text-zinc-500 mt-1">
+                      {activity.timestamp}
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       {/* Positions Tab 内容（占位） */}
       {activeTab === "positions" && (
         <div className="p-8 text-center text-zinc-400">
-          <p>暂无持仓</p>
+          <p>No positions</p>
         </div>
       )}
     </div>
   );
 }
-

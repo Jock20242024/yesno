@@ -99,9 +99,9 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   };
 
   // 🔥 关键修复：使用 /api/user/assets 获取总资产，与主页面数据源一致
-  // 🔴 [临时诊断] 强制发送请求：无论登录与否都发送请求，用于诊断
+  // 🔥 只有在 shouldFetch 为 true 时才发送请求（未登录时不发送请求）
   const { data: totalBalance, isLoading, error } = useSWR<number>(
-    '/api/user/assets',  // 🔴 临时诊断：强制发送请求，不再判断 shouldFetch
+    shouldFetch ? '/api/user/assets' : null,  // 🔥 未登录时传入 null，SWR 不会发送请求
     fetcher,
     {
       refreshInterval: shouldFetch ? 5000 : 0, // 5秒刷新一次（资产数据不需要太频繁）
@@ -109,19 +109,19 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
       dedupingInterval: 2000, // 2秒内去重，避免重复请求
       errorRetryCount: 3,
       errorRetryInterval: 2000,
-      keepPreviousData: true,
+      keepPreviousData: false, // 🔥 修复：登出后不保留之前的数据
     }
   );
 
   // 调试日志
   console.log('💰 [LiveWallet] Total balance state:', { totalBalance, isLoading, error, isLoggedIn, authLoading, shouldFetch });
 
-  // 🔥 架构修复：只有当 isLoggedIn 且 totalBalance 不为 undefined 时才渲染数值，否则显示 Loading
+  // 🔥 架构修复：认证加载中或未登录时，不显示任何内容（或显示 $0.00）
   if (authLoading || !isLoggedIn) {
-    // 认证加载中或未登录：显示 Loading
+    // 未登录：显示 $0.00（不显示加载动画，避免误导）
     return (
-      <span className={`text-sm font-black text-white leading-none font-mono tracking-tight ${className} animate-pulse`}>
-        <span className="opacity-50">...</span>
+      <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className}`}>
+        $0.00
       </span>
     );
   }
@@ -130,7 +130,7 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   if (totalBalance === undefined || isLoading) {
     // 数据加载中：显示 Loading
     return (
-      <span className={`text-sm font-black text-white leading-none font-mono tracking-tight ${className} animate-pulse`}>
+      <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className} animate-pulse`}>
         <span className="opacity-50">...</span>
       </span>
     );
@@ -160,7 +160,7 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   // 显示状态：格式化后的余额（强制显示，即使是 0 也要显示）
   console.log('💰 [LiveWallet] Rendering balance:', displayBalance, formattedBalance);
   return (
-    <span className={`text-sm font-black text-white leading-none font-mono tracking-tight ${className}`}>
+    <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className}`}>
       {formattedBalance}
     </span>
   );

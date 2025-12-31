@@ -4,6 +4,7 @@ import { DBService } from '@/lib/dbService';
 import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离：使用统一的 userId 提取函数
 import { prisma } from '@/lib/prisma';
 import { calculateDisplayVolume } from '@/lib/marketUtils';
+import { createNoCacheResponse } from '@/lib/responseHelpers'; // 🔥 使用禁用缓存的响应帮助函数
 
 // 🔥 强制清理前端缓存：确保不使用旧缓存
 export const dynamic = 'force-dynamic';
@@ -32,12 +33,12 @@ export async function GET(
 
     if (!market_id || market_id.trim() === '') {
       console.error('❌ [Market Detail API] 市场ID为空');
-      return NextResponse.json(
+      return createNoCacheResponse(
         {
           success: false,
           error: 'Market ID is required',
         },
-        { status: 400 }
+        400
       );
     }
 
@@ -62,13 +63,13 @@ export async function GET(
 
     if (!market) {
       console.error('❌ [Market Detail API] 市场不存在:', market_id);
-      return NextResponse.json({ success: false, error: 'Market not found' }, { status: 404 });
+      return createNoCacheResponse({ success: false, error: 'Market not found' }, 404);
     }
 
     // 检查市场是否已发布且激活
     if (market.reviewStatus !== 'PUBLISHED' || !market.isActive) {
       console.error('❌ [Market Detail API] 市场未发布或未激活:', market_id);
-      return NextResponse.json({ success: false, error: 'Market not available' }, { status: 404 });
+      return createNoCacheResponse({ success: false, error: 'Market not available' }, 404);
     }
     
     // 2. 组装返回数据
@@ -202,6 +203,16 @@ export async function GET(
     // 使用 formattedMarket 继续处理
     const marketData = formattedMarket!;
     
+    // 🔥 关键调试：检查 formattedMarket 中的关键字段
+    console.log(`🔍 [Market Detail API] formattedMarket 关键字段:`, {
+      id: formattedMarket.id,
+      isFactory: (formattedMarket as any).isFactory,
+      source: formattedMarket.source,
+      outcomePrices: (formattedMarket as any).outcomePrices,
+      outcomePricesType: typeof (formattedMarket as any).outcomePrices,
+      externalId: (formattedMarket as any).externalId,
+    });
+    
     // 🔥 核心分流逻辑：赔率不是算出来的，是同步过来的！
     // 
     // 1. 如果 externalId 匹配成功（POLYMARKET 市场或工厂市场有 externalId）：
@@ -221,6 +232,19 @@ export async function GET(
     // 🔥 修复：工厂市场无论是否有 externalId，都尝试使用同步赔率（如果有数据的话）
     const shouldUseSyncedOdds = isPolymarketMarket || isFactoryMarket;
     
+    // 🔥 调试日志：检查工厂市场判断
+    console.log(`🔍 [Market Detail API] 市场类型检查:`, {
+      marketId: marketData.id,
+      source: marketData.source,
+      isPolymarketMarket,
+      isFactoryMarket,
+      hasExternalId,
+      shouldUseSyncedOdds,
+      outcomePrices: (marketData as any).outcomePrices ? '存在' : '不存在',
+      outcomePricesType: typeof (marketData as any).outcomePrices,
+      outcomePricesValue: (marketData as any).outcomePrices,
+    });
+    
     if (shouldUseSyncedOdds) {
       // 🚀 强制使用同步赔率：如果有数据，必须强制覆盖本地的 50/50
       let syncedOddsFound = false;
@@ -228,6 +252,13 @@ export async function GET(
       // 第一优先级：使用 outcomePrices（从赔率机器人同步的实时赔率）
       try {
         const outcomePrices = (marketData as any).outcomePrices;
+        console.log(`🔍 [Market Detail API] 尝试解析 outcomePrices:`, {
+          outcomePrices,
+          outcomePricesType: typeof outcomePrices,
+          isString: typeof outcomePrices === 'string',
+          isNull: outcomePrices === null,
+          isUndefined: outcomePrices === undefined,
+        });
         if (outcomePrices) {
           const parsed = typeof outcomePrices === 'string' ? JSON.parse(outcomePrices) : outcomePrices;
           
@@ -253,7 +284,18 @@ export async function GET(
             }
           }
           
-          // 验证价格有效性
+          // 🔥 调试日志：打印解析后的原始价格值
+          console.log(`🔍 [Market Detail API] 解析后的价格值:`, {
+            yesPrice,
+            noPrice,
+            yesPriceType: typeof yesPrice,
+            noPriceType: typeof noPrice,
+            yesPriceIsValid: yesPrice !== null && !isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1,
+            noPriceIsValid: noPrice !== null && !isNaN(noPrice) && noPrice >= 0 && noPrice <= 1,
+          });
+          
+          // 🔥 移除结算状态检查：允许显示真实的Polymarket赔率，包括0/100（已结算市场）
+          // 确保实时同步Polymarket的真实赔率数据
           if (yesPrice !== null && !isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1) {
             yesPercent = yesPrice * 100;
             // 如果对象格式有明确的 NO 价格，使用它；否则计算
@@ -263,8 +305,16 @@ export async function GET(
               noPercent = (1 - yesPrice) * 100;
             }
             syncedOddsFound = true;
-            console.log(`✅ [Market Detail API] 强制使用同步赔率: YES=${yesPercent.toFixed(2)}%, NO=${noPercent.toFixed(2)}% (来源: outcomePrices, externalId: ${(marketData as any).externalId || '未设置'})`);
+            console.log(`✅ [Market Detail API] 强制使用同步赔率: YES=${yesPercent.toFixed(2)}%, NO=${noPercent.toFixed(2)}% (来源: outcomePrices, externalId: ${(marketData as any).externalId || '未设置'}, 原始值: yesPrice=${yesPrice}, noPrice=${noPrice})`);
+          } else {
+            console.warn(`⚠️ [Market Detail API] outcomePrices 存在但验证失败:`, {
+              yesPrice,
+              noPrice,
+              yesPriceValid: yesPrice !== null && !isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1,
+            });
           }
+        } else {
+          console.warn(`⚠️ [Market Detail API] outcomePrices 为空或不存在`);
         }
       } catch (e) {
         console.warn(`⚠️ [Market Detail API] 解析 outcomePrices 失败:`, e);
@@ -302,14 +352,28 @@ export async function GET(
         console.log(`ℹ️ [Market Detail API] 使用本地成交计算赔率（自建市场）: YES=${yesPercent.toFixed(2)}%, NO=${noPercent.toFixed(2)}%`);
       } else {
         console.log(`ℹ️ [Market Detail API] 自建市场 ${marketData.id} 无交易数据，使用默认 50/50 赔率`);
+        // 🔥 确保使用默认值50/50，而不是0/100
+        yesPercent = 50;
+        noPercent = 50;
       }
     }
+    
+    // 🔥 移除安全检查：允许显示真实的Polymarket赔率，包括0/100（已结算市场）
+    // 不再强制使用50/50，确保实时同步Polymarket的真实赔率数据
 
     // 🔥 工厂市场导航：查询同一 templateId 今天的所有市场，按时间排序
     let slots: Array<{ id: string; startTime: string; endTime: string; status: string }> = [];
     
     if (formattedMarket.templateId) {
       try {
+        console.log(`🔍 [Market Detail API] 开始查询slots，当前市场信息:`, {
+          marketId: market.id,
+          marketTitle: market.title,
+          templateId: formattedMarket.templateId,
+          marketSource: market.source,
+          marketIsFactory: (market as any).isFactory,
+        });
+
         // 计算今天的开始和结束时间（UTC+8，Asia/Shanghai）
         const now = new Date();
         // 获取 UTC+8 时区的当前日期字符串（YYYY-MM-DD）
@@ -336,6 +400,8 @@ export async function GET(
           },
           select: {
             id: true,
+            title: true, // 🔥 添加title用于调试和过滤
+            symbol: true, // 🔥 添加symbol用于过滤
             createdAt: true,
             closingDate: true,
             status: true,
@@ -345,6 +411,57 @@ export async function GET(
             createdAt: 'asc', // 按创建时间（开始时间）排序
           },
         });
+        
+        console.log(`🔍 [Market Detail API] 查询到的同模板市场:`, {
+          count: sameTemplateMarkets.length,
+          queryTemplateId: formattedMarket.templateId,
+          markets: sameTemplateMarkets.map(m => ({
+            id: m.id,
+            title: (m as any).title,
+            closingDate: m.closingDate.toISOString(),
+            period: (m as any).period,
+          })),
+        });
+        
+        // 🔥 关键修复：必须同时使用templateId和symbol过滤，确保不混入其他市场
+        const currentMarketSymbol = (market as any).symbol;
+        const currentMarketTitle = market.title;
+        
+        // 🔥 必须同时匹配templateId、symbol和title，确保不混入手动市场或其他类型的市场
+        let filteredMarkets = sameTemplateMarkets.filter((m) => {
+          const marketSymbol = (m as any).symbol;
+          const marketTitle = (m as any).title;
+          
+          // 如果当前市场有symbol，必须匹配symbol
+          if (currentMarketSymbol) {
+            if (marketSymbol !== currentMarketSymbol) {
+              return false;
+            }
+          }
+          
+          // 同时必须匹配title（防止不同symbol但有相同templateId的情况）
+          if (marketTitle !== currentMarketTitle) {
+            return false;
+          }
+          
+          return true;
+        });
+        
+        if (filteredMarkets.length !== sameTemplateMarkets.length) {
+          console.log(`🔧 [Market Detail API] 过滤市场:`, {
+            原始数量: sameTemplateMarkets.length,
+            过滤后数量: filteredMarkets.length,
+            当前市场: {
+              templateId: formattedMarket.templateId,
+              symbol: currentMarketSymbol,
+              title: currentMarketTitle,
+            },
+          });
+        }
+        
+        // 使用过滤后的市场列表
+        sameTemplateMarkets.length = 0;
+        sameTemplateMarkets.push(...filteredMarkets);
         
         // 转换为 slots 格式
         slots = sameTemplateMarkets.map((m) => {
@@ -374,12 +491,20 @@ export async function GET(
         // 🔥 按 startTime 物理升序排列（确保导航栏从早到晚整齐排列）
         slots.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
         
-        console.log(`📊 [Market Detail API] 查询到 ${slots.length} 个同模板市场（今天）`);
+        console.log(`📊 [Market Detail API] 查询到 ${slots.length} 个同模板市场（今天），slots:`, slots.map(s => ({ id: s.id, startTime: s.startTime, endTime: s.endTime })));
       } catch (error) {
         console.error('❌ [Market Detail API] 查询 slots 失败:', error);
         slots = [];
       }
     }
+
+    // 🔥 调试日志：在构建 serializedMarket 之前，确认 yesPercent 和 noPercent 的值
+    console.log(`🔍 [Market Detail API] 构建 serializedMarket 前的赔率值:`, {
+      yesPercent,
+      noPercent,
+      yesPercentType: typeof yesPercent,
+      noPercentType: typeof noPercent,
+    });
 
     // 响应数据完整性：确保 API 返回的市场对象中，所有字段都是完整的
     // 将数据库格式转换为前端期望的格式（使用 formattedMarket）
@@ -393,7 +518,7 @@ export async function GET(
       endTime: formattedMarket.closingDate,
       closingDate: formattedMarket.closingDate,
       createdAt: formattedMarket.createdAt,
-      updatedAt: formattedMarket.createdAt,
+      updatedAt: market.updatedAt ? market.updatedAt.toISOString() : formattedMarket.createdAt, // 🔥 修复：使用实际的 updatedAt，如果没有则使用 createdAt
       
       // 状态和结果
       status: formattedMarket.status,
@@ -421,8 +546,8 @@ export async function GET(
       }), // 兼容字段，使用 displayVolume
       totalYes: formattedMarket.totalYes || 0,
       totalNo: formattedMarket.totalNo || 0,
-      yesPercent: Math.round(yesPercent * 100) / 100, // 保留两位小数
-      noPercent: Math.round(noPercent * 100) / 100, // 保留两位小数
+      yesPercent: Math.round(yesPercent), // 🔥 修复：yesPercent已经是百分比（0-100），直接四舍五入到整数
+      noPercent: Math.round(noPercent),   // 🔥 修复：noPercent已经是百分比（0-100），直接四舍五入到整数
       
       // 新增字段：展示来源和详细交易量信息
       source: formattedMarket.source || 'INTERNAL',
@@ -456,8 +581,83 @@ export async function GET(
       template: formattedMarket.template || null, // 🔥 传递手动查询的 template 对象
       externalId: (formattedMarket as any).externalId || null, // 🔥 用于检查是否有同步赔率
       slots: slots, // 🔥 同模板今天的所有市场，用于时间导航栏
-      // 兼容字段
-      imageUrl: (formattedMarket as any).image || (formattedMarket as any).iconUrl || '', // 使用数据库图片URL
+      // 🔥 图标字段：优先根据 symbol/title 判断（因为数据库图片可能还未修复），然后才检查数据库图片
+      icon: (() => {
+        // 🔥 关键修复：优先根据 symbol/title 判断（因为数据库图片可能还是错误的）
+        const symbol = (formattedMarket as any).symbol || '';
+        const title = formattedMarket.title || '';
+        const symbolUpper = symbol.toUpperCase();
+        const titleUpper = title.toUpperCase();
+        
+        // 优先判断 ETH（因为标题可能包含 "ETH涨跌"）
+        if (symbolUpper.includes('ETH') || titleUpper.includes('ETH') || titleUpper.includes('以太坊') || titleUpper.includes('ETHEREUM')) {
+          return 'Ethereum';
+        }
+        if (symbolUpper.includes('BTC') || titleUpper.includes('BTC') || titleUpper.includes('比特币') || titleUpper.includes('BITCOIN')) {
+          return 'Bitcoin';
+        }
+        
+        // 如果 symbol/title 无法判断，才检查数据库图片（作为后备方案）
+        const dbImage = (formattedMarket as any).image || (formattedMarket as any).iconUrl || '';
+        const dbImageLower = dbImage.toLowerCase();
+        if (dbImage && (dbImageLower.includes('ethereum') || dbImageLower.includes('eth'))) {
+          return 'Ethereum';
+        }
+        if (dbImage && (dbImageLower.includes('bitcoin') || dbImageLower.includes('btc'))) {
+          return 'Bitcoin';
+        }
+        
+        return 'Bitcoin'; // 默认
+      })(),
+      iconColor: (() => {
+        // 🔥 关键修复：优先根据 symbol/title 判断（因为数据库图片可能还是错误的）
+        const symbol = (formattedMarket as any).symbol || '';
+        const title = formattedMarket.title || '';
+        const symbolUpper = symbol.toUpperCase();
+        const titleUpper = title.toUpperCase();
+        
+        // 优先判断 ETH（因为标题可能包含 "ETH涨跌"）
+        if (symbolUpper.includes('ETH') || titleUpper.includes('ETH') || titleUpper.includes('以太坊') || titleUpper.includes('ETHEREUM')) {
+          return 'bg-[#627EEA]'; // 以太坊蓝色
+        }
+        if (symbolUpper.includes('BTC') || titleUpper.includes('BTC') || titleUpper.includes('比特币') || titleUpper.includes('BITCOIN')) {
+          return 'bg-[#f7931a]'; // 比特币橙色
+        }
+        
+        // 如果 symbol/title 无法判断，才检查数据库图片（作为后备方案）
+        const dbImage = (formattedMarket as any).image || (formattedMarket as any).iconUrl || '';
+        const dbImageLower = dbImage.toLowerCase();
+        if (dbImage && (dbImageLower.includes('ethereum') || dbImageLower.includes('eth'))) {
+          return 'bg-[#627EEA]'; // 以太坊蓝色
+        }
+        if (dbImage && (dbImageLower.includes('bitcoin') || dbImageLower.includes('btc'))) {
+          return 'bg-[#f7931a]'; // 比特币橙色
+        }
+        
+        return 'bg-[#f7931a]'; // 默认
+      })(),
+      // 兼容字段：确保 imageUrl 也正确设置（优先使用数据库中的图片）
+      imageUrl: (() => {
+        const dbImage = (formattedMarket as any).image || (formattedMarket as any).iconUrl || '';
+        // 如果数据库中有图片且是正确的 ETH 图片，直接使用
+        if (dbImage && (dbImage.includes('ethereum') || dbImage.includes('eth'))) {
+          return dbImage;
+        }
+        // 如果是 BTC 图片，直接使用
+        if (dbImage && (dbImage.includes('bitcoin') || dbImage.includes('btc'))) {
+          return dbImage;
+        }
+        // 如果没有数据库图片，根据 symbol 返回对应的默认图片 URL
+        const symbol = (formattedMarket as any).symbol || '';
+        const symbolUpper = symbol.toUpperCase();
+        if (symbolUpper.includes('ETH')) {
+          return 'https://cryptologos.cc/logos/ethereum-eth-logo.png';
+        }
+        if (symbolUpper.includes('BTC')) {
+          return 'https://cryptologos.cc/logos/bitcoin-btc-logo.png';
+        }
+        return dbImage; // 返回数据库图片（可能为空）
+      })(),
       commentsCount: 0, // 默认 0（如果数据库中没有此字段）
       sourceUrl: undefined,
       resolutionCriteria: undefined,
@@ -466,12 +666,12 @@ export async function GET(
     // 强制校验：确保 DBService.findMarketById 成功返回数据
     if (!market) {
       console.error('❌ [Market Detail API] 强制校验失败：市场数据为空');
-      return NextResponse.json(
+      return createNoCacheResponse(
         {
           success: false,
           error: 'Market not found',
         },
-        { status: 404 }
+        404
       );
     }
     
@@ -536,7 +736,8 @@ export async function GET(
     console.log('📤 [Market Detail API]   - totalNo:', serializedMarket.totalNo !== undefined ? `✅ (${serializedMarket.totalNo})` : '❌');
     console.log('📤 [Market Detail API] ============================================');
 
-    return NextResponse.json(finalResponse);
+    // 🔥 关键修复：使用 createNoCacheResponse 防止浏览器缓存，确保赔率数据实时更新
+    return createNoCacheResponse(finalResponse);
   } catch (error) {
     // 捕获异常：打印完整的错误堆栈
     console.error('❌ [Market Detail API] ========== 获取市场详情失败 ==========');
@@ -550,7 +751,7 @@ export async function GET(
     }
     console.error('❌ [Market Detail API] ===============================');
 
-    return NextResponse.json(
+    return createNoCacheResponse(
       {
         success: false,
         error: 'Failed to fetch market',
@@ -559,7 +760,7 @@ export async function GET(
           ? { details: error.message, stack: error.stack }
           : {}),
       },
-      { status: 500 }
+      500
     );
   }
 }

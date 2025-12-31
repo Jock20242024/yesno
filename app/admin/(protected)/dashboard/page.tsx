@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, Users, DollarSign, ShoppingCart, FileText, Settings, Activity } from "lucide-react";
+import { Loader2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, Users, DollarSign, ShoppingCart, FileText, Settings, Activity, Play, Pause } from "lucide-react";
 
 interface DashboardStats {
   // 实时状态指标
@@ -13,8 +13,8 @@ interface DashboardStats {
   activeTemplates: number;
   pausedTemplates: number;
   pausedTemplatesDetails: Array<{
-    id: string;
-    name: string;
+  id: string;
+  name: string;
     symbol: string;
     period: number;
     pauseReason: string | null;
@@ -58,6 +58,152 @@ interface DashboardStats {
 }
 
 type TimeRange = '7d' | '30d' | '90d' | 'all';
+
+/**
+ * 🔥 全局任务开关卡片组件
+ */
+function SystemStatusCard() {
+  const [isActive, setIsActive] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isToggling, setIsToggling] = useState(false);
+
+  // 获取当前状态
+  const fetchStatus = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/admin/system/scheduler-status', {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('获取状态失败');
+      }
+
+      const result = await response.json();
+      if (result.success && result.data) {
+        setIsActive(result.data.active);
+      }
+    } catch (error) {
+      console.error('获取调度器状态失败:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 切换状态
+  const toggleStatus = async () => {
+    try {
+      setIsToggling(true);
+      const newStatus = !isActive;
+      
+      const response = await fetch('/api/admin/system/scheduler-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ active: newStatus }),
+      });
+
+      if (!response.ok) {
+        throw new Error('更新状态失败');
+      }
+
+        const result = await response.json();
+        if (result.success) {
+        setIsActive(newStatus);
+        // 显示成功提示（可以集成 toast）
+        console.log(`✅ ${result.data.message}`);
+      }
+    } catch (error) {
+      console.error('更新调度器状态失败:', error);
+      alert('更新状态失败，请重试');
+    } finally {
+      setIsToggling(false);
+    }
+  };
+  
+  useEffect(() => {
+    fetchStatus();
+    // 每10秒自动刷新状态
+    const interval = setInterval(fetchStatus, 10000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  return (
+    <div className={`rounded-xl border shadow-md p-5 ${
+      isActive
+        ? 'bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-900/20 dark:to-green-800/10 border-green-200/50 dark:border-green-800/30'
+        : 'bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-900/20 dark:to-orange-800/10 border-orange-200/50 dark:border-orange-800/30'
+    }`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className={`p-3 rounded-lg ${
+            isActive ? 'bg-green-500/10' : 'bg-orange-500/10'
+          }`}>
+            {isActive ? (
+              <Activity className="w-6 h-6 text-green-600 dark:text-green-400" />
+            ) : (
+              <Pause className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+            )}
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-[#111418] dark:text-white mb-1">
+              后台任务全局开关
+            </h3>
+            <p className="text-sm text-[#637588] dark:text-[#9da8b9]">
+              控制所有自动化任务（赔率同步、工厂生成、市场结算等）
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          {isLoading ? (
+            <Loader2 className="w-5 h-5 animate-spin text-[#637588] dark:text-[#9da8b9]" />
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${
+                  isActive ? 'bg-green-500 animate-pulse' : 'bg-orange-500'
+                }`}></div>
+                <span className={`text-sm font-medium ${
+                  isActive ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'
+                }`}>
+                  {isActive ? '🟢 运行中' : '🔴 已暂停'}
+                </span>
+              </div>
+              <button
+                onClick={toggleStatus}
+                disabled={isToggling}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  isActive
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                    : 'bg-green-500 hover:bg-green-600 text-white'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isToggling ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    切换中...
+                  </>
+                ) : isActive ? (
+                  <>
+                    <Pause className="w-4 h-4" />
+                    暂停任务
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" />
+                    启动任务
+                  </>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -236,10 +382,13 @@ export default function AdminDashboardPage() {
         </button>
       </div>
 
+      {/* 🔥 全局任务开关卡片 */}
+      <SystemStatusCard />
+
       {/* ========== 一、实时状态指标（不需要时间范围） ========== */}
       <div>
         <h2 className="text-lg font-semibold text-[#111418] dark:text-white mb-4">实时状态</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 总注册用户数 */}
           <div className="rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-800/10 border border-blue-200/50 dark:border-blue-800/30 shadow-md p-5">
             <div className="flex items-center justify-between mb-3">
@@ -279,8 +428,8 @@ export default function AdminDashboardPage() {
             <p className="text-[#637588] dark:text-[#9da8b9] text-sm font-medium mb-1">活跃市场</p>
             <p className="text-2xl font-bold text-[#111418] dark:text-white">
               {stats.activeMarkets}
-            </p>
-          </div>
+          </p>
+        </div>
 
           {/* 已上架交易模版（统计已经生成市场且有实际交易的模版） */}
           <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-900/20 dark:to-indigo-800/10 border border-indigo-200/50 dark:border-indigo-800/30 shadow-md p-5">
@@ -288,14 +437,14 @@ export default function AdminDashboardPage() {
               <div className="p-2 rounded-lg bg-indigo-500/10">
                 <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               </div>
-            </div>
+          </div>
             <p className="text-[#637588] dark:text-[#9da8b9] text-sm font-medium mb-1">已上架交易模版</p>
             <p className="text-2xl font-bold text-[#111418] dark:text-white">
               {stats.activeTemplates}
             </p>
           </div>
         </div>
-      </div>
+        </div>
 
       {/* ========== 二、今日运营指标 ========== */}
       <div>
@@ -331,8 +480,8 @@ export default function AdminDashboardPage() {
             </p>
             <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">
               本周: {stats.weekOrders}
-            </p>
-          </div>
+          </p>
+        </div>
 
           {/* 今日手续费收入 */}
           <div className="rounded-xl bg-card-light dark:bg-card-dark border border-[#e5e7eb] dark:border-[#283545] shadow-sm p-4">
@@ -359,7 +508,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* ========== 三、核心业务趋势（带时间范围选择） ========== */}
-      <div>
+            <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-[#111418] dark:text-white">业务趋势</h2>
           <div className="flex items-center gap-2 bg-[#f3f4f6] dark:bg-[#101822] rounded-lg p-1">
@@ -400,7 +549,7 @@ export default function AdminDashboardPage() {
                   </span>
                 </div>
               )}
-            </div>
+              </div>
             <div className="h-[200px]">
               <TrendChart data={stats.volumeHistory} color="#136dec" height={200} />
             </div>
@@ -426,7 +575,7 @@ export default function AdminDashboardPage() {
                     {Math.abs(usersTrend).toFixed(1)}%
                   </span>
                 </div>
-              )}
+            )}
             </div>
             <div className="h-[200px]">
               <TrendChart data={stats.activeUsersHistory} color="#0bda5e" height={200} />
@@ -436,7 +585,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* ========== 四、系统运行状态监控 ========== */}
-      <div>
+            <div>
         <h2 className="text-lg font-semibold text-[#111418] dark:text-white mb-4">系统运行状态</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* 赔率管理运行状态 */}
@@ -454,7 +603,7 @@ export default function AdminDashboardPage() {
                   stats.oddsRobotStatus.status === 'ERROR' ? 'text-red-600 dark:text-red-400' :
                   'text-gray-600 dark:text-gray-400'
                 }`} />
-              </div>
+            </div>
               <a
                 href="/admin/operations/odds"
                 className="text-xs text-primary hover:text-blue-600 font-medium"
@@ -475,7 +624,7 @@ export default function AdminDashboardPage() {
               <div className="flex justify-between">
                 <span className="text-[#637588] dark:text-[#9da8b9]">活跃市场池:</span>
                 <span className="text-[#111418] dark:text-white font-medium">{stats.oddsRobotStatus.activePoolSize}</span>
-              </div>
+          </div>
               <div className="flex justify-between">
                 <span className="text-[#637588] dark:text-[#9da8b9]">同步效能:</span>
                 <span className="text-[#111418] dark:text-white font-medium">{stats.oddsRobotStatus.syncEfficiency}%</span>
@@ -489,15 +638,15 @@ export default function AdminDashboardPage() {
                       minute: '2-digit' 
                     })}
                   </span>
-                </div>
+            </div>
               )}
               {stats.oddsRobotStatus.errorMessage && (
                 <p className="text-red-600 dark:text-red-400 mt-2 truncate" title={stats.oddsRobotStatus.errorMessage}>
                   {stats.oddsRobotStatus.errorMessage}
                 </p>
               )}
-            </div>
           </div>
+        </div>
 
           {/* 自动化工厂状态汇总 */}
           <div className={`rounded-xl border shadow-md p-5 ${
@@ -512,7 +661,7 @@ export default function AdminDashboardPage() {
                 <Settings className={`w-5 h-5 ${
                   stats.factoryStatus === 'RUNNING' ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'
                 }`} />
-              </div>
+            </div>
               <a
                 href="/admin/factory"
                 className="text-xs text-primary hover:text-blue-600 font-medium"
@@ -530,7 +679,7 @@ export default function AdminDashboardPage() {
               }`}>
                 {stats.factoryStatus === 'RUNNING' ? '运行中' : '已停止'}
               </p>
-            </div>
+          </div>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[#111418] dark:text-white text-xl font-bold">
@@ -544,7 +693,7 @@ export default function AdminDashboardPage() {
                     {stats.pausedTemplates}
                   </span>
                   <span className="text-xs text-[#637588] dark:text-[#9da8b9]">异常熔断</span>
-                </div>
+            </div>
               )}
             </div>
           </div>
@@ -553,7 +702,7 @@ export default function AdminDashboardPage() {
 
       {/* ========== 五、待处理事项（需要立即关注） ========== */}
       {(stats.pendingWithdrawals > 0 || stats.pendingReviewMarkets > 0 || stats.pausedTemplates > 0) && (
-        <div>
+          <div>
           <h2 className="text-lg font-semibold text-[#111418] dark:text-white mb-4 flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-orange-500" />
             待处理事项
@@ -565,8 +714,8 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="p-2 rounded-lg bg-orange-500/10">
                     <DollarSign className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                  </div>
-                </div>
+          </div>
+        </div>
                 <p className="text-[#637588] dark:text-[#9da8b9] text-sm font-medium mb-1">待处理提现</p>
                 <p className="text-2xl font-bold text-[#111418] dark:text-white mb-3">
                   {stats.pendingWithdrawals} 笔
@@ -586,8 +735,8 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="p-2 rounded-lg bg-yellow-500/10">
                     <FileText className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-                  </div>
-                </div>
+              </div>
+            </div>
                 <p className="text-[#637588] dark:text-[#9da8b9] text-sm font-medium mb-1">待审核事件</p>
                 <p className="text-2xl font-bold text-[#111418] dark:text-white mb-3">
                   {stats.pendingReviewMarkets} 个
@@ -607,8 +756,8 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="p-2 rounded-lg bg-red-500/10">
                     <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-                  </div>
-                </div>
+              </div>
+            </div>
                 <p className="text-[#637588] dark:text-[#9da8b9] text-sm font-medium mb-1">异常熔断模版</p>
                 <p className="text-2xl font-bold text-[#111418] dark:text-white mb-2">
                   {stats.pausedTemplates} 个
@@ -632,7 +781,7 @@ export default function AdminDashboardPage() {
                         还有 {stats.pausedTemplatesDetails.length - 3} 个...
                       </p>
                     )}
-                  </div>
+          </div>
                 )}
                 <a
                   href="/admin/factory"
@@ -640,7 +789,7 @@ export default function AdminDashboardPage() {
                 >
                   查看详情
                 </a>
-              </div>
+            </div>
             )}
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useNotification } from "@/components/providers/NotificationProvider";
@@ -25,6 +25,7 @@ function OverviewTab({
   error,
   orders,
   ordersLoading,
+  addNotification,
 }: {
   user: any;
   userData: any;
@@ -32,30 +33,154 @@ function OverviewTab({
   error: string | null;
   orders: any[];
   ordersLoading: boolean;
+  addNotification: (notification: { type: "success" | "error" | "info"; title: string; message: string }) => void;
 }) {
   const [timeFilter, setTimeFilter] = useState<"1D" | "1W" | "全部">("全部");
   const [listTab, setListTab] = useState<"positions" | "activity">("positions");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"value" | "none">("none");
 
-  // 数据容错：确保所有数值都有默认值
-  const profitLoss = (!error && userData?.profitLoss) ? userData.profitLoss : 0;
-  const positionsValue = (!error && userData?.positionsValue) ? userData.positionsValue : 0;
-  const biggestWin = (!error && userData?.biggestWin) ? userData.biggestWin : 0;
-  const predictionsCount = (!error && userData?.predictionsCount) ? userData.predictionsCount : 0;
+  // 🔥 修复：从 API 返回的 positions 数据获取真实持仓（使用 useMemo 稳定引用，防止死循环）
+  const rawPositions = useMemo(() => {
+    return (userData?.positions || []) as Array<{
+      id: string;
+      marketId: string;
+      outcome: string;
+      shares: number;
+      avgPrice: number;
+      currentPrice: number;
+      currentValue: number;
+      costBasis: number;
+      profitLoss: number;
+    }>;
+  }, [userData?.positions]);
+
+  // 🔥 修复：从真实持仓数据计算总价值和盈亏
+  const positionsValue = rawPositions.reduce((sum, pos) => sum + (pos.currentValue || 0), 0);
+  const profitLoss = rawPositions.reduce((sum, pos) => sum + (pos.profitLoss || 0), 0);
+  
+  // 计算最大胜利（单笔最大盈利）
+  const biggestWin = rawPositions.reduce((max, pos) => {
+    const profit = pos.profitLoss || 0;
+    return profit > max ? profit : max;
+  }, 0);
+  
+  // 预测次数：持仓数量
+  const predictionsCount = rawPositions.length;
+
   const userName = user?.name || user?.email?.split("@")[0] || "用户";
   const joinDate = "2025年10月加入"; // Mock 数据
 
-  // Mock 职位数据（容错处理）
-  const positions = (orders || []).map((order, index) => ({
-    id: order.id || `pos-${index}`,
-    marketId: order.marketId || 1,
-    marketName: `市场 ${index + 1}`,
-    averagePrice: 0.5,
-    currentPrice: 0.5,
-    value: positionsValue / (orders.length || 1),
-    pnlPercent: 0,
-  }));
+  // 🔥 修复：使用真实持仓数据，并获取市场标题
+  const [positionsWithMarketNames, setPositionsWithMarketNames] = useState<Array<{
+    id: string;
+    marketId: string;
+    marketName: string;
+    averagePrice: number;
+    currentPrice: number;
+    value: number;
+    pnlPercent: number;
+    shares: number;
+  }>>([]);
+
+  // 🔥 修复：使用 positions ID 和数量作为依赖，而不是整个数组（防止死循环）
+  const positionsIds = useMemo(() => {
+    return rawPositions.map(p => p.id).join(',');
+  }, [rawPositions]);
+
+  // 🔥 获取市场标题（修复：使用 positionsIds 作为依赖，避免死循环）
+  useEffect(() => {
+    // 如果 positionsIds 为空（没有持仓），清空列表并返回
+    if (!positionsIds || rawPositions.length === 0) {
+      setPositionsWithMarketNames([]);
+      return;
+    }
+
+    let isCancelled = false; // 防止组件卸载后更新状态
+
+    const fetchMarketNames = async () => {
+      const positionsWithNames = await Promise.all(
+        rawPositions.map(async (pos) => {
+          try {
+            const response = await fetch(`/api/markets/${pos.marketId}`);
+            if (response.ok) {
+              const result = await response.json();
+              const marketTitle = result.success && result.data ? result.data.title : `市场 ${pos.marketId.slice(0, 8)}`;
+              
+              // 计算盈亏百分比（防止除以零）
+              const pnlPercent = pos.costBasis > 0 
+                ? ((pos.profitLoss || 0) / pos.costBasis) * 100 
+                : 0;
+
+              return {
+                id: pos.id,
+                marketId: pos.marketId,
+                marketName: marketTitle,
+                averagePrice: pos.avgPrice || 0,
+                currentPrice: pos.currentPrice || 0,
+                value: pos.currentValue || 0,
+                pnlPercent,
+                shares: pos.shares || 0,
+              };
+            }
+          } catch (error) {
+            console.error('Error fetching market name:', error);
+          }
+          
+          // 如果获取失败，返回默认值（防止除以零）
+          const pnlPercent = pos.costBasis > 0 
+            ? ((pos.profitLoss || 0) / pos.costBasis) * 100 
+            : 0;
+          
+          return {
+            id: pos.id,
+            marketId: pos.marketId,
+            marketName: `市场 ${pos.marketId.slice(0, 8)}`,
+            averagePrice: pos.avgPrice || 0,
+            currentPrice: pos.currentPrice || 0,
+            value: pos.currentValue || 0,
+            pnlPercent,
+            shares: pos.shares || 0,
+          };
+        })
+      );
+
+      // 只有在组件未卸载时才更新状态
+      if (!isCancelled) {
+        setPositionsWithMarketNames(positionsWithNames);
+      }
+    };
+
+    fetchMarketNames();
+
+    // 清理函数：标记为已取消
+    return () => {
+      isCancelled = true;
+    };
+  }, [positionsIds]); // 🔥 关键修复：只依赖 positionsIds，不依赖 rawPositions
+
+  // 🔥 分享按钮处理函数
+  const handleShare = async (marketId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // 阻止事件冒泡，避免触发行的 onClick
+    try {
+      const url = `${window.location.origin}/markets/${marketId}`;
+      await navigator.clipboard.writeText(url);
+      addNotification({
+        type: "success",
+        title: "链接已复制",
+        message: "市场链接已复制到剪贴板！",
+      });
+    } catch (error) {
+      console.error('复制失败:', error);
+      addNotification({
+        type: "error",
+        title: "复制失败",
+        message: "无法复制链接，请手动复制",
+      });
+    }
+  };
+
+  const positions = positionsWithMarketNames;
 
   return (
     <div className="flex flex-col gap-6">
@@ -227,8 +352,8 @@ function OverviewTab({
                     key={position.id}
                     className="flex items-center gap-4 p-4 bg-pm-card rounded-lg hover:bg-pm-card-hover transition-colors cursor-pointer group"
                     onClick={() => {
-                      // 生成分享图片的逻辑（占位）
-                      console.log("Share position:", position.id);
+                      // 点击行跳转到市场详情页
+                      window.location.href = `/markets/${position.marketId}`;
                     }}
                   >
                     {/* 左侧：市场图标和名称 */}
@@ -254,7 +379,13 @@ function OverviewTab({
                           {position.pnlPercent >= 0 ? "+" : ""}{position.pnlPercent.toFixed(2)}%
                         </div>
                       </div>
-                      <Share2 className="w-5 h-5 text-pm-text-dim opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <button
+                        onClick={(e) => handleShare(position.marketId, e)}
+                        className="p-2 rounded-lg text-pm-text-dim opacity-0 group-hover:opacity-100 hover:text-white hover:bg-white/10 transition-all"
+                        title="分享市场链接"
+                      >
+                        <Share2 className="w-5 h-5" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -627,6 +758,7 @@ export default function ProfilePage() {
                   error={error}
                   orders={orders}
                   ordersLoading={ordersLoading}
+                  addNotification={addNotification}
                 />
               )}
               {activeTab === "settings" && <SettingsTab />}

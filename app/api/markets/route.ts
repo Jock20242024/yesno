@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { DBService } from '@/lib/mockData';
+import { DBService } from '@/lib/dbService'; // 🔥 修复：使用正确的 dbService 而不是 mockData
 import { MarketStatus, Outcome } from '@/types/data';
 import { calculateDisplayVolume } from '@/lib/marketUtils'; // 计算展示交易量
 import { prisma } from '@/lib/prisma';
@@ -7,6 +7,7 @@ import dayjs from '@/lib/dayjs';
 import { aggregateMarketsByTemplate } from '@/lib/marketAggregation'; // 🔥 使用公共聚合函数
 import { BASE_MARKET_FILTER, buildHotMarketFilter, buildCategoryMarketFilter } from '@/lib/marketQuery'; // 🚀 统一过滤器
 import { isIndependentMarket } from '@/lib/marketTypeDetection'; // 🚀 市场类型检测
+import { createNoCacheResponse } from '@/lib/responseHelpers'; // 🔥 创建禁用缓存的响应
 
 // 🔥 强制清理前端缓存：确保不使用旧缓存
 export const dynamic = 'force-dynamic';
@@ -127,17 +128,37 @@ export async function GET(request: Request) {
         sourceUrl: (dbMarket as any).externalId ? `https://polymarket.com/event/${(dbMarket as any).externalId}` : null,
       } as any;
     }
-
+    
     // 🔥 特殊处理：hot 和 all
     // 🚀 物理重构：使用统一过滤器
     let filteredMarkets: any[] = [];
+    
+    // 🔥 修复：如果指定了 status 参数，需要构建自定义的 baseFilter，不限制 status
+    const customBaseFilter = status 
+      ? { isActive: true, reviewStatus: 'PUBLISHED' as const } // 不限制 status
+      : BASE_MARKET_FILTER; // 默认只查询 OPEN 状态
+    
     try {
       if (category === 'hot' || category === '-1') {
         console.log('🔥 [Markets API] 获取热门市场');
         console.log(`🔍 [Markets API] category 参数: ${category}，使用统一热门过滤器`);
         
         // 🚀 使用统一的热门市场过滤器（异步版本，获取真实的热门分类UUID）
-        const whereCondition = await buildHotMarketFilter();
+        // 🔥 修复：传入自定义的 baseFilter 以支持 status 筛选
+        const whereCondition = await buildHotMarketFilter(customBaseFilter);
+        if (status) {
+          // 🔥 如果指定了 status，添加到查询条件中
+          const statusMap: Record<string, string> = {
+            OPEN: 'OPEN',
+            RESOLVED: 'RESOLVED',
+            CLOSED: 'CLOSED',
+            CANCELED: 'CANCELED',
+          };
+          const targetStatus = statusMap[status];
+          if (targetStatus) {
+            (whereCondition as any).status = targetStatus;
+          }
+        }
         
         console.log('📋 [Markets API] 热门市场查询条件:', JSON.stringify(whereCondition, null, 2));
         
@@ -174,11 +195,25 @@ export async function GET(request: Request) {
       } else if (templateId) {
         // 🔥 按 templateId 筛选市场（用于详情页获取同模板的所有场次）
         console.log('📊 [Markets API] 按 templateId 筛选市场:', templateId);
+        // 🔥 修复：如果指定了 status 参数，使用自定义 baseFilter
+        const whereCondition: any = {
+          ...customBaseFilter,
+          templateId: templateId,
+        };
+        if (status) {
+          const statusMap: Record<string, string> = {
+            OPEN: 'OPEN',
+            RESOLVED: 'RESOLVED',
+            CLOSED: 'CLOSED',
+            CANCELED: 'CANCELED',
+          };
+          const targetStatus = statusMap[status];
+          if (targetStatus) {
+            whereCondition.status = targetStatus;
+          }
+        }
         const dbMarkets = await prisma.market.findMany({
-          where: {
-            ...BASE_MARKET_FILTER,
-            templateId: templateId,
-          },
+          where: whereCondition,
           include: {
             categories: {
               include: {
@@ -209,8 +244,22 @@ export async function GET(request: Request) {
       } else if (category === 'all') {
         // 所有市场：使用基础过滤器
         console.log('📊 [Markets API] 获取所有市场');
+        // 🔥 修复：如果指定了 status 参数，使用自定义 baseFilter
+        const whereCondition: any = { ...customBaseFilter };
+        if (status) {
+          const statusMap: Record<string, string> = {
+            OPEN: 'OPEN',
+            RESOLVED: 'RESOLVED',
+            CLOSED: 'CLOSED',
+            CANCELED: 'CANCELED',
+          };
+          const targetStatus = statusMap[status];
+          if (targetStatus) {
+            whereCondition.status = targetStatus;
+          }
+        }
         const dbMarkets = await prisma.market.findMany({
-          where: BASE_MARKET_FILTER,
+          where: whereCondition,
           include: {
             categories: {
               include: {
@@ -243,7 +292,7 @@ export async function GET(request: Request) {
         
         const aggregatedMarkets = aggregateMarketsByTemplate(marketsWithTemplate);
         filteredMarkets = [...aggregatedMarkets, ...independentMarkets];
-      } else {
+      } else if (category) {
         // 🚀 普通分类筛选：使用统一过滤器
         console.log(`📊 [Markets API] 获取分类 '${category}' 的市场`);
         
@@ -266,8 +315,9 @@ export async function GET(request: Request) {
           console.log(`📊 [Markets API] 分类 '${category}' 及其子分类ID:`, categoryIds);
           
           // 使用包含所有分类ID的过滤器
-          const whereCondition = {
-            ...BASE_MARKET_FILTER,
+          // 🔥 修复：如果指定了 status 参数，使用自定义 baseFilter
+          const whereCondition: any = {
+            ...customBaseFilter,
             categories: {
               some: {
                 categoryId: {
@@ -276,6 +326,18 @@ export async function GET(request: Request) {
               },
             },
           };
+          if (status) {
+            const statusMap: Record<string, string> = {
+              OPEN: 'OPEN',
+              RESOLVED: 'RESOLVED',
+              CLOSED: 'CLOSED',
+              CANCELED: 'CANCELED',
+            };
+            const targetStatus = statusMap[status];
+            if (targetStatus) {
+              whereCondition.status = targetStatus;
+            }
+          }
           
           const dbMarkets = await prisma.market.findMany({
             where: whereCondition,
@@ -308,6 +370,52 @@ export async function GET(request: Request) {
           const aggregatedMarkets = aggregateMarketsByTemplate(marketsWithTemplate);
           filteredMarkets = [...aggregatedMarkets, ...independentMarkets];
         }
+      } else {
+        // 🔥 修复：当 category 为 null 或空时，使用基础过滤器查询所有市场
+        console.log('📊 [Markets API] 无分类参数，获取所有市场（使用基础过滤器）');
+        // 🔥 修复：如果指定了 status 参数，使用自定义 baseFilter
+        const whereCondition: any = { ...customBaseFilter };
+        if (status) {
+          const statusMap: Record<string, string> = {
+            OPEN: 'OPEN',
+            RESOLVED: 'RESOLVED',
+            CLOSED: 'CLOSED',
+            CANCELED: 'CANCELED',
+          };
+          const targetStatus = statusMap[status];
+          if (targetStatus) {
+            whereCondition.status = targetStatus;
+          }
+        }
+        const dbMarkets = await prisma.market.findMany({
+          where: whereCondition,
+          include: {
+            categories: {
+              include: {
+                category: {
+                  select: {
+                    name: true,
+                    slug: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: [
+            { isHot: 'desc' },
+            { totalVolume: 'desc' }
+          ],
+        });
+        
+        // 转换格式
+        const convertedMarkets = dbMarkets.map(convertDbMarketToMarketFormat);
+        
+        // 分离聚合项和独立项
+        const marketsWithTemplate = convertedMarkets.filter((m: any) => m.templateId && !isIndependentMarket(m));
+        const independentMarkets = convertedMarkets.filter((m: any) => isIndependentMarket(m));
+        
+        const aggregatedMarkets = aggregateMarketsByTemplate(marketsWithTemplate);
+        filteredMarkets = [...aggregatedMarkets, ...independentMarkets];
       }
       console.log('✅ [Markets API] DBService.getAllMarkets 返回', filteredMarkets.length, '个市场');
       console.log('✅ [Markets API] 返回结果详情:', {
@@ -443,7 +551,7 @@ export async function GET(request: Request) {
             displayVolume,
             volume: displayVolume, // 兼容字段
             totalVolume: displayVolume, // 兼容字段
-          // 🔥 添加 volume24h（24小时交易量，优先使用数据库字段，否则使用 displayVolume）
+            // 🔥 添加 volume24h（24小时交易量，优先使用数据库字段，否则使用 displayVolume）
           volume24h: (market as any).volume24h || displayVolume,
           // 🔥 添加赔率字段（从 totalYes 和 totalNo 计算）
           yesPercent,
@@ -554,7 +662,8 @@ export async function GET(request: Request) {
     }
     console.error('❌ [Markets API] ===============================');
 
-    return NextResponse.json(
+    // 🔥 错误响应也要禁用缓存
+    const errorResponse = NextResponse.json(
       {
         success: false,
         error: 'Failed to fetch markets',
@@ -569,6 +678,13 @@ export async function GET(request: Request) {
       },
       { status: 500 }
     );
+    
+    // 🔥 设置错误响应的缓存头
+    errorResponse.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    errorResponse.headers.set('Pragma', 'no-cache');
+    errorResponse.headers.set('Expires', '0');
+    
+    return errorResponse;
   }
 }
 

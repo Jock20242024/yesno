@@ -211,7 +211,7 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
           <div className="p-2 bg-surface-dark rounded-lg border border-border-dark text-primary">
             <Trophy className="w-5 h-5" />
           </div>
-          <h2 className="text-white text-xl font-bold">全网热门事件 Top 10</h2>
+          <h2 className="text-white text-xl font-bold">Top 10 Trending Markets</h2>
         </div>
       </div>
 
@@ -219,7 +219,7 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       {isLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
-          <span className="text-text-secondary">Loading Markets...</span>
+          <span className="text-text-secondary">Loading markets...</span>
         </div>
       )}
 

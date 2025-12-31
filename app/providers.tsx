@@ -1,6 +1,5 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
 import { StoreProvider } from '@/app/context/StoreContext';
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { NotificationProvider } from "@/components/providers/NotificationProvider";
@@ -8,6 +7,7 @@ import { ErrorBoundary } from "@/components/providers/ErrorBoundary";
 import Navbar from "@/components/Navbar";
 import CategoryBar from "@/components/CategoryBar";
 import { ToastProvider } from "@/components/providers/ToastProvider";
+import { usePathname } from 'next/navigation';
 
 // 🔥 全局初始化 Dayjs：在应用启动时一次性加载所有需要的插件
 import '@/lib/dayjs';
@@ -32,7 +32,11 @@ function ConditionalUI({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function Providers({ children }: { children: React.ReactNode }) {
+interface ProvidersProps {
+  children: React.ReactNode;
+}
+
+export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
       <AuthProvider>

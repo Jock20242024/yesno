@@ -8,6 +8,8 @@ import { useStore } from "@/app/context/StoreContext";
 import { formatUSD } from "@/lib/utils";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
+import { useRouter } from "next/navigation";
+import { useSWRConfig } from "swr";
 
 interface UserPosition {
   yesShares: number;
@@ -29,6 +31,8 @@ interface TradeSidebarProps {
   amount: string;
   onAmountChange: (val: string) => void;
   feeRate?: number; // 交易费率（例如 0.02 表示 2%）
+  totalYes?: number; // 🔥 市场总 YES 流动性
+  totalNo?: number; // 🔥 市场总 NO 流动性
   onTradeSuccess?: (data: {
     updatedMarketPrice: { yesPercent: number; noPercent: number };
     userPosition: { outcome: 'YES' | 'NO'; shares: number; avgPrice: number; totalValue: number };
@@ -38,6 +42,7 @@ interface TradeSidebarProps {
 export interface TradeSidebarRef {
   focusInput: () => void;
   switchToSell: () => void;
+  setLimitPriceAndSwitch: (price: number) => void; // 🔥 新增：设置限价并切换到 LIMIT 模式
 }
 
 const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
@@ -53,6 +58,8 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   amount,
   onAmountChange,
   feeRate = 0, // 默认费率为 0，如果父组件没传的话
+  totalYes = 0, // 🔥 市场总 YES 流动性
+  totalNo = 0, // 🔥 市场总 NO 流动性
   onTradeSuccess,
 }, ref) => {
   // 🔥 逻辑守卫：确保必要数据存在
@@ -74,11 +81,18 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   // 注意：这里我们需要在后续代码中使用 safeYesPercent 和 safeNoPercent
   const { addNotification } = useNotification();
   const { executeTrade, balance: storeBalance, updateBalance: updateStoreBalance } = useStore();
+  const router = useRouter();
+  // 🔥 P0 修复：引入 SWR mutate 用于即时刷新数据
+  const { mutate } = useSWRConfig();
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTrading, setIsTrading] = useState(false);
   const [tradeMessage, setTradeMessage] = useState<string | null>(null);
   const [selectedOutcome, setSelectedOutcome] = useState<"yes" | "no">("yes");
+  // 🔥 订单类型状态：Market (市价) 或 Limit (限价)
+  const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
+  // 🔥 限价单的价格输入（仅当 orderType === 'LIMIT' 时使用）
+  const [limitPrice, setLimitPrice] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
   const hasInitialized = useRef(false);
   const lastBalanceRef = useRef<number>(0);
@@ -146,6 +160,11 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
+    },
+    setLimitPriceAndSwitch: (price: number) => {
+      // 🔥 新增：设置限价并切换到 LIMIT 模式
+      setOrderType('LIMIT');
+      setLimitPrice(price.toFixed(2)); // 格式化为两位小数
     },
   }));
 
@@ -281,8 +300,17 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   // 2. 如果市场进行中 (OPEN) -> 显示正常交易面板
   const yesPrice = safeYesPercent / 100;
   const noPrice = safeNoPercent / 100;
-  const selectedPrice = selectedOutcome === "yes" ? yesPrice : noPrice;
+  // 🔥 价格选择逻辑：市价单使用当前市场价格，限价单使用用户输入的限价
+  const marketPrice = selectedOutcome === "yes" ? yesPrice : noPrice;
+  const limitPriceNum = parseFloat(limitPrice) || 0;
+  // 市价单：使用当前市场价格；限价单：使用用户输入的限价（如果未输入则回退到市场价格用于预览）
+  const selectedPrice = orderType === 'MARKET' 
+    ? marketPrice 
+    : (limitPriceNum > 0 ? limitPriceNum : marketPrice);
   const amountNum = parseFloat(amount) || 0;
+  
+  // 🔥 当切换订单类型时，如果切换到市价单，可以保留限价值但不使用（方便用户切换回来时不用重新输入）
+  // 如果切换到限价单，如果限价为0，则使用当前市场价格作为默认值（仅用于预览，用户仍需输入）
   
   // 检查价格是否达到 $1.00（100%），如果达到则禁用买入
   const isPriceAtMax = (selectedOutcome === "yes" && yesPrice >= 0.999) || 
@@ -292,30 +320,83 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   const FEE_RATE = 0.02; // 2%
 
   // 计算逻辑（与 StoreContext 完全一致）
+  // 🔥 限价单验证：如果选择了限价单但限价未输入或无效，使用市场价格作为预览
+  const isLimitPriceValid = orderType === 'MARKET' || (orderType === 'LIMIT' && limitPriceNum > 0 && limitPriceNum >= 0.01 && limitPriceNum <= 0.99);
+  // 用于计算的价格：限价单且限价有效时使用限价，否则使用市场价格
+  const calcPrice = (orderType === 'LIMIT' && isLimitPriceValid) ? limitPriceNum : marketPrice;
+  
   let estShares = 0;
   let estReturn = 0;
   let priceImpact = 0;
+  let estimatedExecutionPrice = 0; // 🔥 预估成交价（用于计算，不显示警告）
 
-  if (activeTab === "buy" && amountNum > 0) {
+  // 🔥 计算总流动性
+  const totalVolume = (totalYes || 0) + (totalNo || 0);
+  const currentYesAmount = totalYes || 0;
+  const currentNoAmount = totalNo || 0;
+
+  if (activeTab === "buy" && amountNum > 0 && calcPrice > 0 && orderType === 'MARKET') {
     // Buy 模式：预估份额 = (amount * (1 - 0.02)) / price
     // 与 StoreContext 中的 netInvest = inputVal * (1 - FEE_RATE) 和 newShares = netInvest / price 一致
     const netInvest = amountNum * (1 - FEE_RATE);
-    estShares = netInvest > 0 && selectedPrice > 0
-      ? netInvest / selectedPrice
+    
+    // 🔥 价格影响计算：模拟交易后的市场状态
+    if (selectedOutcome === "yes") {
+      // 买入 YES：新 totalYes = currentYesAmount + netInvest，totalNo 不变
+      const newTotalYes = currentYesAmount + netInvest;
+      const newTotalNo = currentNoAmount;
+      const newTotalVolume = newTotalYes + newTotalNo;
+      
+      // 预估成交价 = 新 YES 价格
+      estimatedExecutionPrice = newTotalVolume > 0 ? newTotalYes / newTotalVolume : 1.0;
+      
+      // 价格影响计算（仅用于内部计算，不显示警告）
+      const currentPrice = currentYesAmount > 0 || currentNoAmount > 0 
+        ? currentYesAmount / (currentYesAmount + currentNoAmount)
+        : 0.5;
+      priceImpact = currentPrice > 0 ? Math.abs(estimatedExecutionPrice - currentPrice) / currentPrice * 100 : 0;
+    } else {
+      // 买入 NO：新 totalNo = currentNoAmount + netInvest，totalYes 不变
+      const newTotalYes = currentYesAmount;
+      const newTotalNo = currentNoAmount + netInvest;
+      const newTotalVolume = newTotalYes + newTotalNo;
+      
+      // 预估成交价 = 新 NO 价格
+      estimatedExecutionPrice = newTotalVolume > 0 ? newTotalNo / newTotalVolume : 1.0;
+      
+      // 价格影响计算（仅用于内部计算，不显示警告）
+      const currentPrice = currentYesAmount > 0 || currentNoAmount > 0
+        ? currentNoAmount / (currentYesAmount + currentNoAmount)
+        : 0.5;
+      priceImpact = currentPrice > 0 ? Math.abs(estimatedExecutionPrice - currentPrice) / currentPrice * 100 : 0;
+    }
+    
+    // 🔥 使用预估成交价计算份额（AMM 公式自然决定价格）
+    estShares = netInvest > 0 && estimatedExecutionPrice > 0
+      ? netInvest / estimatedExecutionPrice
       : 0;
-    // 修复交易公式：修正预估收益率的计算逻辑
-    // 如果市场结算为选中方向，每份额价值 $1，否则为 $0
-    // 潜在回报 = 份额 * $1（如果获胜）
     estReturn = estShares * 1.0; // 潜在回报 = 份额 * $1（假设获胜）
-    priceImpact = 0; // 不显示滑点，保持简洁
-  } else if (activeTab === "sell" && amountNum > 0) {
+  } else if (activeTab === "buy" && amountNum > 0 && calcPrice > 0 && orderType === 'LIMIT') {
+    // 限价单：使用限价计算，不计算价格影响
+    const netInvest = amountNum * (1 - FEE_RATE);
+    estShares = netInvest > 0 && calcPrice > 0
+      ? netInvest / calcPrice
+      : 0;
+    estReturn = estShares * 1.0;
+    estimatedExecutionPrice = limitPriceNum; // 限价单的成交价就是限价
+    priceImpact = 0;
+  } else if (activeTab === "sell" && amountNum > 0 && calcPrice > 0) {
     // Sell 模式：预估收到 = (amountShares * price) * (1 - 0.02)
     // 与 StoreContext 中的 grossValue = shares * price 和 netReturn = grossValue * (1 - FEE_RATE) 一致
-    const grossValue = amountNum * selectedPrice;
+    const grossValue = amountNum * calcPrice;
     estReturn = grossValue * (1 - FEE_RATE);
     estShares = amountNum; // 卖出份额就是输入的份额
-    priceImpact = 0; // 不显示滑点，保持简洁
+    // 卖出模式暂不计算价格影响（简化）
+    estimatedExecutionPrice = calcPrice;
+    priceImpact = 0;
   }
+
+  // 🔥 移除流动性检查：参考 Polymarket 设计，保持界面中立，不限制交易
 
   // 修复交易公式：修正预估收益率 (ROI) 的计算逻辑
   // 在 50% 价格下，ROI 应该基于盈亏计算公式
@@ -363,7 +444,9 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   // 
   // 让我采用更简单的方法：ROI 基于净投资计算，这样在 50% 价格下会更合理
   const roi = React.useMemo(() => {
-    if (activeTab === "buy" && amountNum > 0 && selectedPrice > 0) {
+    // 使用与计算预估份额相同的价格逻辑
+    const calcPrice = (orderType === 'LIMIT' && isLimitPriceValid) ? limitPriceNum : marketPrice;
+    if (activeTab === "buy" && amountNum > 0 && calcPrice > 0) {
       // 修复：基于净投资计算 ROI，而不是总投入
       // 这样在 50% 价格下，ROI 会更合理
       const netInvestment = amountNum * (1 - FEE_RATE);
@@ -403,7 +486,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       return 0;
     }
     return 0;
-  }, [activeTab, amountNum, estReturn, FEE_RATE, userPosition, selectedOutcome, selectedPrice]);
+  }, [activeTab, amountNum, estReturn, FEE_RATE, userPosition, selectedOutcome, orderType, isLimitPriceValid, limitPriceNum, marketPrice]);
 
   // 🔥 检查 WalletContext 是否就绪
   const isWalletReady = React.useMemo(() => {
@@ -460,10 +543,25 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     return null;
   }, [isLoggedIn, isWalletReady, currentUser?.balance, user?.balance, storeBalance]);
 
-  // 可用份额（卖出模式）
-  const availableShares = activeTab === "sell" && userPosition
-    ? (selectedOutcome === "yes" ? userPosition.yesShares : userPosition.noShares)
-    : 0;
+  // 🔥 可用份额（卖出模式）：使用传入的 userPosition 数据
+  const availableShares = React.useMemo(() => {
+    if (activeTab !== "sell" || !userPosition) {
+      return 0;
+    }
+    const shares = selectedOutcome === "yes" ? userPosition.yesShares : userPosition.noShares;
+    // 🔥 调试日志：确认数据传递正确
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 [TradeSidebar] availableShares 计算:', {
+        activeTab,
+        selectedOutcome,
+        userPosition,
+        yesShares: userPosition.yesShares,
+        noShares: userPosition.noShares,
+        calculatedShares: shares,
+      });
+    }
+    return shares;
+  }, [activeTab, userPosition, selectedOutcome]);
 
   // 余额/份额校验（availableBalance 为 null 时不进行校验，避免误判）
   const isInsufficientBalance = activeTab === "buy"
@@ -481,6 +579,21 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         console.error("toast failed", e);
       }
       return;
+    }
+
+    // 🔥 验证限价单的价格输入
+    if (orderType === 'LIMIT') {
+      if (limitPriceNum <= 0 || limitPriceNum < 0.01 || limitPriceNum > 0.99) {
+        try {
+          toast.error("请输入有效的限价", {
+            description: "限价必须在 $0.01 到 $0.99 之间",
+            duration: 3000,
+          });
+        } catch (e) {
+          console.error("toast failed", e);
+        }
+        return;
+      }
     }
 
     if (amountNum <= 0) {
@@ -566,6 +679,8 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
             marketId: marketIdStr, // 使用正确的 UUID 格式
             outcomeSelection: outcome,
             amount: amountNum,
+            orderType: orderType, // 🔥 传递订单类型
+            limitPrice: orderType === 'LIMIT' ? limitPriceNum : undefined, // 🔥 限价单传递限价
           }),
         });
 
@@ -578,13 +693,31 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           });
           
           let errorMessage = '交易失败';
+          let errorDetails = '';
           try {
             const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || errorMessage;
+            // 🔥 优先使用 message 字段，然后是 error 字段，最后是 details
+            errorMessage = errorJson.message || errorJson.error || errorJson.details || errorMessage;
+            errorDetails = errorJson.details || errorJson.prismaCode || '';
+            
+            // 🔥 打印详细的错误信息到控制台（帮助调试）
+            console.error('❌ [TradeSidebar] 详细错误信息:', {
+              error: errorJson.error,
+              message: errorJson.message,
+              details: errorJson.details,
+              prismaCode: errorJson.prismaCode,
+              meta: errorJson.meta,
+            });
           } catch (e) {
             // 如果无法解析 JSON，使用原始错误文本
             errorMessage = errorText || `HTTP ${response.status}: ${response.statusText}`;
           }
+          
+          // 🔥 显示详细的错误信息给用户
+          toast.error(errorMessage, {
+            description: errorDetails ? `错误详情: ${errorDetails}` : undefined,
+            duration: 5000,
+          });
           
           throw new Error(errorMessage);
         }
@@ -667,6 +800,24 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
             type: "success",
           });
           
+          // 🔥 P0 修复：立即刷新所有相关数据，消除数据同步延迟
+          // 1. 刷新市场数据（解决假死状态：持仓数据立即更新）
+          mutate(`/api/markets/${marketIdStr}`);
+          
+          // 2. 刷新用户资产（解决导航栏余额延迟）
+          mutate('/api/user/assets');
+          
+          // 3. 刷新用户详情数据（解决个人中心不同步）
+          if (currentUser?.id) {
+            mutate(`/api/users/${currentUser.id}`);
+          }
+          
+          // 4. 刷新订单列表（解决个人中心订单列表不同步）
+          mutate('/api/orders/user');
+          
+          // 5. 刷新交易记录（解决个人中心交易记录不同步）
+          mutate('/api/transactions');
+          
           // 修复交易状态管理：下注成功后，刷新详情页订单列表
           // 通过调用 onTradeSuccess 回调，触发父组件刷新市场数据
           // 这将确保用户持仓数据正确显示，并根据持仓情况禁用/启用交易按钮
@@ -684,33 +835,127 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           }
         }
       } else {
-        // 卖出功能暂时保留原有逻辑（使用 Store）
-        const inputValue = amountNum;
-        await executeTrade(
-          activeTab,
-          marketIdStr,
+        // 🔥 卖出功能：调用真实 API
+        console.log('🔍 [TradeSidebar] 准备调用卖出 API:', {
+          url: '/api/orders/sell',
+          method: 'POST',
+          marketId: marketIdStr,
           outcome,
-          inputValue,
-          selectedPrice
-        );
-
-        onAmountChange("");
-        setTradeMessage(`卖出成功！`);
+          shares: amountNum,
+        });
         
-        try {
-          toast.success("卖出成功！", {
-            description: `已成功卖出 ${outcome} ${amountNum.toFixed(2)} 份额，收到 ${formatUSD(estReturn)}`,
-            duration: 3000,
+        const response = await fetch("/api/orders/sell", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: 'include', // 重要：包含 Cookie
+          body: JSON.stringify({
+            marketId: marketIdStr,
+            outcome: outcome,
+            shares: amountNum,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ [TradeSidebar] 卖出 API 调用失败:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
           });
-        } catch (e) {
-          console.error("toast failed", e);
+          
+          let errorMessage = '卖出失败';
+          let errorDetails = '';
+          try {
+            const errorJson = JSON.parse(errorText);
+            // 🔥 优先使用 message 字段，然后是 error 字段，最后是 details
+            errorMessage = errorJson.message || errorJson.error || errorJson.details || errorMessage;
+            errorDetails = errorJson.details || errorJson.prismaCode || '';
+            
+            // 🔥 打印详细的错误信息到控制台（帮助调试）
+            console.error('❌ [TradeSidebar] 详细错误信息:', {
+              error: errorJson.error,
+              message: errorJson.message,
+              details: errorJson.details,
+              prismaCode: errorJson.prismaCode,
+              meta: errorJson.meta,
+            });
+          } catch (e) {
+            // 如果无法解析 JSON，使用原始错误文本
+            errorMessage = errorText || errorMessage;
+          }
+          
+          // 🔥 显示详细的错误信息给用户
+          toast.error(errorMessage, {
+            description: errorDetails ? `错误详情: ${errorDetails}` : undefined,
+            duration: 5000,
+          });
+          
+          throw new Error(errorMessage);
         }
 
-        addNotification({
-          title: "订单已成交",
-          message: `卖出 ${outcome} - ${marketTitle}`,
-          type: "success",
-        });
+        const result = await response.json();
+        console.log('✅ [TradeSidebar] 卖出成功:', result);
+
+        if (result.success && result.data) {
+          onAmountChange("");
+          setTradeMessage(`卖出成功！`);
+          
+          toast.success("卖出成功！", {
+            description: `已成功卖出 ${outcome} ${amountNum.toFixed(2)} 份额，收到 ${formatUSD(result.data.order?.netReturn || estReturn)}`,
+            duration: 3000,
+          });
+
+          addNotification({
+            title: "订单已成交",
+            message: `卖出 ${outcome} - ${marketTitle}`,
+            type: "success",
+          });
+
+          // 🔥 P0 修复：立即刷新所有相关数据，消除数据同步延迟
+          // 1. 刷新市场数据（解决假死状态：持仓数据立即更新）
+          mutate(`/api/markets/${marketIdStr}`);
+          
+          // 2. 刷新用户资产（解决导航栏余额延迟）
+          mutate('/api/user/assets');
+          
+          // 3. 刷新用户详情数据（解决个人中心不同步）
+          if (currentUser?.id) {
+            mutate(`/api/users/${currentUser.id}`);
+          }
+          
+          // 4. 刷新订单列表（解决个人中心订单列表不同步）
+          mutate('/api/orders/user');
+          
+          // 5. 刷新交易记录（解决个人中心交易记录不同步）
+          mutate('/api/transactions');
+
+          // 🔥 成功后刷新页面数据
+          if (onTradeSuccess) {
+            onTradeSuccess({
+              updatedMarketPrice: {
+                yesPercent: result.data.updatedMarket?.totalYes 
+                  ? (result.data.updatedMarket.totalYes / (result.data.updatedMarket.totalYes + result.data.updatedMarket.totalNo)) * 100
+                  : yesPercent,
+                noPercent: result.data.updatedMarket?.totalNo
+                  ? (result.data.updatedMarket.totalNo / (result.data.updatedMarket.totalYes + result.data.updatedMarket.totalNo)) * 100
+                  : noPercent,
+              },
+              userPosition: {
+                outcome: outcome as 'YES' | 'NO',
+                shares: result.data.position?.shares || 0,
+                avgPrice: 0, // 卖出后不再有持仓，或需要从 API 获取
+                totalValue: 0,
+              },
+            });
+          }
+
+          // 🔥 强制刷新页面数据（使用 Next.js router）
+          router.refresh();
+        } else {
+          throw new Error(result.error || '卖出失败');
+        }
       }
     } catch (error) {
       console.error("交易失败:", error);
@@ -757,6 +1002,116 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
             卖出
           </button>
         </div>
+
+        {/* 🔥 订单类型切换器：Market (市价) / Limit (限价) */}
+        <div className="flex bg-pm-bg p-1 rounded-lg border border-pm-border">
+          <button
+            onClick={() => setOrderType('MARKET')}
+            className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${
+              orderType === 'MARKET'
+                ? 'bg-pm-card text-white shadow-sm border border-pm-border/50'
+                : 'text-pm-text-dim hover:text-white'
+            }`}
+          >
+            Market (市价)
+          </button>
+          <button
+            onClick={() => setOrderType('LIMIT')}
+            className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${
+              orderType === 'LIMIT'
+                ? 'bg-pm-card text-white shadow-sm border border-pm-border/50'
+                : 'text-pm-text-dim hover:text-white'
+            }`}
+          >
+            Limit (限价)
+          </button>
+        </div>
+
+        {/* 🔥 限价单：价格输入框（仅当 orderType === 'LIMIT' 时显示） */}
+        {orderType === 'LIMIT' && (
+          <div>
+            <div className="flex justify-between text-xs font-medium mb-2">
+              <span className="text-pm-text-dim">限价 (Limit Price)</span>
+              <span className="text-pm-text-dim">
+                当前: {formatUSD(marketPrice)}
+              </span>
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={limitPrice}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  // 🔥 修复：允许用户输入过程中的中间状态（如 "0", "0.", "0.5" 等）
+                  // 只阻止明显的无效输入（负数、超过1的数、非数字字符）
+                  if (val === '') {
+                    setLimitPrice('');
+                    return;
+                  }
+                  
+                  // 允许小数点开头的情况（如 ".5"）
+                  if (val === '.') {
+                    setLimitPrice('0.');
+                    return;
+                  }
+                  
+                  // 验证是否为有效数字格式
+                  const numRegex = /^-?\d*\.?\d*$/;
+                  if (!numRegex.test(val)) {
+                    return; // 不是有效数字格式，忽略输入
+                  }
+                  
+                  const num = parseFloat(val);
+                  
+                  // 允许空值、部分输入（如 "0", "0."）或有效范围内的数字
+                  // 只在输入完成时（blur）进行严格验证，输入过程中允许中间状态
+                  if (isNaN(num)) {
+                    // 允许部分输入（如 "0."）
+                    if (val.endsWith('.') || val === '') {
+                      setLimitPrice(val);
+                    }
+                  } else if (num >= 0 && num <= 1) {
+                    // 允许 0 到 1 之间的所有输入（包括 0, 0.5 等）
+                    setLimitPrice(val);
+                  }
+                  // 如果 num < 0 或 num > 1，则忽略输入（不允许负数或超过1的值）
+                }}
+                onBlur={(e) => {
+                  // 🔥 失去焦点时进行最终验证和格式化
+                  const val = e.target.value;
+                  const num = parseFloat(val);
+                  
+                  if (val === '' || isNaN(num)) {
+                    setLimitPrice('');
+                    return;
+                  }
+                  
+                  // 限制在 0.01 到 0.99 之间
+                  if (num < 0.01) {
+                    setLimitPrice('0.01');
+                  } else if (num > 0.99) {
+                    setLimitPrice('0.99');
+                  } else {
+                    // 保留用户输入的格式，但确保是有效的数字
+                    setLimitPrice(val);
+                  }
+                }}
+                className="w-full bg-pm-bg border border-pm-border rounded-xl px-4 py-3 text-lg font-bold text-white placeholder:text-pm-border focus:outline-none focus:border-pm-green focus:ring-1 focus:ring-pm-green pr-12"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 font-medium text-sm pointer-events-none">
+                USD
+              </span>
+            </div>
+            {limitPriceNum > 0 && limitPriceNum < 0.01 && (
+              <p className="text-xs text-amber-500 mt-1">限价不能低于 $0.01</p>
+            )}
+            {limitPriceNum > 0 && limitPriceNum > 0.99 && (
+              <p className="text-xs text-amber-500 mt-1">限价不能高于 $0.99</p>
+            )}
+          </div>
+        )}
 
         {/* Outcome Selection - 🔥 交易区尺寸缩小 */}
         <div className="grid grid-cols-2 gap-2">
@@ -852,11 +1207,27 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
 
         {/* 交易信息摘要 - Polymarket 简洁风格 */}
         <div className="space-y-3 py-3 bg-pm-bg rounded-xl border border-pm-border/50 p-4">
-          {/* 平均价格 */}
+          {/* 价格显示 */}
           <div className="flex justify-between items-center text-sm">
-            <span className="text-pm-text-dim">平均价格</span>
-            <span className="text-white font-mono font-medium">{formatUSD(selectedPrice)}</span>
+            <span className="text-pm-text-dim">
+              {orderType === 'MARKET' ? '市场价格' : '限价'}
+            </span>
+            <span className="text-white font-mono font-medium">
+              {orderType === 'MARKET' 
+                ? formatUSD(marketPrice) 
+                : (limitPriceNum > 0 && isLimitPriceValid ? formatUSD(limitPriceNum) : formatUSD(marketPrice) + ' (未设置)')}
+            </span>
           </div>
+          {orderType === 'MARKET' && (
+            <div className="text-xs text-pm-text-dim">
+              按当前市场最优价格成交
+            </div>
+          )}
+          {orderType === 'LIMIT' && (!limitPriceNum || !isLimitPriceValid) && (
+            <div className="text-xs text-amber-500">
+              请设置有效的限价（$0.01 - $0.99）
+            </div>
+          )}
 
           {/* 滑点提示（小字显示） */}
           {priceImpact > 0 && amountNum > 0 && (
@@ -952,6 +1323,8 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           </div>
         )}
 
+        {/* 🔥 移除所有流动性警告：参考 Polymarket 设计，保持界面中立 */}
+
         {/* 底部按钮 */}
         <button
           onClick={handleTrade}
@@ -963,6 +1336,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
             isSubmitting || 
             (activeTab === "sell" && (!userPosition || (selectedOutcome === "yes" && userPosition.yesShares === 0) || (selectedOutcome === "no" && userPosition.noShares === 0))) ||
             (activeTab === "buy" && isPriceAtMax) // 买入时，如果价格达到 $1.00，禁用按钮
+            // 🔥 移除流动性限制：参考 Polymarket 设计，允许用户在空池中交易
           }
           className={`w-full py-3.5 font-bold rounded-xl transition-transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
             activeTab === "buy"

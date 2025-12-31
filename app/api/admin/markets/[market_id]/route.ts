@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DBService } from "@/lib/mockData";
+import { DBService } from "@/lib/dbService"; // 🔥 修复：使用正确的 dbService 而不是 mockData
 import { Market, MarketStatus, Outcome } from "@/types/data";
 import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
 import { prisma } from '@/lib/prisma';
-import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { auth } from "@/lib/authExport";
 
 // 🔥 强制清理前端缓存：确保不使用旧缓存
 export const dynamic = 'force-dynamic';
@@ -130,6 +130,9 @@ export async function GET(
       internalVolume,
       manualOffset,
       isActive: dbMarket.isActive ?? true,
+      // 🚀 添加子市场详情所需字段
+      outcomePrices: (dbMarket as any).outcomePrices || null,
+      period: (dbMarket as any).period || null,
     };
 
       console.log('✅ [Admin Market GET] 市场详情获取成功:', marketData.id);
@@ -302,6 +305,30 @@ export async function PUT(
             categoryId: categoryId,
           })),
         });
+      }
+      
+      // 🔥 修复热门标签逻辑：检查是否包含热门分类（ID=-1 或 slug="-1"）
+      const hotCategory = await prisma.category.findFirst({
+        where: {
+          OR: [
+            { slug: '-1' },
+            { slug: 'hot' },
+            { name: { contains: '热门' } },
+          ],
+        },
+        select: { id: true },
+      });
+      
+      if (hotCategory && categoryIds.includes(hotCategory.id)) {
+        // 如果分类列表中包含热门分类，自动设置 isHot = true
+        updateData.isHot = true;
+        console.log('🔥 [Admin Market PUT] 检测到热门分类，自动设置 isHot = true');
+      } else if (categoryIds.length > 0) {
+        // 如果分类列表中不包含热门分类，且 isHot 未显式提供，设置为 false
+        if (isHot === undefined) {
+          updateData.isHot = false;
+          console.log('🔥 [Admin Market PUT] 分类中不包含热门分类，自动设置 isHot = false');
+        }
       }
     }
 

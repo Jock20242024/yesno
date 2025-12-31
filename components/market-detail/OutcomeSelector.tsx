@@ -18,6 +18,9 @@ export default function OutcomeSelector({
 }: OutcomeSelectorProps) {
   const { isLoggedIn } = useAuth();
   const router = useRouter();
+  
+  // 🔥 移除安全检查：直接使用后端返回的真实赔率，允许显示0/100（已结算市场）
+  // 确保实时同步Polymarket的真实赔率数据
   const yesPrice = formatUSD(yesPercent / 100);
   const noPrice = formatUSD(noPercent / 100);
 
@@ -34,7 +37,7 @@ export default function OutcomeSelector({
     <div className="mb-12">
       <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
         <span className="text-pm-green">●</span>
-        预测选项
+        Prediction Options
       </h3>
       <div className="flex flex-col gap-3">
         {/* Yes Option */}
@@ -46,7 +49,7 @@ export default function OutcomeSelector({
               </div>
               <span className="font-bold text-lg text-white">Yes</span>
             </div>
-            <div className="flex items-center gap-8 mr-4">
+            <div className="flex items-center gap-4 md:gap-8 mr-4">
               <div className="text-right">
                 <div className="font-mono font-bold text-pm-green text-lg">
                   {yesPrice}
@@ -60,7 +63,7 @@ export default function OutcomeSelector({
             onClick={() => handleTrade("yes")}
             className="relative z-10 bg-pm-green hover:bg-green-400 text-pm-bg font-bold py-2 px-4 text-sm rounded-lg mr-2 transition-colors shadow-lg shadow-pm-green/20"
           >
-            {isLoggedIn ? "买入" : "登录以交易"}
+            {isLoggedIn ? "Buy" : "Login to Trade"}
           </button>
           <div
             className="absolute left-0 top-0 bottom-0 bg-pm-green-dim transition-all duration-700 ease-out border-r border-pm-green/20"
@@ -94,7 +97,7 @@ export default function OutcomeSelector({
             onClick={() => handleTrade("no")}
             className="relative z-10 bg-pm-card-hover border border-pm-border hover:bg-pm-red hover:text-white hover:border-pm-red text-pm-text-dim font-bold py-2 px-4 text-sm rounded-lg ml-2 transition-all"
           >
-            {isLoggedIn ? "买入" : "登录以交易"}
+            {isLoggedIn ? "Buy" : "Login to Trade"}
           </button>
           <div
             className="absolute left-0 top-0 bottom-0 bg-pm-red-dim transition-all duration-700 ease-out border-r border-pm-red/20"

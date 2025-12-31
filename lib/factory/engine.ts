@@ -123,36 +123,65 @@ async function fetchMarkets(force: boolean = false): Promise<any[]> {
 
     /**
      * 带重试的 fetch 函数
+     * 🔥 增强错误处理和超时控制
      */
     const fetchWithRetry = async (url: string, retries = 3): Promise<Response> => {
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-          const response = await fetch(url, {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-          });
+          // 🔥 添加超时控制（30秒），防止请求无限挂起
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
           
-          if (response.ok) {
-            return response;
+          try {
+            const response = await fetch(url, {
+              headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              },
+              signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+              return response;
+            }
+            
+            // 如果是最后一次尝试，返回响应（即使失败）
+            if (attempt === retries) {
+              return response;
+            }
+            
+            // 🔥 性能优化：仅在开发环境或错误严重时输出日志
+            if (response.status >= 500) {
+              console.warn(`⚠️ [FactoryEngine] 服务器错误（尝试 ${attempt}/${retries}），HTTP ${response.status}，将在 ${attempt * 500}ms 后重试...`);
+            }
+            await new Promise(resolve => setTimeout(resolve, attempt * 500));
+            
+          } catch (fetchError: any) {
+            clearTimeout(timeoutId);
+            throw fetchError;
           }
-          
-          // 如果是最后一次尝试，返回响应（即使失败）
-          if (attempt === retries) {
-            return response;
-          }
-          
-          console.warn(`⚠️ [FactoryEngine] 请求失败（尝试 ${attempt}/${retries}），${response.status}，将在 ${attempt * 500}ms 后重试...`);
-          await new Promise(resolve => setTimeout(resolve, attempt * 500));
           
         } catch (error: any) {
+          // 🔥 增强错误分类处理
+          const isTimeout = error.name === 'AbortError' || error.message?.includes('timeout');
+          const isNetworkError = error.message?.includes('fetch failed') || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND';
+          
           // 如果是最后一次尝试，抛出错误
           if (attempt === retries) {
+            if (isTimeout) {
+              throw new Error(`请求超时（${url}）`);
+            } else if (isNetworkError) {
+              throw new Error(`网络连接失败（${error.message}）`);
+            }
             throw error;
           }
           
-          console.warn(`⚠️ [FactoryEngine] 网络错误（尝试 ${attempt}/${retries}）: ${error.message}，将在 ${attempt * 500}ms 后重试...`);
+          // 🔥 性能优化：仅在网络错误或超时时输出警告（避免刷屏）
+          if (isTimeout || isNetworkError) {
+            console.warn(`⚠️ [FactoryEngine] 网络错误（尝试 ${attempt}/${retries}）: ${isTimeout ? '请求超时' : error.message}，将在 ${attempt * 500}ms 后重试...`);
+          }
           await new Promise(resolve => setTimeout(resolve, attempt * 500));
         }
       }
@@ -715,10 +744,84 @@ async function syncMarketOddsImmediately(marketId: string, externalId: string): 
       return;
     }
 
+    // 🚀 解析 outcomePrices 获取 YES 概率（用于重置 AMM Pool）
+    let yesProbability: number | null = null;
+    try {
+      const parsed = typeof outcomePrices === 'string' ? JSON.parse(outcomePrices) : outcomePrices;
+      
+      // 支持数组格式：[0.75, 0.25]（第一个是 YES 价格）
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const yesPrice = parseFloat(String(parsed[0]));
+        if (!isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1) {
+          yesProbability = Math.round(yesPrice * 100); // 转换为百分比（0-100）
+        }
+      }
+      // 支持对象格式：{YES: 0.75, NO: 0.25}
+      else if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        if ('YES' in parsed) {
+          const yesPrice = parseFloat(String(parsed.YES));
+          if (!isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1) {
+            yesProbability = Math.round(yesPrice * 100);
+          }
+        } else if ('yes' in parsed) {
+          const yesPrice = parseFloat(String(parsed.yes));
+          if (!isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1) {
+            yesProbability = Math.round(yesPrice * 100);
+          }
+        }
+      }
+    } catch (parseError: any) {
+      console.warn(`⚠️ [FactoryEngine] 解析 outcomePrices 失败: ${parseError.message} (marketId: ${marketId})`);
+    }
+
+    // 🚀 查询市场当前状态，检查是否需要重置 AMM Pool
+    const currentMarket = await prisma.market.findUnique({
+      where: { id: marketId },
+      select: {
+        id: true,
+        totalVolume: true,
+        totalYes: true,
+        totalNo: true,
+      },
+    });
+
+    if (!currentMarket) {
+      console.warn(`⚠️ [FactoryEngine] 市场不存在: ${marketId}`);
+      return;
+    }
+
+    // 🚀 准备更新数据
+    const updateData: any = {
+      outcomePrices: outcomePricesJson,
+      externalId: externalId, // 🔥 确保 externalId 也被更新
+    };
+
+    // 🚀 核心逻辑：如果市场尚未有用户交易（totalVolume === 0）且能解析出概率，重置 AMM Pool
+    if (currentMarket.totalVolume === 0 && yesProbability !== null) {
+      const INITIAL_LIQUIDITY = 1000; // 初始流动性
+      const yesProb = yesProbability / 100; // 转换为 0-1 的概率（例如 75% -> 0.75）
+      
+      // 🚀 根据恒定乘积公式反推：
+      // Price(Yes) = totalYes / (totalYes + totalNo) = yesProb
+      // 总流动性 L = totalYes + totalNo = INITIAL_LIQUIDITY
+      // 因此：totalYes = L * yesProb, totalNo = L * (1 - yesProb)
+      const calculatedYes = INITIAL_LIQUIDITY * yesProb;
+      const calculatedNo = INITIAL_LIQUIDITY * (1 - yesProb);
+
+      updateData.totalYes = calculatedYes;
+      updateData.totalNo = calculatedNo;
+
+      console.log(`🔄 [FactoryEngine] 市场 ${marketId} 重置 AMM Pool: YES=${calculatedYes.toFixed(2)}, NO=${calculatedNo.toFixed(2)} (概率: YES=${yesProbability}%, NO=${100 - yesProbability}%)`);
+    } else if (currentMarket.totalVolume > 0) {
+      console.log(`ℹ️ [FactoryEngine] 市场 ${marketId} 已有交易（totalVolume=${currentMarket.totalVolume}），跳过 Pool 重置`);
+    } else if (yesProbability === null) {
+      console.log(`ℹ️ [FactoryEngine] 市场 ${marketId} 无法解析概率，跳过 Pool 重置`);
+    }
+
     // 🔥 立即更新数据库
     await prisma.market.update({
       where: { id: marketId },
-      data: { outcomePrices: outcomePricesJson },
+      data: updateData,
     });
 
     // 🔥 性能优化：删除实时同步成功日志（避免高频输出）
@@ -844,9 +947,11 @@ function findBestMatchWithScoring(
     // 🔥 纯打分机制：不使用 if，只用 score
     let score = symbolScore; // 基础分：名字命中别名 +100分
     
-    // 时间差异：每差1分钟 -1分
+    // 🔥 关键修复：优化时间差异扣分机制，避免30分钟差异导致分数过低
+    // 时间差异：每差1分钟 -0.5分（原来是 -1分，太严格）
+    // 这样30分钟差异只会扣15分，而不是30分
     const timeDiffMinutes = timeDiff / (60 * 1000);
-    score -= timeDiffMinutes; // 每分钟差异扣1分
+    score -= timeDiffMinutes * 0.5; // 每分钟差异扣 0.5 分（更宽松）
     
     // 状态一致性奖励
     if (localMarketStatus === 'OPEN' && m.closed === false) {
@@ -875,7 +980,9 @@ function findBestMatchWithScoring(
   const bestMatch = candidates[0];
   
   // 🔥 自动修正：取最高分且 > 50分的候选项
-  if (bestMatch.score > 50) {
+  // 🔥 关键修复：降低阈值到 40 分，因为时间差异扣分已优化（从-1/分钟改为-0.5/分钟）
+  // 这样即使有较大的时间差异（如30分钟），只要资产名称匹配，仍能成功匹配
+  if (bestMatch.score > 40) {
     return { market: bestMatch.market, score: bestMatch.score };
   }
   

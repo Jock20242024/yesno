@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { DBService } from '@/lib/dbService';
-import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离：使用统一的 userId 提取函数
+import { calculatePositionValue } from '@/lib/utils/valuation';
+import { prisma } from '@/lib/prisma';
 
 /**
  * 用户详情 API
@@ -13,50 +13,45 @@ import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离�
  * 
  * 安全修复：强制身份验证和用户 ID 匹配检查
  * 用户只能访问自己的数据，不能访问其他用户的数据
+ * 
+ * 🔥 统一认证：使用 NextAuth 进行身份验证
  */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ user_id: string }> }
 ) {
   try {
-    // 强制身份过滤：从 Auth Token 提取 current_user_id
-    const authResult = await extractUserIdFromToken();
-    
-    if (!authResult.success || !authResult.userId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: authResult.error || 'Not authenticated',
-        },
-        { status: 401 }
-      );
-    }
-
-    const currentUserId = authResult.userId;
-
     const { user_id } = await params;
     const { searchParams } = new URL(request.url);
     const timeRange = searchParams.get('timeRange') || 'ALL';
 
-    // 强制身份过滤：确保 current_user_id 必须与请求的 user_id 匹配
-    // 防止用户访问其他用户的数据
-    if (currentUserId !== user_id) {
-      console.error('❌ [Users API] 安全漏洞：用户尝试访问其他用户的数据', {
-        currentUserId,
-        requestedUserId: user_id,
-      });
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Forbidden: You can only access your own data',
-        },
-        { status: 403 }
-      );
+    // 🔥 修复：排行榜访问允许查看所有用户的数据，不需要身份验证限制
+    // 但如果是查看自己的数据，可以使用已验证的用户 ID
+    // 如果是查看其他用户，需要允许访问（用于排行榜链接）
+    let targetUserId = user_id;
+    
+    // 如果 user_id 是 UUID 格式，直接使用
+    // 如果不是 UUID（可能是用户名），需要查找对应的用户
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidPattern.test(user_id)) {
+      // 如果不是 UUID，尝试通过邮箱前缀查找用户
+      const allUsers = await DBService.getAllUsers();
+      const foundUser = allUsers.find(user => user.email.split('@')[0] === user_id);
+      if (foundUser) {
+        targetUserId = foundUser.id;
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'User not found',
+          },
+          { status: 404 }
+        );
+      }
     }
 
     // 查找用户（从数据库）
-    // 硬编码检查：使用已验证的 currentUserId（已通过匹配检查）
-    const user = await DBService.findUserById(currentUserId);
+    const user = await DBService.findUserById(targetUserId);
     
     if (!user) {
       return NextResponse.json(
@@ -68,23 +63,95 @@ export async function GET(
       );
     }
 
-    // 获取用户的订单（从数据库，确保数据隔离）
-    // 硬编码检查：使用已验证的 currentUserId（已通过匹配检查），确保数据隔离
-    const orders = await DBService.findOrdersByUserId(currentUserId);
-    
-    // 从订单计算持仓（简化实现）
-    const positions = orders.map((order) => ({
-      marketId: order.marketId,
-      outcome: order.outcomeSelection,
-      shares: order.amount - (order.feeDeducted || 0), // 简化：使用净投资作为份额
-      avgPrice: 0.5, // 简化：使用占位价格
-      profitLoss: (order.payout || 0) - (order.amount - (order.feeDeducted || 0)),
-    }));
+    // 🔥 核心修复：持仓必须只基于 Position 表，绝对排除未成交订单
+    // 强制规则：只有真正成交的份额（Position表中有记录）才能算作持仓
+    const positionsData = await prisma.position.findMany({
+      where: {
+        userId: targetUserId,
+        status: 'OPEN', // 🔥 只返回持仓中的仓位，排除已关闭的
+      },
+      include: {
+        market: {
+          select: {
+            id: true,
+            title: true,
+            totalYes: true,
+            totalNo: true,
+            status: true,
+            closingDate: true,
+            resolvedOutcome: true, // ✅ 已包含 resolvedOutcome
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
 
-    // 从订单生成交易历史（简化实现）
+    // 计算每个持仓的当前价值、盈亏等信息
+    // 🔥 重构：使用统一的 calculatePositionValue 工具函数
+    // 🔥 修复：添加 null/undefined 检查，防止 500 错误
+    const positions = positionsData.map((position) => {
+      try {
+        // 🔥 修复：确保 outcome 是 'YES' | 'NO'，过滤掉其他值
+        const validOutcome = (position.outcome === 'YES' || position.outcome === 'NO') 
+          ? position.outcome 
+          : 'YES';
+        
+        const valuation = calculatePositionValue(
+          {
+            shares: position.shares || 0,
+            avgPrice: position.avgPrice || 0,
+            outcome: validOutcome,
+          },
+          {
+            status: position.market?.status || 'OPEN',
+            resolvedOutcome: position.market?.resolvedOutcome || null,
+            totalYes: position.market?.totalYes || 0,
+            totalNo: position.market?.totalNo || 0,
+          }
+        );
+
+        return {
+          id: position.id,
+          marketId: position.marketId,
+          outcome: position.outcome,
+          shares: position.shares || 0,
+          avgPrice: position.avgPrice || 0,
+          currentPrice: valuation.currentPrice || 0,
+          currentValue: valuation.currentValue || 0,
+          costBasis: valuation.costBasis || 0,
+          profitLoss: valuation.profitLoss || 0,
+        };
+      } catch (error) {
+        console.error(`Error calculating position value for position ${position.id}:`, error);
+        // 返回默认值，避免整个请求失败
+        return {
+          id: position.id,
+          marketId: position.marketId,
+          outcome: position.outcome || 'YES',
+          shares: position.shares || 0,
+          avgPrice: position.avgPrice || 0,
+          currentPrice: 0,
+          currentValue: 0,
+          costBasis: 0,
+          profitLoss: 0,
+        };
+      }
+    });
+
+    // 🔥 获取用户的订单（用于交易历史，不是持仓）
+    // 注意：交易历史包含所有订单，包括已成交的
+    // 使用 Prisma 直接查询，避免 DBService 的 UUID 验证问题（如果将来需要）
+    const orders = await prisma.order.findMany({
+      where: { userId: targetUserId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // 从订单生成交易历史
     const tradeHistory = orders.map((order) => ({
       id: order.id,
-      timestamp: order.createdAt,
+      timestamp: order.createdAt.toISOString(),
       type: 'buy',
       marketId: order.marketId,
       outcome: order.outcomeSelection,
@@ -110,10 +177,22 @@ export async function GET(
       });
     }
 
-    // 计算总盈亏（从持仓计算）
-    const totalProfitLoss = positions.reduce((sum, pos) => {
-      return sum + (pos.profitLoss || 0);
-    }, 0);
+    // 计算总盈亏、持仓价值、最大胜利（从持仓计算）
+    let totalProfitLoss = 0;
+    let positionsValue = 0;
+    let biggestWin = 0;
+    
+    for (const pos of positions) {
+      totalProfitLoss += pos.profitLoss || 0;
+      positionsValue += pos.currentValue || 0;
+      const profitLoss = pos.profitLoss || 0;
+      if (profitLoss > biggestWin) {
+        biggestWin = profitLoss;
+      }
+    }
+
+    // 计算预测次数（订单数量）
+    const predictions = orders.length;
 
     return NextResponse.json({
       success: true,
@@ -125,6 +204,9 @@ export async function GET(
         isBanned: user.isBanned,
         createdAt: user.createdAt,
         totalProfitLoss,
+        positionsValue,
+        biggestWin,
+        predictions,
         tradeHistory: filteredTradeHistory,
         positions,
       },

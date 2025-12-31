@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { auth } from "@/lib/authExport";
 import { DBService } from '@/lib/dbService';
 import { prisma } from '@/lib/prisma';
+import { calculatePositionPrice } from '@/lib/utils/valuation';
 
 /**
  * 获取用户资产汇总 API
@@ -182,6 +183,7 @@ export async function GET() {
             totalYes: true,
             totalNo: true,
             status: true,
+            resolvedOutcome: true, // 🔥 必须包含：用于计算已结算市场的价格
           },
         },
       },
@@ -189,23 +191,19 @@ export async function GET() {
 
     let positionsValue = 0;
     
-    // 计算每个持仓的当前价值
+    // 🔥 重构：计算每个持仓的当前价值（包括已结算的市场）
+    // 注意：虽然 Position 状态是 OPEN，但市场可能已结算（RESOLVED）
+    // 使用统一的 calculatePositionPrice 工具函数
     for (const position of positions) {
       try {
-        // 只计算OPEN市场的持仓价值
-        if (position.market.status !== 'OPEN') {
-          continue;
-        }
-
-        // 计算当前市场价格
-        const totalVolume = (position.market.totalYes || 0) + (position.market.totalNo || 0);
-        if (totalVolume <= 0) {
-          continue;
-        }
-
-        const currentPrice = position.outcome === 'YES'
-          ? (position.market.totalYes / totalVolume)
-          : (position.market.totalNo / totalVolume);
+        // 🔥 确保 outcome 类型正确（Position.outcome 是 Outcome 枚举，需要转换为 'YES' | 'NO'）
+        const outcomeStr = position.outcome as 'YES' | 'NO';
+        const currentPrice = calculatePositionPrice(outcomeStr, {
+          status: position.market.status,
+          resolvedOutcome: position.market.resolvedOutcome,
+          totalYes: position.market.totalYes || 0,
+          totalNo: position.market.totalNo || 0,
+        });
 
         // 持仓价值 = 份额 * 当前价格
         positionsValue += position.shares * currentPrice;
@@ -280,6 +278,7 @@ export async function GET() {
               totalYes: true,
               totalNo: true,
               status: true,
+              resolvedOutcome: true, // 🔥 修复：添加 resolvedOutcome 用于盈亏计算
             },
           },
         },
@@ -287,21 +286,26 @@ export async function GET() {
       
       let historicalPositionValue = 0;
       for (const position of historicalPositions) {
-        // 只计算OPEN市场的持仓价值
-        if (position.market.status !== 'OPEN') {
-          continue;
-        }
+        try {
+          // 🔥 重构：使用统一的 calculatePositionPrice 工具函数
+          // 只计算 OPEN 市场的持仓价值（已结算的应该已经计入余额）
+          if (position.market.status !== 'OPEN') {
+            continue;
+          }
 
-        // 使用当前市场价格（简化，实际应该查询历史价格快照）
-        // 注意：这是一个近似值，生产环境应该使用历史价格快照表
-        const totalVolume = (position.market.totalYes || 0) + (position.market.totalNo || 0);
-        if (totalVolume > 0) {
-          const currentPrice = position.outcome === 'YES'
-            ? (position.market.totalYes / totalVolume)
-            : (position.market.totalNo / totalVolume);
+          const currentPrice = calculatePositionPrice(position.outcome, {
+            status: position.market.status,
+            resolvedOutcome: position.market.resolvedOutcome,
+            totalYes: position.market.totalYes || 0,
+            totalNo: position.market.totalNo || 0,
+          });
+
           // 只计算该时间点之前创建的持仓份额
           // 简化：使用当前shares（实际应该查询历史shares快照）
           historicalPositionValue += position.shares * currentPrice;
+        } catch (error) {
+          console.error(`Error calculating historical position value for position ${position.id}:`, error);
+          // 继续处理其他持仓
         }
       }
       

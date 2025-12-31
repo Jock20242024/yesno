@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { auth } from "@/lib/authExport";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
 
@@ -26,23 +26,26 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
   if (!session || !session.user) {
     // 🛡️ 强制"打桩"监控：在执行 redirect 之前，打印 Session 数据
     console.log('🛡️ [Admin-Layout] 拦截检查 - Session 数据:', JSON.stringify(session?.user));
+    console.log('🛡️ [Admin-Layout] 重定向到 /admin/login（管理员登录页）');
+    // 🔥 修复：确保重定向到管理员登录页，而不是用户登录页
     redirect("/admin/login");
   }
   
-  // 🔥 布局组件"终极审判"：只有当明确 session.user.isAdmin === false 时，才执行重定向到 /
-  // 如果 isAdmin 为 undefined 或 true，都不应该重定向
+  // 🔥 布局组件"终极审判"：只有当明确 session.user.isAdmin === false 时，才执行重定向
+  // 🔥 关键修复：非管理员用户应该重定向到 /admin/login，而不是首页，避免误跳转到用户登录页
   const isAdmin = (session.user as any).isAdmin;
   
   if (isAdmin === false) {
-    // 🔥 明确是 false，才重定向
-    console.log('🛡️ [Admin-Layout] 权限拦截：已登录但明确不是管理员（isAdmin === false），重定向到首页', {
+    // 🔥 明确是 false，重定向到管理员登录页，而不是首页（避免误跳到用户登录页）
+    console.log('🛡️ [Admin-Layout] 权限拦截：已登录但明确不是管理员（isAdmin === false），重定向到管理员登录页', {
       email: session.user.email,
       isAdmin: isAdmin,
     });
-    redirect("/");
+    redirect("/admin/login");
   }
 
-  // 如果 isAdmin 为 undefined 或 true，继续渲染（包括 Loading 状态）
+  // 如果 isAdmin 为 undefined，说明权限状态未确定，显示 Loading 界面
+  // 🔥 注意：不要在 isAdmin 为 undefined 时重定向，因为这可能是 session 正在加载
   if (isAdmin === undefined) {
     console.log('🛡️ [Admin-Layout] 权限状态未确定（isAdmin === undefined），显示 Loading 界面');
     return (

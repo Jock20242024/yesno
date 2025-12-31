@@ -13,9 +13,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // 1. 最基础的清理
   const clearUserData = useCallback(() => {
     console.log("🧹 [AuthProvider] 执行清理...");
+    
+    // 🔥 清除所有用户相关的 localStorage
     localStorage.removeItem('pm_user');
+    localStorage.removeItem('pm_currentUser');
+    
+    // 🔥 清除所有资金相关的 localStorage
+    localStorage.removeItem('pm_store_balance');
+    localStorage.removeItem('pm_store_positions');
+    localStorage.removeItem('pm_store_history');
+    localStorage.removeItem('pm_fundRecords');
+    localStorage.removeItem('pm_deposits');
+    localStorage.removeItem('pm_withdrawals');
+    localStorage.removeItem('pm_frozenBalance');
+    
+    // 🔥 清除状态
     setIsLoggedIn(false);
     setUser(null);
+    setIsLoading(false);
   }, []);
 
   // 2. 定义 logout (因为它被后面的函数引用)

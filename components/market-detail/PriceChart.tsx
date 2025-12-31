@@ -10,7 +10,7 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from "recharts";
-import { TrendingUp, ChevronUp, X } from "lucide-react";
+import { TrendingUp, TrendingDown, ChevronUp, X } from "lucide-react";
 import type { MarketStatus, MarketResult } from "./MarketHeader";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -33,32 +33,27 @@ interface PriceChartProps {
   period?: number | null; // 🔥 周期（分钟数），用于判断是否显示场次导航
   templateId?: string | null; // 🔥 模板 ID，用于未生成场次的生成接口
   height?: number; // 🔥 图表高度
-  data?: any[]; // 🔥 图表数据
+  data?: Array<{ time: string; value: number; timestamp: number }>; // 🔥 图表数据（历史价格数据）
   hideNavigation?: boolean; // 🔥 是否隐藏内部导航栏
   isFactory?: boolean; // 🔥 是否是工厂市场
 }
 
-// Mock data for the chart
-const generateChartData = () => {
-  const data = [];
+// 🔥 移除假数据生成函数：现在使用真实历史数据
+// 如果数据为空，返回一个默认数据点
+const getDefaultChartData = (currentPrice: number) => {
   const now = Date.now();
-  const hours = 24;
-  
-  for (let i = hours; i >= 0; i--) {
-    const time = new Date(now - i * 60 * 60 * 1000);
-    // Simulate price movement around 65%
-    const baseValue = 0.65;
-    const variation = (Math.sin(i / 3) * 0.1) + (Math.random() * 0.05);
-    const value = Math.max(0.3, Math.min(0.9, baseValue + variation));
-    
-    data.push({
-      time: time.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
-      value: value,
-      timestamp: time.getTime(),
-    });
-  }
-  
-  return data;
+  return [
+    {
+      time: new Date(now - 24 * 60 * 60 * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+      value: 0.5, // 初始价格 50%
+      timestamp: now - 24 * 60 * 60 * 1000,
+    },
+    {
+      time: new Date(now).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+      value: currentPrice, // 当前价格
+      timestamp: now,
+    },
+  ];
 };
 
 export default function PriceChart({ yesPercent, marketStatus = "open", marketResult = null, slots = [], currentMarketId, period, templateId, height = 300, data, hideNavigation = false, isFactory = false }: PriceChartProps) {
@@ -168,9 +163,57 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
     );
   }
 
-  const chartData = data || generateChartData();
+  // 🔥 使用真实数据：优先使用传入的 data，如果没有则使用默认数据
   const currentValue = yesPercent / 100;
+  const chartData = data && data.length > 0 
+    ? data 
+    : getDefaultChartData(currentValue);
   const isResolved = marketStatus === "closed" && marketResult !== null;
+  
+  // 🔥 计算24小时价格变化百分比（基于真实历史数据）
+  const priceChange24h = useMemo(() => {
+    if (!data || data.length === 0) {
+      return null; // 没有历史数据，无法计算
+    }
+    
+    const now = Date.now();
+    const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+    
+    // 找到24小时前最接近的价格点
+    let price24hAgo: number | null = null;
+    let minTimeDiff = Infinity;
+    
+    for (const point of data) {
+      const timeDiff = Math.abs(point.timestamp - twentyFourHoursAgo);
+      if (timeDiff < minTimeDiff && point.timestamp <= twentyFourHoursAgo) {
+        minTimeDiff = timeDiff;
+        price24hAgo = point.value;
+      }
+    }
+    
+    // 如果找不到24小时前的数据，尝试找最早的数据点
+    if (price24hAgo === null && data.length > 0) {
+      const firstPoint = data[0];
+      // 如果最早的数据点在24小时前，使用它
+      if (firstPoint.timestamp <= twentyFourHoursAgo) {
+        price24hAgo = firstPoint.value;
+      }
+    }
+    
+    // 如果仍然找不到，返回null
+    if (price24hAgo === null) {
+      return null;
+    }
+    
+    // 计算变化百分比：((当前价格 - 24小时前价格) / 24小时前价格) * 100
+    const currentPrice = currentValue;
+    const changePercent = ((currentPrice - price24hAgo) / price24hAgo) * 100;
+    
+    return {
+      percent: changePercent,
+      isPositive: changePercent >= 0,
+    };
+  }, [data, currentValue]);
   
   // 🔥 动态获取用户时区（使用浏览器本地时区，不硬编码）
   const userTimeZone = typeof window !== 'undefined' 
@@ -222,20 +265,26 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
   if (!shouldShowSlotNavigation) {
     // 原有的周期切换栏（1H, 6H, 1D...）
     return (
-      <div className="mb-10">
+      <div className="w-full h-full flex flex-col">
         <div className="flex items-baseline gap-3 mb-2">
           <span className="text-3xl md:text-4xl font-black text-pm-green tracking-tight">
             {yesPercent}%
           </span>
           <span className="text-lg font-bold text-pm-green">Yes</span>
-          <span className="flex items-center text-xs font-bold text-pm-green bg-pm-green-dim px-2 py-0.5 rounded ml-2">
+          {priceChange24h !== null ? (
+            <span className={`flex items-center text-xs font-bold ${priceChange24h.isPositive ? 'text-pm-green bg-pm-green-dim' : 'text-red-500 bg-red-500/20'} px-2 py-0.5 rounded ml-2`}>
+              {priceChange24h.isPositive ? (
             <TrendingUp className="w-3 h-3 mr-0.5" />
-            +5.2% (24h)
+              ) : (
+                <TrendingDown className="w-3 h-3 mr-0.5" />
+              )}
+              {priceChange24h.isPositive ? '+' : ''}{priceChange24h.percent.toFixed(1)}% (24h)
           </span>
+          ) : null}
         </div>
-        <div id="chart-container" className={`h-[${height}px] w-full bg-[#0a0b0d] relative`} style={{ height: `${height}px` }}>
-          <ResponsiveContainer width="100%" height={height}>
-            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+        <div id="chart-container" className="w-full bg-[#0a0b0d] relative outline-none flex-1" style={{ height: `${height}px`, minHeight: `${height}px`, maxHeight: `${height}px`, outline: 'none' }} tabIndex={-1}>
+          <ResponsiveContainer width="100%" height={height} className="outline-none">
+            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }} className="outline-none">
               <defs>
                 <linearGradient id="colorYes" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#22c55e" stopOpacity={0.2} />
@@ -336,37 +385,43 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
       }
     }
   };
-  
+
   return (
-    <div className="mb-10">
+    <div className="w-full h-full flex flex-col">
       <div className="flex items-baseline gap-3 mb-2">
         <span className="text-3xl md:text-4xl font-black text-pm-green tracking-tight">
           {yesPercent}%
         </span>
         <span className="text-lg font-bold text-pm-green">Yes</span>
-        <span className="flex items-center text-xs font-bold text-pm-green bg-pm-green-dim px-2 py-0.5 rounded ml-2">
+        {priceChange24h !== null ? (
+          <span className={`flex items-center text-xs font-bold ${priceChange24h.isPositive ? 'text-pm-green bg-pm-green-dim' : 'text-red-500 bg-red-500/20'} px-2 py-0.5 rounded ml-2`}>
+            {priceChange24h.isPositive ? (
           <TrendingUp className="w-3 h-3 mr-0.5" />
-          +5.2% (24h)
+            ) : (
+              <TrendingDown className="w-3 h-3 mr-0.5" />
+            )}
+            {priceChange24h.isPositive ? '+' : ''}{priceChange24h.percent.toFixed(1)}% (24h)
         </span>
+        ) : null}
       </div>
-        <div id="chart-container" className="w-full bg-[#0a0b0d] relative" style={{ height: `${height}px` }}>
-          <ResponsiveContainer width="100%" height={height}>
-          <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+        <div id="chart-container" className="w-full bg-[#0a0b0d] relative outline-none flex-1" style={{ height: `${height}px`, minHeight: `${height}px`, maxHeight: `${height}px`, outline: 'none' }} tabIndex={-1}>
+          <ResponsiveContainer width="100%" height={height} className="outline-none">
+          <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }} className="outline-none">
             <defs>
               <linearGradient id="colorYes" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#22c55e" stopOpacity={0.2} />
                 <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis 
-              dataKey="time" 
+            <XAxis
+              dataKey="time"
               height={40}
               hide={false}
               tick={{fill: '#4a4a4a', fontSize: 12}}
               stroke="#4a4a4a"
               tickLine={false}
             />
-            <YAxis 
+            <YAxis
               domain={[0, 1]}
               tickFormatter={(value) => `${Math.round(value * 100)}%`}
               stroke="#4a4a4a"
@@ -390,9 +445,9 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
               dot={false}
             />
             {isResolved && (
-              <ReferenceLine 
-                x={chartData[resolvedTimeIndex]?.time} 
-                stroke="#ef4444" 
+              <ReferenceLine
+                x={chartData[resolvedTimeIndex]?.time}
+                stroke="#ef4444"
                 strokeDasharray="5 5"
                 label={{ value: "结算点", position: "top", fill: "#ef4444" }}
               />
@@ -452,7 +507,7 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
                 {!isGenerated && (
                   <span className="ml-1 text-[10px] opacity-50">+</span>
                 )}
-              </button>
+          </button>
             );
           })}
         </div>

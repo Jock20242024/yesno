@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { DBService } from '@/lib/dbService';
 import { TransactionStatus } from '@/types/data';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth-core/sessionStore';
+import { requireAuth } from '@/lib/auth/utils';
 
 /**
  * 充值 API
@@ -13,30 +12,22 @@ import { getSession } from '@/lib/auth-core/sessionStore';
  * 请求体：
  * - amount: 充值金额
  * - txHash: 交易哈希（模拟）
+ * 
+ * 🔥 统一认证：使用 NextAuth 进行身份验证
  */
 export async function POST(request: Request) {
   try {
-    // 从 Cookie 读取 auth_core_session
-    const cookieStore = await cookies();
-    const sessionId = cookieStore.get('auth_core_session')?.value;
+    // 🔥 使用统一的 NextAuth 认证
+    const authResult = await requireAuth();
     
-    if (!sessionId) {
+    if (!authResult.success) {
       return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
+        { success: false, error: authResult.error },
+        { status: authResult.statusCode }
       );
     }
 
-    // 调用 sessionStore.getSession(sessionId)
-    const userId = await getSession(sessionId);
-    
-    // 若 session 不存在，返回 401
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'Session expired or invalid' },
-        { status: 401 }
-      );
-    }
+    const userId = authResult.userId;
 
     // 解析请求体
     const body = await request.json();

@@ -9,6 +9,7 @@ import { runRelayEngine } from '@/lib/factory/relay';
 import { runSettlementScanner } from '@/lib/factory/settlement';
 import { syncOdds } from '@/lib/scrapers/oddsRobot';
 import { startOddsWorker } from '@/lib/queue/oddsQueue';
+import { getSchedulerActiveStatus } from '@/lib/redis';
 
 // 单例标志
 let isSchedulerStarted = false;
@@ -44,6 +45,18 @@ export function startCronScheduler(): void {
   // 1. 赔率同步（每30秒执行一次）
   // 用于实时同步工厂市场和 Polymarket 市场的赔率数据
   cron.schedule('*/30 * * * * *', async () => {
+    // 🔥 全局开关检查：从 Redis 读取状态
+    try {
+      const isActive = await getSchedulerActiveStatus();
+      if (!isActive) {
+        // 只在第一次跳过时输出日志，避免刷屏
+        return;
+      }
+    } catch (error: any) {
+      // Redis 不可用时，默认继续运行（容错处理）
+      console.warn(`⚠️ [Cron Scheduler] 读取调度器状态失败: ${error.message}，继续运行`);
+    }
+    
     // 🔥 性能优化：防重叠锁机制
     if (isOddsSyncRunning) {
       return; // 上一次任务还在运行，直接跳过
@@ -62,6 +75,18 @@ export function startCronScheduler(): void {
   // 2. 工厂市场自动接力与结算（每30秒执行一次）
   // 用于确保工厂市场永不断流，并及时结算已到期的市场
   cron.schedule('*/30 * * * * *', async () => {
+    // 🔥 全局开关检查：从 Redis 读取状态
+    try {
+      const isActive = await getSchedulerActiveStatus();
+      if (!isActive) {
+        // 只在第一次跳过时输出日志，避免刷屏
+        return;
+      }
+    } catch (error: any) {
+      // Redis 不可用时，默认继续运行（容错处理）
+      console.warn(`⚠️ [Cron Scheduler] 读取调度器状态失败: ${error.message}，继续运行`);
+    }
+    
     // 🔥 性能优化：防重叠锁机制
     if (isFactoryRelayRunning) {
       return; // 上一次任务还在运行，直接跳过
@@ -90,9 +115,17 @@ export function startCronScheduler(): void {
   // 暂时注释掉，因为 runRelayEngine 已经包含了预生成逻辑
   
   isSchedulerStarted = true;
-  console.log('✅ [Cron Scheduler] 定时任务已启动:');
-  console.log('   - 赔率同步: 每30秒');
-  console.log('   - 工厂市场自动接力与结算: 每30秒');
+  
+  // 读取初始状态
+  getSchedulerActiveStatus().then(isActive => {
+    console.log('✅ [Cron Scheduler] 定时任务已启动:');
+    console.log('   - 赔率同步: 每30秒', isActive ? '(运行中)' : '(已暂停)');
+    console.log('   - 工厂市场自动接力与结算: 每30秒', isActive ? '(运行中)' : '(已暂停)');
+  }).catch(() => {
+    console.log('✅ [Cron Scheduler] 定时任务已启动（默认运行中）');
+    console.log('   - 赔率同步: 每30秒');
+    console.log('   - 工厂市场自动接力与结算: 每30秒');
+  });
 }
 
 /**

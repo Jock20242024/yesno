@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { DBService } from '@/lib/mockData';
+import { DBService } from '@/lib/dbService'; // 🔥 修复：使用正确的 dbService 而不是 mockData
 import { comparePassword } from '@/services/authService';
 
 /**

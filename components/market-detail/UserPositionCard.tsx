@@ -95,7 +95,7 @@ export default function UserPositionCard({
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {/* 持有份额 */}
         <div className="flex flex-col gap-1">
           <span className="text-zinc-500 text-xs font-medium">持有份额 (Shares)</span>
@@ -113,6 +113,16 @@ export default function UserPositionCard({
             isLoser ? "text-zinc-500" : "text-white"
           }`}>
             {formatUSD(position.avgPrice)}
+          </span>
+        </div>
+
+        {/* 🔥 总成本 (Total Cost) */}
+        <div className="flex flex-col gap-1">
+          <span className="text-zinc-500 text-xs font-medium">总投入 (Total Cost)</span>
+          <span className={`font-mono font-bold text-sm ${
+            isLoser ? "text-zinc-500" : "text-white"
+          }`}>
+            {formatUSD(totalCost)}
           </span>
         </div>
 

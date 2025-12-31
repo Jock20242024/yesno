@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { formatUSD } from "@/lib/utils";
 import CommentsTab from "./tabs/CommentsTab";
 import HoldersTab from "./tabs/HoldersTab";
@@ -14,6 +15,14 @@ interface OrderBookProps {
   endDate?: string;
   userOrders?: any[]; // 修复详情页订单列表：接收用户订单数据
   marketId?: string; // 市场 ID
+  onPriceSelect?: (price: number) => void; // 🔥 新增：点击订单簿价格时的回调
+}
+
+interface OrderBookData {
+  asks: Array<{ price: number; quantity: number; total: number }>;
+  bids: Array<{ price: number; quantity: number; total: number }>;
+  spread: number;
+  currentPrice: number;
 }
 
 export default function OrderBook({ 
@@ -23,7 +32,12 @@ export default function OrderBook({
   endDate,
   userOrders = [], // 修复详情页订单列表：使用从 API 获取的用户订单
   marketId,
+  onPriceSelect, // 🔥 新增：点击价格回调
 }: OrderBookProps) {
+  const [orderBookData, setOrderBookData] = useState<OrderBookData | null>(null);
+  const [isLoadingOrderBook, setIsLoadingOrderBook] = useState(true);
+  const [orderBookError, setOrderBookError] = useState<string | null>(null);
+
   // 🔥 逻辑守卫：确保必要数据存在
   if (!marketId) {
     return (
@@ -33,32 +47,64 @@ export default function OrderBook({
     );
   }
 
-  // 修复详情页订单列表：如果提供了用户订单，使用它们；否则使用模拟数据
-  // API 调用：确认该组件调用了正确的 API，并且能够正确接收和渲染下注成功后生成的持仓记录
-  const orders = userOrders.length > 0 
-    ? userOrders.map((order) => {
-        // 从订单数据转换为订单簿格式
-        // 简化：使用订单金额作为数量，价格需要从市场数据获取（这里使用占位值）
-        return {
-          price: 0.5, // 占位价格，实际应该从市场数据获取
-          quantity: order.amount,
-          total: order.amount,
-          type: order.outcomeSelection === 'YES' ? 'buy' : 'sell', // 简化映射
-        };
-      })
-    : [
-        // 如果没有用户订单，使用模拟数据（向后兼容）
-        { price: 0.66, quantity: 800, total: 528.0, type: "sell" },
-        { price: 0.67, quantity: 2100, total: 1407.0, type: "sell" },
-        { price: 0.65, quantity: 1250, total: 812.5, type: "buy" },
-        { price: 0.64, quantity: 5000, total: 3200.0, type: "buy" },
-      ];
+  // 🔥 获取真实订单簿数据
+  useEffect(() => {
+    if (!marketId || activeTab !== "orderbook") return;
+
+    const fetchOrderBook = async () => {
+      try {
+        setIsLoadingOrderBook(true);
+        setOrderBookError(null);
+
+        const response = await fetch(`/api/markets/${marketId}/orderbook`, {
+          cache: 'no-store',
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch order book');
+        }
+
+        const result = await response.json();
+
+        if (result.success && result.data) {
+          setOrderBookData(result.data);
+        } else {
+          throw new Error(result.error || 'Invalid response format');
+        }
+      } catch (err) {
+        console.error('Failed to fetch order book:', err);
+        setOrderBookError(err instanceof Error ? err.message : 'Failed to load order book');
+      } finally {
+        setIsLoadingOrderBook(false);
+      }
+    };
+
+    fetchOrderBook();
+  }, [marketId, activeTab]);
+
+  // 转换订单簿数据为表格格式
+  const orders = orderBookData 
+    ? [
+        ...orderBookData.asks.map(ask => ({
+          price: ask.price,
+          quantity: ask.quantity,
+          total: ask.total,
+          type: "sell" as const,
+        })),
+        ...orderBookData.bids.map(bid => ({
+          price: bid.price,
+          quantity: bid.quantity,
+          total: bid.total,
+          type: "buy" as const,
+        })),
+      ]
+    : [];
 
   const tabs: { id: DetailTab; label: string }[] = [
-    { id: "orderbook", label: "订单簿" },
-    { id: "comments", label: "事件评论" },
-    { id: "holders", label: "持有者" },
-    { id: "rules", label: "规则" },
+    { id: "orderbook", label: "Order Book" },
+    { id: "comments", label: "Comments" },
+    { id: "holders", label: "Holders" },
+    { id: "rules", label: "Rules" },
   ];
 
   const handleTabClick = (tab: DetailTab) => {
@@ -68,16 +114,18 @@ export default function OrderBook({
   };
 
   return (
-    <div>
-      <div className="border-b border-pm-border flex gap-8 mb-4">
+    <div className="w-full max-w-full overflow-hidden relative z-10">
+      {/* 🔥 确保标签页总是可见 - 使用更明显的样式和背景，提升层级 */}
+      <div className="border-b border-pm-border flex gap-4 md:gap-8 mb-4 w-full overflow-x-auto py-2 min-h-[48px] items-end relative z-10 bg-transparent">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => handleTabClick(tab.id)}
-            className={`pb-3 border-b-2 text-sm font-bold transition-colors ${
+            type="button"
+            className={`pb-3 border-b-2 text-sm font-bold transition-colors whitespace-nowrap px-1 cursor-pointer ${
               activeTab === tab.id
-                ? "border-pm-text text-white"
-                : "border-transparent text-pm-text-dim hover:text-white"
+                ? "border-pm-text text-white border-opacity-100"
+                : "border-transparent text-pm-text-dim hover:text-white hover:border-pm-text-dim hover:border-opacity-50"
             }`}
           >
             {tab.label}
@@ -89,47 +137,76 @@ export default function OrderBook({
       <div>
         {activeTab === "orderbook" && (
           <div className="bg-pm-card rounded-xl border border-pm-border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-pm-card-hover text-xs font-semibold text-pm-text-dim uppercase tracking-wider">
-                <tr>
-                  <th className="py-3 px-6 text-left">价格 (USD)</th>
-                  <th className="py-3 px-6 text-right">数量 (份)</th>
-                  <th className="py-3 px-6 text-right">总计 (USD)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-pm-border">
-                {orders
-                  .filter((order) => order.type === "sell")
-                  .map((order, index) => (
-                    <tr
-                      key={`sell-${index}`}
-                      className="hover:bg-pm-card-hover transition-colors"
+            {isLoadingOrderBook ? (
+              <div className="text-pm-text-dim text-center py-12">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-2 border-pm-text-dim border-t-primary rounded-full animate-spin"></div>
+                  <span className="text-sm">Loading order book...</span>
+                </div>
+              </div>
+            ) : orderBookError ? (
+              <div className="text-pm-red text-center py-12">
+                {orderBookError}
+              </div>
+            ) : orderBookData && orders.length > 0 ? (
+              <div className="w-full overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-pm-card-hover text-xs font-semibold text-pm-text-dim uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-6 text-left">Price (USD)</th>
+                    <th className="py-3 px-6 text-right">Quantity</th>
+                    <th className="py-3 px-6 text-right">Total (USD)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-pm-border">
+                  {/* 卖单（从高到低显示，但实际排序是从低到高） */}
+                  {orderBookData.asks
+                    .slice()
+                    .reverse() // 反转数组，使价格最高的卖单显示在最上面
+                    .map((order, index) => (
+                      <tr
+                        key={`sell-${index}`}
+                        className="hover:bg-pm-card-hover transition-colors cursor-pointer"
+                        onClick={() => {
+                          // 🔥 点击填充价格：触发回调，将价格传递给父组件
+                          if (onPriceSelect) {
+                            onPriceSelect(order.price);
+                          }
+                        }}
+                      >
+                        <td className="py-2.5 px-6 font-mono text-pm-red">
+                          {formatUSD(order.price)}
+                        </td>
+                        <td className="py-2.5 px-6 text-right text-white font-mono">
+                          {order.quantity.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-6 text-right text-pm-text-dim font-mono">
+                          {formatUSD(order.total)}
+                        </td>
+                      </tr>
+                    ))}
+                  {/* 价差行 */}
+                  <tr>
+                    <td
+                      className="py-1 px-6 bg-pm-card-hover/30 text-center text-xs text-pm-text-dim font-mono tracking-widest"
+                      colSpan={3}
                     >
-                      <td className="py-2.5 px-6 font-mono text-pm-red">
-                        {formatUSD(order.price)}
-                      </td>
-                      <td className="py-2.5 px-6 text-right text-white font-mono">
-                        {order.quantity.toLocaleString()}
-                      </td>
-                      <td className="py-2.5 px-6 text-right text-pm-text-dim font-mono">
-                        {formatUSD(order.total)}
-                      </td>
-                    </tr>
-                  ))}
-                <tr>
-                  <td
-                    className="py-1 px-6 bg-pm-card-hover/30 text-center text-xs text-pm-text-dim font-mono tracking-widest"
-                    colSpan={3}
-                  >
-                    --- Spread: $0.01 ---
-                  </td>
-                </tr>
-                {orders
-                  .filter((order) => order.type === "buy")
-                  .map((order, index) => (
+                      {orderBookData.spread > 0 
+                        ? `--- Spread: ${formatUSD(orderBookData.spread)} ---`
+                        : '--- Spread: N/A ---'}
+                    </td>
+                  </tr>
+                  {/* 买单（从高到低显示） */}
+                  {orderBookData.bids.map((order, index) => (
                     <tr
                       key={`buy-${index}`}
-                      className="hover:bg-pm-card-hover transition-colors"
+                      className="hover:bg-pm-card-hover transition-colors cursor-pointer"
+                      onClick={() => {
+                        // 🔥 点击填充价格：触发回调，将价格传递给父组件
+                        if (onPriceSelect) {
+                          onPriceSelect(order.price);
+                        }
+                      }}
                     >
                       <td className="py-2.5 px-6 font-mono text-pm-green">
                         {formatUSD(order.price)}
@@ -142,13 +219,19 @@ export default function OrderBook({
                       </td>
                     </tr>
                   ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+              </div>
+            ) : (
+              <div className="text-pm-text-dim text-center py-12">
+                No order data available
+              </div>
+            )}
           </div>
         )}
 
-        {activeTab === "comments" && <CommentsTab />}
-        {activeTab === "holders" && <HoldersTab />}
+        {activeTab === "comments" && <CommentsTab marketId={marketId} />}
+        {activeTab === "holders" && <HoldersTab marketId={marketId} />}
         {activeTab === "rules" && <RulesTab marketTitle={marketTitle} endDate={endDate} />}
       </div>
     </div>

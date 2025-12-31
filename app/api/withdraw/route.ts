@@ -9,26 +9,39 @@
  */
 
 import { NextResponse } from 'next/server';
-import { auth } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from '@/lib/prisma';
 import { TransactionType, TransactionStatus } from '@prisma/client';
+import { requireAuth } from '@/lib/auth/utils';
 
 export const dynamic = "force-dynamic";
 
+/**
+ * 提现 API
+ * POST /api/withdraw
+ * 
+ * 严格的后端校验逻辑：
+ * 1. 身份校验：使用 NextAuth requireAuth()
+ * 2. 余额对账：从数据库重新查询用户余额，不信任前端传的余额
+ * 3. 事务原子性：确保扣除余额和创建 Transaction 记录同时成功或失败
+ * 
+ * 🔥 统一认证：使用 NextAuth 进行身份验证
+ */
 export async function POST(request: Request) {
   try {
-    // ========== 第一重锁：身份校验 ==========
-    const session = await auth();
+    // 🔥 使用统一的 NextAuth 认证
+    const authResult = await requireAuth();
     
-    if (!session?.user?.email) {
+    if (!authResult.success) {
       return NextResponse.json(
         { 
           success: false, 
-          error: '未登录，请先登录' 
+          error: authResult.error || '未登录，请先登录'
         },
-        { status: 401 }
+        { status: authResult.statusCode }
       );
     }
+    
+    const userId = authResult.userId;
 
     // 解析请求体
     const body = await request.json();
@@ -70,8 +83,9 @@ export async function POST(request: Request) {
 
     // ========== 第二重锁：余额对账（不信任前端传来的余额）==========
     // 必须从数据库重新查询该用户的最新 balance
+    // 🔥 直接使用 userId 查询，不需要通过 email
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { id: userId },
       select: {
         id: true,
         email: true,

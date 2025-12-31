@@ -199,6 +199,24 @@ export async function executeSettlement(
       // 🔥 性能优化：删除高频日志
       // console.log(`ℹ️ [Settlement] 市场 ${marketId} 没有订单，直接标记为已结算`);
       await prisma.$transaction(async (tx) => {
+        // 🔥 修复：即使没有订单，也要关闭所有 Position
+        const allPositions = await tx.position.findMany({
+          where: {
+            marketId: marketId,
+            status: 'OPEN',
+          },
+        });
+
+        for (const position of allPositions) {
+          await tx.position.update({
+            where: { id: position.id },
+            data: {
+              status: 'CLOSED',
+            },
+          });
+          console.log(`📦 [Settlement] 持仓 ${position.id} 已关闭（无订单情况，用户: ${position.userId}, 方向: ${position.outcome}）`);
+        }
+
         await tx.market.update({
           where: { id: marketId },
           data: {
@@ -265,7 +283,7 @@ export async function executeSettlement(
       }
     }
 
-    // 8. 🔥 使用事务确保所有操作的原子性（订单更新、余额更新、市场状态更新）
+    // 8. 🔥 使用事务确保所有操作的原子性（订单更新、余额更新、Position状态更新、Transaction记录、市场状态更新）
     await prisma.$transaction(async (tx) => {
       // 批量更新订单 payout
       for (const order of orders) {
@@ -276,9 +294,29 @@ export async function executeSettlement(
         });
       }
 
-      // 批量更新用户余额
+      // 🔥 修复：更新所有 Position 的状态（赢家和输家都设为 CLOSED）
+      const allPositions = await tx.position.findMany({
+        where: {
+          marketId: marketId,
+          status: 'OPEN', // 只更新 OPEN 状态的持仓
+        },
+      });
+
+      for (const position of allPositions) {
+        // 无论输赢，都将 Position 状态设为 CLOSED
+        await tx.position.update({
+          where: { id: position.id },
+          data: {
+            status: 'CLOSED',
+          },
+        });
+        console.log(`📦 [Settlement] 持仓 ${position.id} 已关闭（用户: ${position.userId}, 方向: ${position.outcome}）`);
+      }
+
+      // 批量更新用户余额并创建 Transaction 记录
       for (const [userId, payout] of userPayouts.entries()) {
         if (payout > 0) {
+          // 更新用户余额
           await tx.user.update({
             where: { id: userId },
             data: {
@@ -288,6 +326,18 @@ export async function executeSettlement(
             },
           });
           console.log(`💰 [Settlement] 用户 ${userId} 获得回报: $${payout.toFixed(2)}`);
+
+          // 🔥 修复：创建 Transaction 记录记录奖金发放
+          await tx.transaction.create({
+            data: {
+              userId: userId,
+              amount: payout,
+              type: 'WIN', // 使用 WIN 类型表示结算奖金
+              reason: `市场 ${marketId} 结算奖金（${finalOutcome} 胜）`,
+              status: 'COMPLETED',
+            },
+          });
+          console.log(`📝 [Settlement] 已创建 Transaction 记录（用户: ${userId}, 金额: $${payout.toFixed(2)}）`);
         }
       }
 

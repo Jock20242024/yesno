@@ -2,12 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 🔥 移除图表点击时的蓝色聚焦边框 */
+.recharts-wrapper,
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-surface,
+.recharts-surface:focus,
+.recharts-surface:focus-visible,
+svg.recharts-surface,
+svg.recharts-surface:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* 移除图表容器的聚焦边框 */
+#chart-container,
+#chart-container:focus,
+#chart-container:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 @layer base {
   body {
     font-family: 'Inter', 'Noto Sans SC', sans-serif;
   }
   
-  /* 强制确保输入框和文本区域可以选中文本 - 使用最高优先级选择器 */
+  /* 🔥 强制确保输入框和文本区域可以选中文本 - 使用最高优先级选择器 */
   input,
   textarea,
   input[type="text"],
@@ -74,7 +95,7 @@
     animation: flame-jump 1.5s ease-in-out infinite !important;
   }
   
-  /* 强制所有输入框允许文本选择 - 使用最高优先级 */
+  /* 🔥 强制所有输入框允许文本选择 - 使用最高优先级，覆盖所有可能的样式 */
   input[type="text"],
   input[type="email"],
   input[type="password"],
@@ -84,12 +105,18 @@
   input[type="search"],
   textarea,
   input.select-text,
-  input[class*="select-text"] {
+  input[class*="select-text"],
+  /* 🔥 添加更具体的选择器，确保覆盖所有情况 */
+  input.w-full,
+  input.bg-pm-bg,
+  input.bg-pm-card {
     user-select: text !important;
     -webkit-user-select: text !important;
     -moz-user-select: text !important;
     -ms-user-select: text !important;
     cursor: text !important;
+    /* 🔥 确保没有任何样式会阻止选择 */
+    pointer-events: auto !important;
   }
   
   /* 🔥 强制图表容器高度 */
@@ -98,4 +125,3 @@
     min-height: 320px !important;
   }
 }
-

@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/app/api/auth/[...nextauth]/route';
+import { auth } from '@/lib/authExport';
 import { runSettlementScanner } from '@/lib/factory/settlement';
 
 export const dynamic = 'force-dynamic';

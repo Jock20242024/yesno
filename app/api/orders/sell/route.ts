@@ -1,9 +1,32 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { MarketStatus, Outcome } from '@/types/data';
 import { prisma } from '@/lib/prisma';
 import { DBService } from '@/lib/dbService';
-import { getSession } from '@/lib/auth-core/sessionStore';
+import { requireAuth } from '@/lib/auth/utils';
+import { TransactionType, TransactionStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
+
+// 🔥 系统账户配置（与买入 API 保持一致）
+const SYSTEM_ACCOUNT_EMAILS = {
+  FEE: 'system.fee@yesno.com',        // 手续费账户
+  AMM: 'system.amm@yesno.com',        // AMM 资金池
+} as const;
+
+/**
+ * 获取系统账户 User 对象
+ * @param email 系统账户 email
+ * @returns User 对象或 null
+ */
+async function getSystemUser(email: string) {
+  return await prisma.user.findUnique({ 
+    where: { email },
+    select: {
+      id: true,
+      email: true,
+      balance: true,
+    },
+  });
+}
 
 /**
  * 卖出订单 API
@@ -17,27 +40,17 @@ import { getSession } from '@/lib/auth-core/sessionStore';
  */
 export async function POST(request: Request) {
   try {
-    // 从 Cookie 读取 auth_core_session
-    const cookieStore = await cookies();
-    const sessionId = cookieStore.get('auth_core_session')?.value;
+    // 🔥 使用统一的 NextAuth 认证
+    const authResult = await requireAuth();
     
-    if (!sessionId) {
+    if (!authResult.success) {
       return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
+        { success: false, error: authResult.error },
+        { status: authResult.statusCode }
       );
     }
 
-    // 调用 sessionStore.getSession(sessionId)
-    const userId = await getSession(sessionId);
-    
-    // 若 session 不存在，返回 401
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'Session expired or invalid' },
-        { status: 401 }
-      );
-    }
+    const userId = authResult.userId;
 
     // 2. 解析请求体
     const body = await request.json();
@@ -99,11 +112,52 @@ export async function POST(request: Request) {
       );
     }
 
-    // 7. 使用事务执行卖出操作
+    // 7. 获取系统账户（在事务外检查，避免事务内查询失败）
+    let feeAccount = await getSystemUser(SYSTEM_ACCOUNT_EMAILS.FEE);
+    let ammAccount = await getSystemUser(SYSTEM_ACCOUNT_EMAILS.AMM);
+
+    // 🔥 如果系统账户不存在，自动创建
+    if (!feeAccount) {
+      console.log('⚠️ [Sell API] 手续费账户不存在，自动创建...');
+      feeAccount = await prisma.user.create({
+        data: {
+          email: SYSTEM_ACCOUNT_EMAILS.FEE,
+          balance: 0,
+          isAdmin: false,
+          isBanned: false,
+        },
+        select: {
+          id: true,
+          email: true,
+          balance: true,
+        },
+      });
+      console.log('✅ [Sell API] 手续费账户已创建:', feeAccount.id);
+    }
+
+    if (!ammAccount) {
+      console.log('⚠️ [Sell API] AMM 资金池账户不存在，自动创建...');
+      ammAccount = await prisma.user.create({
+        data: {
+          email: SYSTEM_ACCOUNT_EMAILS.AMM,
+          balance: 0,
+          isAdmin: false,
+          isBanned: false,
+        },
+        select: {
+          id: true,
+          email: true,
+          balance: true,
+        },
+      });
+      console.log('✅ [Sell API] AMM 资金池账户已创建:', ammAccount.id);
+    }
+
+    // 8. 使用事务执行卖出操作
     const PRECISION_MULTIPLIER = 100;
     
     const result = await prisma.$transaction(async (tx) => {
-      // 7.1 锁定用户和Position记录
+      // 8.1 锁定用户和Position记录
       const user = await tx.user.findUnique({
         where: { id: userId },
       });
@@ -112,7 +166,7 @@ export async function POST(request: Request) {
         throw new Error('User not found');
       }
 
-      // 7.2 查询OPEN Position（带锁）
+      // 8.2 查询OPEN Position（带锁）
       const position = await tx.position.findFirst({
         where: {
           userId,
@@ -130,44 +184,77 @@ export async function POST(request: Request) {
         throw new Error('Insufficient shares');
       }
 
-      // 7.3 计算当前市场价格
-      const totalVolume = market.totalYes + market.totalNo;
-      const currentPrice = outcome === 'YES'
-        ? (market.totalYes / totalVolume)
-        : (market.totalNo / totalVolume);
+      // 8.3 计算当前市场价格（处理空池情况）
+      const totalVolume = (market.totalYes || 0) + (market.totalNo || 0);
+      let currentPrice: number;
+      if (totalVolume <= 0) {
+        // 空池：使用默认价格 0.5
+        currentPrice = 0.5;
+      } else {
+        currentPrice = outcome === 'YES'
+          ? (market.totalYes / totalVolume)
+          : (market.totalNo / totalVolume);
+      }
 
-      // 7.4 计算卖出金额（扣除手续费）
+      // 8.4 计算卖出金额（扣除手续费）
       const grossValue = sharesNum * currentPrice;
       const feeRate = market.feeRate || 0.02;
       const feeDeducted = grossValue * feeRate;
       const netReturn = grossValue - feeDeducted;
 
-      // 7.5 更新用户余额
-      const userBalanceCents = Math.round(user.balance * PRECISION_MULTIPLIER);
+      // 🔥 8.5 资金划转：从 AMM 池扣除，给用户增加
+      const grossValueCents = Math.round(grossValue * PRECISION_MULTIPLIER);
       const netReturnCents = Math.round(netReturn * PRECISION_MULTIPLIER);
-      const newBalanceCents = userBalanceCents + netReturnCents;
-      const newBalance = newBalanceCents / PRECISION_MULTIPLIER;
+      const feeDeductedCents = Math.round(feeDeducted * PRECISION_MULTIPLIER);
+
+      // 8.5.1 更新用户余额（增加净收益）
+      const userBalanceCents = Math.round(user.balance * PRECISION_MULTIPLIER);
+      const newUserBalanceCents = userBalanceCents + netReturnCents;
+      const newUserBalance = newUserBalanceCents / PRECISION_MULTIPLIER;
 
       const updatedUser = await tx.user.update({
         where: { id: userId },
-        data: { balance: newBalance },
+        data: { balance: newUserBalance },
       });
 
-      // 7.6 更新市场池（反向操作）
+      // 8.5.2 更新手续费账户余额（增加手续费收入）
+      const feeAccountBalanceCents = Math.round(feeAccount.balance * PRECISION_MULTIPLIER);
+      const newFeeBalanceCents = feeAccountBalanceCents + feeDeductedCents;
+      const newFeeBalance = newFeeBalanceCents / PRECISION_MULTIPLIER;
+
+      await tx.user.update({
+        where: { id: feeAccount.id },
+        data: { balance: newFeeBalance },
+      });
+
+      // 8.5.3 更新 AMM 资金池余额（扣除支付给用户的金额）
+      const ammAccountBalanceCents = Math.round(ammAccount.balance * PRECISION_MULTIPLIER);
+      // 🔥 检查 AMM 账户余额是否足够（防止穿仓）
+      if (ammAccountBalanceCents < grossValueCents) {
+        throw new Error(`Insufficient AMM pool balance: ${ammAccount.balance} < ${grossValue}`);
+      }
+      const newAmmBalanceCents = ammAccountBalanceCents - grossValueCents;
+      const newAmmBalance = newAmmBalanceCents / PRECISION_MULTIPLIER;
+
+      await tx.user.update({
+        where: { id: ammAccount.id },
+        data: { balance: newAmmBalance },
+      });
+
+      // 8.6 更新市场池（反向操作）
       // 🔥 修复：只更新 internalVolume（内部交易量），不覆盖 externalVolume
       const marketInternalVolumeCents = Math.round((market.internalVolume || 0) * PRECISION_MULTIPLIER);
-      const marketTotalYesCents = Math.round(market.totalYes * PRECISION_MULTIPLIER);
-      const marketTotalNoCents = Math.round(market.totalNo * PRECISION_MULTIPLIER);
+      const marketTotalYesCents = Math.round((market.totalYes || 0) * PRECISION_MULTIPLIER);
+      const marketTotalNoCents = Math.round((market.totalNo || 0) * PRECISION_MULTIPLIER);
 
-      const grossValueCents = Math.round(grossValue * PRECISION_MULTIPLIER);
       const newInternalVolumeCents = marketInternalVolumeCents - grossValueCents;
       const newInternalVolume = newInternalVolumeCents / PRECISION_MULTIPLIER;
 
       const newTotalYesCents = outcome === 'YES'
-        ? marketTotalYesCents - Math.round(netReturn * PRECISION_MULTIPLIER)
+        ? marketTotalYesCents - netReturnCents
         : marketTotalYesCents;
       const newTotalNoCents = outcome === 'NO'
-        ? marketTotalNoCents - Math.round(netReturn * PRECISION_MULTIPLIER)
+        ? marketTotalNoCents - netReturnCents
         : marketTotalNoCents;
 
       const newTotalYes = newTotalYesCents / PRECISION_MULTIPLIER;
@@ -192,21 +279,24 @@ export async function POST(request: Request) {
         },
       });
 
-      // 7.7 创建Order记录（SELL类型）
-      const orderId = `O-SELL-${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
+      // 8.7 创建Order记录（SELL类型）- 使用 UUID
+      const orderId = randomUUID();
       const newOrder = await tx.order.create({
         data: {
           id: orderId,
           userId,
           marketId,
           outcomeSelection: outcome as Outcome,
-          amount: netReturn,
+          amount: grossValue, // 总价值
           feeDeducted,
           type: 'SELL',
+          status: 'FILLED', // 卖出订单立即成交
+          orderType: 'MARKET', // 卖出默认是市价单
+          filledAmount: sharesNum, // 已成交份额
         },
       });
 
-      // 7.8 更新Position
+      // 8.8 更新Position
       const remainingShares = position.shares - sharesNum;
       const shouldClose = remainingShares <= 0.001;
 
@@ -218,12 +308,51 @@ export async function POST(request: Request) {
         },
       });
 
+      // 🔥 8.9 记录流水 (Transaction) - 复式记账
+      // 8.9.1 用户流水：收到卖出收益
+      await tx.transaction.create({
+        data: {
+          id: randomUUID(),
+          userId: userId,
+          type: TransactionType.BET, // 使用 BET 类型表示交易
+          amount: netReturn, // 净收益（扣除手续费后）
+          status: TransactionStatus.COMPLETED,
+          reason: `卖出 ${outcome} ${sharesNum.toFixed(4)} 份额`,
+        },
+      });
+
+      // 8.9.2 手续费账户流水：收到手续费
+      await tx.transaction.create({
+        data: {
+          id: randomUUID(),
+          userId: feeAccount.id,
+          type: TransactionType.ADMIN_ADJUSTMENT, // 系统调整类型
+          amount: feeDeducted, // 手续费收入
+          status: TransactionStatus.COMPLETED,
+          reason: `卖出订单手续费: Order ${orderId}`,
+        },
+      });
+
+      // 8.9.3 AMM 账户流水：支付给用户
+      await tx.transaction.create({
+        data: {
+          id: randomUUID(),
+          userId: ammAccount.id,
+          type: TransactionType.ADMIN_ADJUSTMENT, // 系统调整类型
+          amount: -grossValue, // 负数表示支出
+          status: TransactionStatus.COMPLETED,
+          reason: `卖出订单支付: Order ${orderId}`,
+        },
+      });
+
       return {
         updatedUser,
         updatedMarket,
         newOrder,
         updatedPosition,
         netReturn,
+        grossValue,
+        feeDeducted,
       };
     });
 
@@ -261,23 +390,32 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('❌ [Sell API] 卖出失败:', error);
     
-    if (error.message === 'Position not found' || error.message === 'Insufficient shares') {
-      return NextResponse.json(
-        {
-          success: false,
-          error: error.message,
-        },
-        { status: 400 }
-      );
+    // 🔥 详细错误信息透传（无论环境）
+    const errorResponse: any = {
+      success: false,
+      error: error.message || 'Internal server error',
+      message: error.message || 'Internal server error',
+      details: error.message,
+    };
+
+    // 添加 Prisma 错误详情（如果存在）
+    if (error.code) {
+      errorResponse.prismaCode = error.code;
+    }
+    if (error.meta) {
+      errorResponse.meta = error.meta;
+    }
+    if (error.name) {
+      errorResponse.name = error.name;
+    }
+    if (error.stack && process.env.NODE_ENV === 'development') {
+      errorResponse.stack = error.stack;
+    }
+    
+    if (error.message === 'Position not found' || error.message === 'Insufficient shares' || error.message === 'Insufficient AMM pool balance') {
+      return NextResponse.json(errorResponse, { status: 400 });
     }
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Internal server error',
-        ...(process.env.NODE_ENV === 'development' && { details: error.message }),
-      },
-      { status: 500 }
-    );
+    return NextResponse.json(errorResponse, { status: 500 });
   }
 }

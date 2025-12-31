@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { auth } from "@/lib/authExport";
 import { prisma } from '@/lib/prisma';
 import dayjs from '@/lib/dayjs';
 import { MarketStatus } from '@/types/data';
@@ -16,26 +16,76 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    // 权限校验
+    // 🔥 修复：权限校验 - 直接从数据库查询 isAdmin
     const session = await auth();
     
+    // 🔥 调试日志：打印 session 信息
+    console.log('🔍 [Settlement GET API] Session 信息:', {
+      hasSession: !!session,
+      hasUser: !!(session?.user),
+      userId: session?.user?.id,
+      userEmail: session?.user?.email,
+      userRole: (session?.user as any)?.role,
+      isAdmin: (session?.user as any)?.isAdmin,
+    });
+    
     if (!session || !session.user) {
+      console.error('❌ [Settlement GET API] Session 验证失败: session 或 user 为空');
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Admin access required.' },
         { status: 401 }
       );
     }
     
-    const userRole = (session.user as any).role;
     const userEmail = session.user.email;
-    const adminEmail = 'yesno@yesno.com';
-    
-    if (userRole !== 'ADMIN' && userEmail !== adminEmail) {
+    if (!userEmail) {
+      console.error('❌ [Settlement GET API] 用户邮箱为空');
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Admin access required.' },
         { status: 401 }
       );
     }
+    
+    // 🔥 修复：直接从数据库查询 isAdmin，不依赖 session
+    const dbUser = await prisma.user.findUnique({
+      where: { email: userEmail },
+      select: { id: true, isAdmin: true, isBanned: true },
+    });
+    
+    // 🔥 调试日志：打印数据库查询结果
+    console.log('🔍 [Settlement GET API] 数据库用户查询结果:', {
+      found: !!dbUser,
+      userId: dbUser?.id,
+      isAdmin: dbUser?.isAdmin,
+      isBanned: dbUser?.isBanned,
+      email: userEmail,
+    });
+    
+    if (!dbUser) {
+      console.error('❌ [Settlement GET API] 用户不存在于数据库');
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Admin access required.' },
+        { status: 401 }
+      );
+    }
+    
+    if (!dbUser.isAdmin) {
+      console.error('❌ [Settlement GET API] 用户不是管理员，数据库 isAdmin =', dbUser.isAdmin);
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Admin access required.' },
+        { status: 401 }
+      );
+    }
+    
+    if (dbUser.isBanned) {
+      console.error('❌ [Settlement GET API] 管理员账户已被禁用');
+      return NextResponse.json(
+        { success: false, error: 'Admin account is banned.' },
+        { status: 403 }
+      );
+    }
+    
+    console.log('✅ [Settlement GET API] 权限验证通过，用户ID:', dbUser.id);
 
     const now = dayjs.utc();
     const twentyFourHoursAgo = now.subtract(24, 'hour');
@@ -53,9 +103,7 @@ export async function GET(request: NextRequest) {
           not: MarketStatus.RESOLVED, // 确保状态不是已结算
         },
       },
-      include: {
-        marketTemplate: true,
-      },
+      // 🔥 修复：移除不存在的 marketTemplate relation，Market 模型中没有定义这个关系
       orderBy: {
         closingDate: 'asc', // 按结束时间升序（最早结束的优先显示）
       },
@@ -74,9 +122,7 @@ export async function GET(request: NextRequest) {
           gte: twentyFourHoursAgo.toDate(), // 最近 24 小时内结算的
         },
       },
-      include: {
-        marketTemplate: true,
-      },
+      // 🔥 修复：移除不存在的 marketTemplate relation，Market 模型中没有定义这个关系
       orderBy: {
         updatedAt: 'desc', // 最近结算的在前
       },
@@ -204,10 +250,21 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('❌ [Settlement API] 获取结算数据失败:', error);
+    console.error('❌ [Settlement API] 错误堆栈:', error?.stack);
+    console.error('❌ [Settlement API] 错误详情:', {
+      message: error?.message,
+      name: error?.name,
+      code: (error as any)?.code,
+    });
     return NextResponse.json(
       {
         success: false,
         error: error?.message || 'Internal server error',
+        // 🔥 开发环境返回详细错误信息，方便调试
+        ...(process.env.NODE_ENV === 'development' && {
+          details: error?.message,
+          stack: error?.stack,
+        }),
       },
       { status: 500 }
     );
@@ -225,26 +282,76 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // 权限校验
+    // 🔥 修复：权限校验 - 直接从数据库查询 isAdmin
     const session = await auth();
     
+    // 🔥 调试日志：打印 session 信息
+    console.log('🔍 [Settlement POST API] Session 信息:', {
+      hasSession: !!session,
+      hasUser: !!(session?.user),
+      userId: session?.user?.id,
+      userEmail: session?.user?.email,
+      userRole: (session?.user as any)?.role,
+      isAdmin: (session?.user as any)?.isAdmin,
+    });
+    
     if (!session || !session.user) {
+      console.error('❌ [Settlement POST API] Session 验证失败: session 或 user 为空');
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Admin access required.' },
         { status: 401 }
       );
     }
     
-    const userRole = (session.user as any).role;
     const userEmail = session.user.email;
-    const adminEmail = 'yesno@yesno.com';
-    
-    if (userRole !== 'ADMIN' && userEmail !== adminEmail) {
+    if (!userEmail) {
+      console.error('❌ [Settlement POST API] 用户邮箱为空');
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Admin access required.' },
         { status: 401 }
       );
     }
+    
+    // 🔥 修复：直接从数据库查询 isAdmin，不依赖 session
+    const dbUser = await prisma.user.findUnique({
+      where: { email: userEmail },
+      select: { id: true, isAdmin: true, isBanned: true },
+    });
+    
+    // 🔥 调试日志：打印数据库查询结果
+    console.log('🔍 [Settlement POST API] 数据库用户查询结果:', {
+      found: !!dbUser,
+      userId: dbUser?.id,
+      isAdmin: dbUser?.isAdmin,
+      isBanned: dbUser?.isBanned,
+      email: userEmail,
+    });
+    
+    if (!dbUser) {
+      console.error('❌ [Settlement POST API] 用户不存在于数据库');
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Admin access required.' },
+        { status: 401 }
+      );
+    }
+    
+    if (!dbUser.isAdmin) {
+      console.error('❌ [Settlement POST API] 用户不是管理员，数据库 isAdmin =', dbUser.isAdmin);
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Admin access required.' },
+        { status: 401 }
+      );
+    }
+    
+    if (dbUser.isBanned) {
+      console.error('❌ [Settlement POST API] 管理员账户已被禁用');
+      return NextResponse.json(
+        { success: false, error: 'Admin account is banned.' },
+        { status: 403 }
+      );
+    }
+    
+    console.log('✅ [Settlement POST API] 权限验证通过，用户ID:', dbUser.id);
 
     const body = await request.json();
     const { marketId, forceOutcome } = body;
@@ -272,7 +379,7 @@ export async function POST(request: NextRequest) {
     // 如果是强制手动结算，使用指定的 outcome
     if (forceOutcome) {
       // 直接调用结算逻辑（不通过 HTTP）
-      const { DBService } = await import('@/lib/mockData');
+      const { DBService } = await import('@/lib/dbService'); // 🔥 修复：使用正确的 dbService 而不是 mockData
       const { MarketStatus, Outcome } = await import('@/types/data');
       
       const orders = await prisma.order.findMany({

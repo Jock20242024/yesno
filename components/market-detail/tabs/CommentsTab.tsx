@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { MessageCircle, Heart, Reply } from "lucide-react";
 
+interface CommentsTabProps {
+  marketId?: string;
+}
+
 interface Comment {
   id: string;
   user: {
@@ -15,50 +19,17 @@ interface Comment {
   replies: number;
 }
 
-// Mock 评论数据
-const mockComments: Comment[] = [
-  {
-    id: "1",
-    user: {
-      name: "CryptoTrader",
-      avatar: "/images/avatar1.png",
-    },
-    text: "Based on current market trends and technical analysis, I believe YES is the more likely outcome. The momentum is strong.",
-    timestamp: "2 hours ago",
-    likes: 12,
-    replies: 3,
-  },
-  {
-    id: "2",
-    user: {
-      name: "MarketMaster",
-      avatar: "/images/avatar2.png",
-    },
-    text: "I'm going with NO. The fundamentals don't support a YES outcome in my opinion.",
-    timestamp: "5 hours ago",
-    likes: 8,
-    replies: 1,
-  },
-  {
-    id: "3",
-    user: {
-      name: "PredictPro",
-      avatar: "/images/avatar3.png",
-    },
-    text: "This is a close call. I've analyzed both sides and I'm leaning towards YES, but it's risky.",
-    timestamp: "1 day ago",
-    likes: 15,
-    replies: 5,
-  },
-];
-
-export default function CommentsTab() {
-  const [comments, setComments] = useState<Comment[]>(mockComments);
+export default function CommentsTab({ marketId }: CommentsTabProps) {
+  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
+  // TODO: 实现真实的评论功能（需要后端API支持）
+  // 当前版本：评论功能暂未实现，显示空状态提示
   const handlePost = () => {
     if (!newComment.trim()) return;
-
+    
+    // 暂时使用本地状态（后续需要调用API保存评论）
     const comment: Comment = {
       id: Date.now().toString(),
       user: {
@@ -108,8 +79,14 @@ export default function CommentsTab() {
       </div>
 
       {/* 评论列表 */}
-      <div className="flex flex-col gap-4">
-        {comments.map((comment) => (
+      {comments.length === 0 ? (
+        <div className="text-center py-12 text-pm-text-dim">
+          <p className="mb-2">暂无评论</p>
+          <p className="text-xs">评论功能即将上线</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {comments.map((comment) => (
           <div
             key={comment.id}
             className="p-4 bg-pm-card border border-pm-border rounded-xl hover:bg-pm-card-hover transition-colors"
@@ -150,7 +127,8 @@ export default function CommentsTab() {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

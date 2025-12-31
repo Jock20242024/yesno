@@ -1,4 +1,15 @@
 /**
+ * Truncate Ethereum address to display format (0x1234...5678)
+ */
+export function truncateAddress(address: string | null | undefined, startLength = 4, endLength = 4): string {
+  if (!address || typeof address !== 'string') return '';
+  if (address.length <= startLength + endLength) return address;
+  if (!address.startsWith('0x')) return address; // Not an Ethereum address
+  
+  return `${address.slice(0, startLength + 2)}...${address.slice(-endLength)}`;
+}
+
+/**
  * 格式化金额为 USD 格式
  * @param amount 金额（数字或字符串）
  * @returns 格式化后的字符串，如 "$1,234.56"

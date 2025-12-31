@@ -1,45 +1,67 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth-core/sessionStore';
+import { requireAuth } from '@/lib/auth/utils';
+import { calculatePositionValue } from '@/lib/utils/valuation';
 
 /**
  * 获取用户持仓列表 API
- * GET /api/positions
+ * GET /api/positions?type=active|history
  * 
- * 返回当前登录用户的所有OPEN状态的持仓
+ * 查询参数：
+ * - type: 'active' (默认) 或 'history'
+ *   - active: 返回活跃持仓 (Position status=OPEN 且 Market status != RESOLVED)
+ *   - history: 返回已结束持仓 (Position status=CLOSED 或 Market status=RESOLVED)
+ * 
  * 强制规则：UI的"我的持仓"100%只能来自Position表，不允许从Trade计算
+ * 
+ * 🔥 统一认证：使用 NextAuth 进行身份验证
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // 从 Cookie 读取 auth_core_session
-    const cookieStore = await cookies();
-    const sessionId = cookieStore.get('auth_core_session')?.value;
+    // 🔥 使用统一的 NextAuth 认证
+    const authResult = await requireAuth();
     
-    if (!sessionId) {
+    if (!authResult.success) {
       return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
+        { success: false, error: authResult.error },
+        { status: authResult.statusCode }
       );
     }
 
-    // 调用 sessionStore.getSession(sessionId)
-    const userId = await getSession(sessionId);
-    
-    // 若 session 不存在，返回 401
-    if (!userId) {
+    const userId = authResult.userId;
+
+    // 1. 解析查询参数
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type') || 'active'; // 默认为 'active'
+    const marketId = searchParams.get('marketId'); // 可选：按市场ID过滤
+
+    // 2. 根据 type 构建查询条件
+    // 注意：对于 history 类型，我们需要查询所有 Position，然后在代码中进行过滤
+    // 因为需要同时考虑 Position.status 和 Market.status
+    let whereClause: any = { userId };
+
+    // 🔥 新增：如果提供了 marketId，添加市场过滤条件
+    if (marketId) {
+      whereClause.marketId = marketId;
+    }
+
+    if (type === 'active') {
+      // 活跃持仓：Position status = OPEN
+      whereClause.status = 'OPEN';
+    } else if (type === 'history') {
+      // 已结束持仓：查询所有 Position（包括 OPEN 和 CLOSED）
+      // 稍后会在代码中过滤：Position status = CLOSED 或 Market status = RESOLVED
+      // 不设置 status 过滤，查询所有状态，然后在代码中过滤
+    } else {
       return NextResponse.json(
-        { success: false, error: 'Session expired or invalid' },
-        { status: 401 }
+        { success: false, error: 'Invalid type parameter. Must be "active" or "history".' },
+        { status: 400 }
       );
     }
 
-    // 2. 从Position表查询OPEN状态的持仓
+    // 3. 从Position表查询持仓
     const positions = await prisma.position.findMany({
-      where: {
-        userId,
-        status: 'OPEN', // ========== 强制规则：只返回OPEN状态的持仓 ==========
-      },
+      where: whereClause,
       include: {
         market: {
           select: {
@@ -48,40 +70,63 @@ export async function GET() {
             totalYes: true,
             totalNo: true,
             status: true,
+            resolvedOutcome: true, // 🔥 必须包含：用于计算已结算市场的价格
+            closingDate: true, // 添加关闭日期，用于已结束列表的排序
           },
         },
       },
-      orderBy: {
-        updatedAt: 'desc',
-      },
+      orderBy: type === 'history' 
+        ? { updatedAt: 'desc' } // 已结束的按更新时间倒序（最新的在前）
+        : { updatedAt: 'desc' },
     });
 
-    // 3. 计算当前市场价格和价值
-    const positionsWithValue = positions.map((position) => {
-      const totalVolume = (position.market.totalYes || 0) + (position.market.totalNo || 0);
-      const currentPrice = position.outcome === 'YES'
-        ? (position.market.totalYes / totalVolume || 0.5)
-        : (position.market.totalNo / totalVolume || 0.5);
-      
-      const currentValue = position.shares * currentPrice;
-      const costBasis = position.shares * position.avgPrice;
-      const profitLoss = currentValue - costBasis;
-      const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
+    // 4. 根据 type 进行二次过滤
+    let filteredPositions = positions;
+    
+    if (type === 'active') {
+      // 活跃持仓：只返回市场未结算的
+      filteredPositions = positions.filter(
+        (p) => p.market.status !== 'RESOLVED' && p.market.status !== 'CLOSED'
+      );
+    } else if (type === 'history') {
+      // 已结束持仓：Position status = CLOSED 或 Market status = RESOLVED
+      filteredPositions = positions.filter(
+        (p) => p.status === 'CLOSED' || p.market.status === 'RESOLVED'
+      );
+    }
+
+    // 5. 计算当前市场价格和价值
+    // 🔥 重构：使用统一的 calculatePositionValue 工具函数
+    const positionsWithValue = filteredPositions.map((position) => {
+      const valuation = calculatePositionValue(
+        {
+          shares: position.shares,
+          avgPrice: position.avgPrice,
+          outcome: position.outcome,
+        },
+        {
+          status: position.market.status,
+          resolvedOutcome: position.market.resolvedOutcome,
+          totalYes: position.market.totalYes || 0,
+          totalNo: position.market.totalNo || 0,
+        }
+      );
 
       return {
         id: position.id,
         marketId: position.marketId,
         marketTitle: position.market.title,
         marketStatus: position.market.status,
+        resolvedOutcome: position.market.resolvedOutcome,
         outcome: position.outcome,
         shares: position.shares,
         avgPrice: position.avgPrice,
-        currentPrice,
-        currentValue,
-        costBasis,
-        profitLoss,
-        profitLossPercent,
-        status: position.status, // ========== 强制规则：必须返回status字段 ==========
+        currentPrice: valuation.currentPrice,
+        currentValue: valuation.currentValue,
+        costBasis: valuation.costBasis,
+        profitLoss: valuation.profitLoss,
+        profitLossPercent: valuation.profitLossPercent,
+        status: position.status,
         createdAt: position.createdAt.toISOString(),
         updatedAt: position.updatedAt.toISOString(),
       };

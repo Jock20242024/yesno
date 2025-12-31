@@ -123,9 +123,9 @@ export default function CategoryBar() {
                 return aOrder - bOrder;
               })
               .map((cat: ApiCategory) => {
-                // 🔥 动态获取图标组件：优先使用 slug="hot" 的判断，否则使用数据库中的 icon 字段
+                // 🔥 动态获取图标组件：优先使用 slug="hot" 或 "-1" 的判断，否则使用数据库中的 icon 字段
                 let IconComponent: LucideIcon;
-                if (cat.slug === "hot") {
+                if (cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门") {
                   // 如果是"热门"分类，强制使用 Flame 图标
                   IconComponent = Icons.Flame;
                 } else {
@@ -134,10 +134,10 @@ export default function CategoryBar() {
                 }
 
                 return {
-                  slug: cat.slug,
+                  slug: cat.slug === "-1" ? "hot" : cat.slug, // 🔥 修复：将数据库中的 -1 转换为 hot 用于路由
                   label: cat.name,
                   icon: IconComponent,
-                  isHighlight: cat.slug === "hot", // 热门分类高亮显示
+                  isHighlight: cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门", // 热门分类高亮显示
                 };
               });
 
@@ -172,9 +172,9 @@ export default function CategoryBar() {
     if (slug === "data") {
       return pathname === "/data";
     }
-    if (slug === "hot") {
+    if (slug === "hot" || slug === "-1") {
       // 🔥 修复：热门应该跳转到分类页面，而不是 /data
-      return pathname === "/category/hot" || pathname === "/markets?category=hot";
+      return pathname === "/category/hot" || pathname === "/category/-1" || pathname === "/markets?category=hot";
     }
     return pathname === `/category/${slug}`;
   };
@@ -208,7 +208,8 @@ export default function CategoryBar() {
           }
 
           // 热门 - 从数据库获取，使用特殊样式（火焰跳动效果）
-          if (category.slug === "hot") {
+          // 🔥 修复：支持数据库中的 -1 slug
+          if (category.slug === "hot" || category.slug === "-1") {
             return (
               <Link
                 key={category.slug}

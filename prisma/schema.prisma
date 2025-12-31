@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,84 +7,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// 枚举类型 (Enums)
-// ============================================
-
-enum MarketStatus {
-  OPEN // 开放中 - 用户可以下注
-  CLOSED // 已关闭 - 市场已关闭，等待结算
-  RESOLVED // 已结算 - 市场已结算，结果已确定
-  CANCELED // 已取消 - 市场被取消，不进行结算
-  PENDING_REVIEW // 待审核 - 新抓取的市场，等待管理员审核
-}
-
-enum ReviewStatus {
-  PENDING // 待审核
-  PUBLISHED // 已发布
-  REJECTED // 已拒绝
-}
-
-enum Outcome {
-  YES // 是/会/发生
-  NO // 否/不会/不发生
-  CANCELED // 取消/无效
-}
-
-enum TransactionStatus {
-  PENDING // 待处理
-  COMPLETED // 已完成
-  FAILED // 失败
-}
-
-enum PositionStatus {
-  OPEN // 持仓中
-  CLOSED // 已关闭（卖出或结算）
-}
-
-enum TransactionType {
-  DEPOSIT // 充值
-  WITHDRAW // 提现
-  BET // 下注
-  WIN // 获胜
-  ADMIN_ADJUSTMENT // 管理员调整
-}
-
-enum DataSourceStatus {
-  ACTIVE // 激活
-  INACTIVE // 停用
-  ERROR // 错误
-}
-
-enum MarketSource {
-  POLYMARKET // 从外部爬取的（Polymarket）
-  INTERNAL // 自主上架的内部事件
-}
-
-// ============================================
-// 核心模型 (Models)
-// ============================================
-
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
+  id            String        @id @default(uuid())
+  email         String        @unique
   passwordHash  String?
-  provider      String   @default("email")
-  balance       Float    @default(0.0)
-  walletAddress String? // 可空字段，无唯一性约束
-  isAdmin       Boolean  @default(false)
-  isBanned      Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // 关联关系
-  orders       Order[]
-  positions    Position[] // ✅ 修复：添加 Position 关系
-  deposits     Deposit[]
-  withdrawals  Withdrawal[]
-  transactions Transaction[] // 资金变动记录
-  adminLogs    AdminLog[]    @relation("AdminLogs")
-  authSessions AuthSession[]
+  provider      String        @default("email")
+  balance       Float         @default(0.0)
+  walletAddress String?
+  isAdmin       Boolean       @default(false)
+  isBanned      Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  adminLogs     AdminLog[]    @relation("AdminLogs")
+  authSessions  AuthSession[]
+  deposits      Deposit[]
+  orders        Order[]
+  positions     Position[]
+  transactions  Transaction[]
+  withdrawals   Withdrawal[]
 
   @@map("users")
 }
@@ -95,31 +32,28 @@ model User {
 model AuthSession {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("auth_sessions")
 }
 
 model Category {
-  id           String     @id @default(uuid())
-  name         String // 分类名称（中文，如 "加密货币"）- 已移除 @unique 约束，允许不同父类下有同名子类
-  slug         String     @unique // 分类 slug（如 "crypto" 或 "crypto-15m"）- 必须唯一，子分类使用父类前缀避免冲突
-  icon         String? // 图标名称（可选）
-  displayOrder Int        @default(0) // 显示顺序
-  sortOrder    Int        @default(0) // 手动排序字段（后台使用）
-  status       String     @default("active") // active | inactive
-  level        Int        @default(0) // 层级（0=顶级，1=二级，2=三级...）
-  parentId     String? // 父分类 ID（自关联）
-  parent       Category?  @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children     Category[] @relation("CategoryChildren") // 子分类列表
-
-  // 多对多关系：市场可以属于多个分类
-  markets MarketCategory[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String           @id @default(uuid())
+  name         String
+  slug         String           @unique
+  icon         String?
+  displayOrder Int              @default(0)
+  status       String           @default("active")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  level        Int              @default(0)
+  parentId     String?
+  sortOrder    Int              @default(0)
+  parent       Category?        @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Category[]       @relation("CategoryChildren")
+  markets      MarketCategory[]
 
   @@index([parentId])
   @@index([status])
@@ -128,73 +62,64 @@ model Category {
 }
 
 model Market {
-  id              String       @id @default(uuid())
+  id              String           @id @default(uuid())
   title           String
-  titleZh         String? // 中文标题（可选）
-  description     String       @default("")
-  descriptionZh   String? // 中文描述（可选）
+  description     String           @default("")
   closingDate     DateTime
   resolvedOutcome Outcome?
-  status          MarketStatus @default(OPEN)
-  reviewStatus    ReviewStatus @default(PENDING) // 审核状态
-  totalVolume     Float        @default(0.0) // 保留字段，向后兼容，实际使用 displayVolume
-  totalYes        Float        @default(0.0)
-  totalNo         Float        @default(0.0)
-  yesProbability  Int? // Yes 概率（如 32，表示 32%）
-  noProbability   Int? // No 概率（如 68，表示 68%）
-  rank            Int? // 手动排名顺序（用于排行榜）
-  feeRate         Float        @default(0.05)
-  isHot           Boolean      @default(false) // 是否热门市场
-  category        String? // 兼容字段（保留用于向后兼容）
-  categorySlug    String? // 兼容字段（保留用于向后兼容）
-  externalId      String? // 外部市场 ID（如 Polymarket 事件 ID）
-  externalSource  String? // 外部数据源（如 "polymarket"），保留字段用于向后兼容
-  source          MarketSource @default(INTERNAL) // 事件来源：POLYMARKET（爬取的）或 INTERNAL（自主上架）
-  externalVolume  Float        @default(0.0) // 外部爬取的交易量（只读，由爬虫更新）
-  internalVolume  Float        @default(0.0) // 本平台产生的交易量（实时累加）
-  manualOffset    Float        @default(0.0) // 手动校准偏移量（后台可调整）
-  isActive        Boolean      @default(true) // 🔥 软删除标记（false 表示已删除）
-  // 🔥 添加 Polymarket 原始数据字段
-  outcomePrices   String? // 存储原始赔率 JSON 字符串，如 "[\"0.7\", \"0.3\"]"
-  image           String? // 存储全网头像 URL
-  iconUrl         String? // 作为备份头像字段
-  initialPrice    Float? // 存储初始价格（0-1 之间）
-  volume24h       Float? // 存储 24 小时交易量
-  isFactory       Boolean      @default(false) // 🔥 是否为工厂自动生成的市场
-  strikePrice     Float? // 🔥 行权价（用于工厂生成的市场，存储实时价格如 $88196.00）
-  templateId      String? // 🔥 关联的模板ID（用于统计该模板生成了多少市场）
-  symbol          String? // 🔥 标的符号（如 "BTC/USD"，从模板继承）
-  period          Int? // 🔥 周期（分钟数，如 15，从模板继承）
-  // factoryId       String? // 🔥 临时移除：数据库中没有这个字段，导致查询错误
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-
-  // 关联关系
-  orders         Order[]
-  positions      Position[]
-  // 多对多关系：一个市场可以属于多个分类
-  categories     MarketCategory[]
-  // 🔥 关联MarketTemplate（如果templateId存在）
-  marketTemplate MarketTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  status          MarketStatus     @default(OPEN)
+  totalVolume     Float            @default(0.0)
+  totalYes        Float            @default(0.0)
+  totalNo         Float            @default(0.0)
+  feeRate         Float            @default(0.05)
+  category        String?
+  categorySlug    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  isHot           Boolean          @default(false)
+  externalId      String?
+  externalSource  String?
+  noProbability   Int?
+  rank            Int?
+  reviewStatus    ReviewStatus     @default(PENDING)
+  yesProbability  Int?
+  descriptionZh   String?
+  titleZh         String?
+  externalVolume  Float            @default(0.0)
+  internalVolume  Float            @default(0.0)
+  manualOffset    Float            @default(0.0)
+  source          MarketSource     @default(INTERNAL)
+  isActive        Boolean          @default(true)
+  iconUrl         String?
+  image           String?
+  initialPrice    Float?
+  outcomePrices   String?
+  volume24h       Float?
+  isFactory       Boolean          @default(false)
+  period          Int?
+  strikePrice     Float?
+  symbol          String?
+  templateId      String?
+  categories      MarketCategory[]
+  orders          Order[]
+  positions       Position[]
 
   @@index([isHot])
   @@index([externalId, externalSource])
   @@index([reviewStatus])
-  @@index([templateId]) // 🔥 索引：方便统计模板生成的市场
-  @@index([symbol]) // 🔥 索引：方便按资产查询
-  // @@index([factoryId]) // 🔥 临时注释：数据库可能还没有这个字段
-  @@index([isFactory]) // 🔥 索引：方便查询工厂市场
+  @@index([templateId])
+  @@index([symbol])
+  @@index([isFactory])
   @@map("markets")
 }
 
-// 市场与分类的多对多关联表
 model MarketCategory {
   id         String   @id @default(uuid())
   marketId   String
   categoryId String
-  market     Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  market     Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
 
   @@unique([marketId, categoryId])
   @@index([marketId])
@@ -210,18 +135,22 @@ model Order {
   amount           Float
   payout           Float?
   feeDeducted      Float    @default(0.0)
-  type             String?  @default("BUY") // BUY | SELL
+  type             String?  @default("BUY")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-
-  // 外键关联
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  filledAmount     Float    @default(0.0)
+  limitPrice       Float?
+  orderType        String   @default("MARKET")
+  status           String   @default("PENDING")
+  market           Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([marketId])
   @@index([createdAt])
   @@index([type])
+  @@index([status])
+  @@index([orderType])
   @@map("orders")
 }
 
@@ -235,10 +164,8 @@ model Position {
   status    PositionStatus @default(OPEN)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
-
-  // 外键关联
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  market    Market         @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, marketId, outcome, status])
   @@index([userId])
@@ -255,9 +182,7 @@ model Deposit {
   status    TransactionStatus @default(PENDING)
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
-
-  // 外键关联
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -273,9 +198,7 @@ model Withdrawal {
   status        TransactionStatus @default(PENDING)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
-
-  // 外键关联
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -286,14 +209,12 @@ model Withdrawal {
 model Transaction {
   id        String            @id @default(uuid())
   userId    String
-  amount    Float // 正数表示增加，负数表示减少
+  amount    Float
   type      TransactionType
-  status    TransactionStatus @default(COMPLETED) // 交易状态
-  reason    String? // 备注/原因（管理员调整时必填）
+  reason    String?
   createdAt DateTime          @default(now())
-
-  // 外键关联
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    TransactionStatus @default(COMPLETED)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([type])
@@ -310,9 +231,7 @@ model AdminLog {
   timestamp  DateTime @default(now())
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-
-  // 外键关联
-  admin User @relation("AdminLogs", fields: [adminId], references: [id], onDelete: Cascade)
+  admin      User     @relation("AdminLogs", fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId])
   @@index([actionType])
@@ -320,44 +239,39 @@ model AdminLog {
   @@map("admin_logs")
 }
 
-// 自动化工厂模板
 model MarketTemplate {
   id                String    @id @default(uuid())
-  name              String // 模板名称（如 "BTC/USD 15分钟")
-  nameZh            String? // 🔥 中文名称（人工翻译，仅用于前端显示）
-  titleTemplate     String? // 🔥 模板标题（支持占位符如 $[StrikePrice] 和 [EndTime]）
-  displayTemplate   String? // 🔥 显示名称模板（中文模板，用于人工预设翻译，支持占位符如 $[StrikePrice] 和 [EndTime]）
-  symbol            String // 标的符号（如 "BTC/USD"）
-  period            Int // 周期（分钟数，如 15）
-  type              String    @default("UP_OR_DOWN") // 🔥 模板类型：UP_OR_DOWN, HIT_PRICE, NEG_RISK, MULTI_STRIKES 等
-  advanceTime       Int       @default(60) // 接力时间（秒，提前多少秒创建下一期）
-  oracleUrl         String? // Oracle 价格来源 URL（可选）
-  categorySlug      String? // 🔥 关联分类的slug（如 "crypto" 或 "finance"）
-  externalIdPattern String? // 🔥 对标外部URL模式（用于自动生成externalId）
-  seriesId          String? // 🔥 Polymarket Series ID（用于直接从API获取价格）
-  isActive          Boolean   @default(true) // 是否激活
-  status            String    @default("ACTIVE") // 🔥 状态：ACTIVE（运行中）、PAUSED（已熔断）
-  failureCount      Int       @default(0) // 🔥 连续失败计数（用于熔断逻辑）
-  pauseReason       String? // 🔥 熔断原因（如 "由于数据源丢失已自动熔断"）
-  lastMarketId      String? // 最后创建的市场ID
-  lastCreatedAt     DateTime? // 最后创建时间
+  name              String
+  symbol            String
+  period            Int
+  advanceTime       Int       @default(60)
+  oracleUrl         String?
+  isActive          Boolean   @default(true)
+  lastMarketId      String?
+  lastCreatedAt     DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  categorySlug      String?
+  externalIdPattern String?
+  failureCount      Int       @default(0)
+  pauseReason       String?
+  status            String    @default("ACTIVE")
+  titleTemplate     String?
+  type              String    @default("UP_OR_DOWN")
+  seriesId          String?
+  displayTemplate   String?
+  nameZh            String?
 
-  // 🔥 关联关系：一个模板可以生成多个市场
-  markets Market[]
-
-  @@unique([symbol, period, type]) // 🔥 保留唯一约束：同一标的、周期和类型的模板唯一
+  @@unique([symbol, period, type])
   @@index([isActive])
-  @@index([status]) // 🔥 添加 status 索引
+  @@index([status])
   @@index([symbol])
   @@map("market_templates")
 }
 
-// 系统设置表（用于存储全局配置和状态）
 model SystemSettings {
-  key       String   @id // 设置键名作为主键
-  value     String   // 设置值（JSON字符串或纯文本）
+  key       String   @id
+  value     String
   updatedAt DateTime @updatedAt
 
   @@map("system_settings")
@@ -365,32 +279,31 @@ model SystemSettings {
 
 model GlobalStat {
   id            String   @id @default(uuid())
-  label         String // 指标名称（如 "24H 交易量"）
-  value         Float    @default(0.0) // 指标数值（自动计算值或手动固定值）
-  manualOffset  Float    @default(0.0) // 手动偏移量（在自动计算值基础上增减）
-  overrideValue Float? // 手动固定值（如果设置，则忽略自动计算，直接使用此值）
-  unit          String? // 单位（如 "USD", "%", "人"）
-  icon          String? // 图标名称（如 "DollarSign", "Users"）
-  sortOrder     Int      @default(0) // 显示顺序
-  isActive      Boolean  @default(true) // 是否激活
+  label         String
+  value         Float    @default(0.0)
+  unit          String?
+  icon          String?
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  manualOffset  Float    @default(0.0)
+  overrideValue Float?
 
   @@index([isActive])
   @@index([sortOrder])
   @@map("global_stats")
 }
 
-// 数据采集源记录
 model DataSource {
   id           String           @id @default(uuid())
-  sourceName   String           @unique // 采集源名称（如 "Polymarket", "Augur"）
-  status       DataSourceStatus @default(ACTIVE) // 状态
-  lastSyncTime DateTime? // 最后同步时间
-  itemsCount   Int              @default(0) // 采集到的项目数量
-  multiplier   Float            @default(1.0) // 数据权重系数（用于计算总和）
-  config       String?          @default("{}") // 配置信息（JSON 字符串）
-  errorMessage String? // 错误信息（如果状态为 ERROR）
+  sourceName   String           @unique
+  status       DataSourceStatus @default(ACTIVE)
+  lastSyncTime DateTime?
+  itemsCount   Int              @default(0)
+  multiplier   Float            @default(1.0)
+  config       String?          @default("{}")
+  errorMessage String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
@@ -399,17 +312,66 @@ model DataSource {
   @@map("data_sources")
 }
 
-// 采集器任务状态记录
 model ScraperTask {
   id          String   @id @default(cuid())
-  name        String   @unique // 例如 "Polymarket_Main"
+  name        String   @unique
   lastRunTime DateTime @default(now())
-  status      String   @default("NORMAL") // NORMAL, ABNORMAL, STOPPED
-  message     String? // 存储报错信息
-  frequency   Int      @default(10) // 运行频率（分钟）
+  status      String   @default("NORMAL")
+  message     String?
+  frequency   Int      @default(10)
   updatedAt   DateTime @updatedAt
 
   @@index([name])
   @@index([status])
   @@map("scraper_tasks")
+}
+
+enum MarketStatus {
+  OPEN
+  CLOSED
+  RESOLVED
+  CANCELED
+  PENDING_REVIEW
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+}
+
+enum Outcome {
+  YES
+  NO
+  CANCELED
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+  BET
+  WIN
+  ADMIN_ADJUSTMENT
+}
+
+enum DataSourceStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+enum MarketSource {
+  POLYMARKET
+  INTERNAL
 }

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DBService } from '@/lib/mockData';
+import { DBService } from '@/lib/dbService'; // 🔥 修复：使用正确的 dbService 而不是 mockData
 import { Market, MarketStatus, Outcome } from '@/types/data';
 import { prisma } from '@/lib/prisma';
-import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { auth } from "@/lib/authExport";
 import { aggregateMarketsByTemplate, countUniqueMarketSeries } from '@/lib/marketAggregation';
 import dayjs from '@/lib/dayjs';
 
@@ -83,11 +83,11 @@ export async function GET(request: NextRequest) {
       // 但在聚合统计中仍然需要这些数据来计算"历史"数量，所以先查询所有数据
       // 🚀 修复：根据 source 参数添加 isFactory 过滤条件（基于布尔值，而非字符串匹配）
       const whereCondition: any = {
-        isActive: true,
-        status: {
-          not: 'PENDING_REVIEW', // 🔥 排除所有 PENDING_REVIEW 状态的市场
-        },
-        reviewStatus: 'PUBLISHED', // 🔥 修复：只显示已发布的市场（reviewStatus 为 PUBLISHED）
+          isActive: true,
+          status: {
+            not: 'PENDING_REVIEW', // 🔥 排除所有 PENDING_REVIEW 状态的市场
+          },
+          reviewStatus: 'PUBLISHED', // 🔥 修复：只显示已发布的市场（reviewStatus 为 PUBLISHED）
       };
       
       // 🚀 修复：根据 source 参数过滤（使用 isFactory 布尔值作为唯一真理标准）
@@ -150,23 +150,23 @@ export async function GET(request: NextRequest) {
       });
       
       // 转换为 Market 类型格式（保持与原有格式一致，包含所有必要字段）
-      const convertToNumber = (value: any): number => {
-        if (value === null || value === undefined) return 0;
-        if (typeof value === 'bigint') {
-          try {
-            return Number(value);
-          } catch {
-            return 0;
+        const convertToNumber = (value: any): number => {
+          if (value === null || value === undefined) return 0;
+          if (typeof value === 'bigint') {
+            try {
+              return Number(value);
+            } catch {
+              return 0;
+            }
           }
-        }
-        if (typeof value === 'string') {
-          const parsed = parseFloat(value);
-          return isNaN(parsed) ? 0 : parsed;
-        }
-        const num = Number(value);
-        return isNaN(num) || !isFinite(num) ? 0 : num;
-      };
-      
+          if (typeof value === 'string') {
+            const parsed = parseFloat(value);
+            return isNaN(parsed) ? 0 : parsed;
+          }
+          const num = Number(value);
+          return isNaN(num) || !isFinite(num) ? 0 : num;
+        };
+        
       // 🚀 计算交易统计数据（交易用户数/交易人次）
       // 批量查询所有市场的订单统计（优化性能）
       const marketIds = dbMarkets.map(m => m.id);
@@ -250,6 +250,17 @@ export async function GET(request: NextRequest) {
         });
       }
       
+      // 🚀 辅助函数：构建市场详情对象（用于子市场列表）
+      const buildMarketDetail = (dbMarket: any) => {
+        return {
+          id: dbMarket.id,
+          endTime: dbMarket.closingDate.toISOString(),
+          period: (dbMarket as any).period || null,
+          externalId: (dbMarket as any).externalId || null,
+          outcomePrices: (dbMarket as any).outcomePrices || null,
+        };
+      };
+      
       // 🔥 同时处理所有市场（用于统计历史数量）和过滤后的市场（用于显示）
       const allMarkets = dbMarkets.map((dbMarket) => {
         const stats = orderStatsMap.get(dbMarket.id) || { userCount: 0, orderCount: 0 };
@@ -280,6 +291,18 @@ export async function GET(request: NextRequest) {
             orderCount: stats.orderCount, // 交易人次（本地平台）
           },
         };
+      });
+      
+      // 🚀 创建市场 ID 到市场详情的映射（用于快速查找）
+      const marketDetailMap = new Map<string, any>();
+      dbMarkets.forEach(dbMarket => {
+        marketDetailMap.set(dbMarket.id, buildMarketDetail(dbMarket));
+      });
+      // 同时包含所有市场（用于历史记录）
+      dbMarketsAll.forEach(dbMarket => {
+        if (!marketDetailMap.has(dbMarket.id)) {
+          marketDetailMap.set(dbMarket.id, buildMarketDetail(dbMarket));
+        }
       });
       
       console.log('✅ [Admin Markets GET] 查询返回', allMarkets.length, '个市场（已排除 PENDING_REVIEW 和48小时前的已结算）');
@@ -363,11 +386,11 @@ export async function GET(request: NextRequest) {
                 totalActive: 0, // 活跃场次数（OPEN + PENDING）
                 ended: 0,     // 🚀 工厂模式专用：已结束数量（RESOLVED + PENDING）
               },
-              // 保存所有场次 ID（用于下钻）
-              marketIds: [] as string[],
-              // 分离场次 ID：用于默认显示和历史显示
-              activeMarketIds: [] as string[], // OPEN 和 SETTLING/PENDING
-              historicalMarketIds: [] as string[], // 超过 48 小时已结算的
+              // 保存所有场次详情（用于下钻）- 🚀 改为对象数组
+              marketIds: [] as any[],
+              // 分离场次详情：用于默认显示和历史显示
+              activeMarketIds: [] as any[], // OPEN 和 SETTLING/PENDING - 🚀 改为对象数组
+              historicalMarketIds: [] as any[], // 超过 48 小时已结算的 - 🚀 改为对象数组
               // 🚀 临时存储：用于聚合时去重用户数
               _userIds: new Set<string>(), // 临时字段，聚合完成后删除
             });
@@ -395,13 +418,17 @@ export async function GET(request: NextRequest) {
               aggregated.activeMarketIds = [];
               aggregated.historicalMarketIds = [];
             }
-            aggregated.marketIds.push(market.id);
+            // 🚀 推送市场详情对象而不是 ID
+            const marketDetail = marketDetailMap.get(market.id);
+            if (marketDetail) {
+              aggregated.marketIds.push(marketDetail);
+            }
             
             // 🔥 判断是否为历史记录（超过 48 小时且已结算）
             const isHistorical = market.status === 'RESOLVED' && 
               dayjs.utc(market.endTime).isBefore(now.subtract(48, 'hour'));
             
-            // 更新状态统计和场次 ID 分类
+            // 更新状态统计和场次详情分类
             if (!aggregated.activeMarketIds || !Array.isArray(aggregated.activeMarketIds)) {
               aggregated.activeMarketIds = [];
             }
@@ -412,17 +439,17 @@ export async function GET(request: NextRequest) {
             if (market.status === 'OPEN') {
               aggregated.stats.open++;
               aggregated.stats.totalActive++;
-              aggregated.activeMarketIds.push(market.id);
+              if (marketDetail) aggregated.activeMarketIds.push(marketDetail);
             } else if (market.status === 'PENDING' || market.status === 'SETTLING' || market.status === 'CLOSED') {
               aggregated.stats.pending++;
-              aggregated.activeMarketIds.push(market.id);
+              if (marketDetail) aggregated.activeMarketIds.push(marketDetail);
             } else if (market.status === 'RESOLVED') {
               if (isHistorical) {
                 aggregated.stats.historical++;
-                aggregated.historicalMarketIds.push(market.id);
+                if (marketDetail) aggregated.historicalMarketIds.push(marketDetail);
               } else {
                 aggregated.stats.resolved++;
-                aggregated.activeMarketIds.push(market.id);
+                if (marketDetail) aggregated.activeMarketIds.push(marketDetail);
               }
             }
           } else {
@@ -509,13 +536,17 @@ export async function GET(request: NextRequest) {
           
           // 🚀 暴力统计：只要是工厂的，总数必须加 1
           aggregated.stats.total++;
-          aggregated.marketIds.push(market.id);
+          // 🚀 推送市场详情对象而不是 ID
+          const marketDetail = marketDetailMap.get(market.id);
+          if (marketDetail) {
+            aggregated.marketIds.push(marketDetail);
+          }
           
           // 🚀 强制逻辑：OPEN 算 open，其他全部算 ended
           if (market.status === 'OPEN') {
             aggregated.stats.open++;
             aggregated.stats.totalActive++;
-            aggregated.activeMarketIds.push(market.id);
+            if (marketDetail) aggregated.activeMarketIds.push(marketDetail);
             if (factoryOpenCount <= 5) {
               console.log(`  ✅ [ForceStats] OPEN: open=${aggregated.stats.open}, ended=${aggregated.stats.ended}, total=${aggregated.stats.total}`);
             }
@@ -530,7 +561,7 @@ export async function GET(request: NextRequest) {
               aggregated.stats.resolved++;
             }
             
-            aggregated.activeMarketIds.push(market.id);
+            if (marketDetail) aggregated.activeMarketIds.push(marketDetail);
             if (factoryClosedCount + factoryOtherCount <= 5) {
               console.log(`  ✅ [ForceStats] ${market.status} -> Ended: open=${aggregated.stats.open}, ended=${aggregated.stats.ended}, total=${aggregated.stats.total}`);
             }
@@ -540,8 +571,9 @@ export async function GET(request: NextRequest) {
         console.log(`📊 [ForceStats] 工厂市场状态分布: OPEN=${factoryOpenCount}, CLOSED=${factoryClosedCount}, 其他=${factoryOtherCount}, 总计=${factoryOpenCount + factoryClosedCount + factoryOtherCount}`);
         
         // 🚀 计算聚合后的交易统计数据（批量查询所有聚合系列的订单）
+        // 🚀 修复：marketIds 现在是对象数组，需要提取 id
         const allAggregatedMarketIds = Array.from(aggregatedMap.values())
-          .flatMap(agg => (agg.marketIds && Array.isArray(agg.marketIds)) ? agg.marketIds : [])
+          .flatMap(agg => (agg.marketIds && Array.isArray(agg.marketIds)) ? agg.marketIds.map((m: any) => typeof m === 'string' ? m : m.id) : [])
           .filter(Boolean);
         
         if (allAggregatedMarketIds.length > 0) {
@@ -595,15 +627,17 @@ export async function GET(request: NextRequest) {
           // 5. 为每个聚合系列计算交易统计
           for (const aggregated of aggregatedMap.values()) {
             if (aggregated.marketIds && Array.isArray(aggregated.marketIds) && aggregated.marketIds.length > 0) {
+              // 🚀 修复：marketIds 现在是对象数组，需要提取 id
+              const marketIdList = aggregated.marketIds.map((m: any) => typeof m === 'string' ? m : m.id);
               // 计算该系列下所有场次的总订单数
-              const totalOrderCount = aggregated.marketIds.reduce(
-                (sum, marketId) => sum + (marketOrderCountMap.get(marketId) || 0),
+              const totalOrderCount = marketIdList.reduce(
+                (sum: number, marketId: string) => sum + (marketOrderCountMap.get(marketId) || 0),
                 0
               );
               
               // 计算该系列下所有场次的唯一用户数（去重）
               const allUserIdsSet = new Set<string>();
-              aggregated.marketIds.forEach(marketId => {
+              marketIdList.forEach((marketId: string) => {
                 const userIds = marketUserIdsMap.get(marketId);
                 if (userIds) {
                   userIds.forEach(userId => allUserIdsSet.add(userId));
@@ -665,7 +699,8 @@ export async function GET(request: NextRequest) {
             // 如果这个市场是历史记录且不在已统计的市场 ID 列表中
             if (isHistorical) {
               // 检查是否已经统计过（避免重复）
-              if (!aggregated.marketIds || !aggregated.marketIds.includes(market.id)) {
+              const existingIds = (aggregated.marketIds || []).map((m: any) => typeof m === 'string' ? m : m.id);
+              if (!existingIds.includes(market.id)) {
                 aggregated.stats.historical++;
                 aggregated.stats.total++;
                 if (!aggregated.historicalMarketIds) {
@@ -674,8 +709,11 @@ export async function GET(request: NextRequest) {
                 if (!aggregated.marketIds) {
                   aggregated.marketIds = [];
                 }
-                aggregated.historicalMarketIds.push(market.id);
-                aggregated.marketIds.push(market.id);
+                const marketDetail = marketDetailMap.get(market.id);
+                if (marketDetail) {
+                  aggregated.historicalMarketIds.push(marketDetail);
+                  aggregated.marketIds.push(marketDetail);
+                }
               }
             }
           }
@@ -748,15 +786,15 @@ export async function GET(request: NextRequest) {
 
     // 🔥 修复 JSON 序列化问题：确保所有数值字段都是有效的数字（不是 BigInt、NaN 或 Infinity）
     const convertToNumberSafe = (value: any): number => {
-      if (value === null || value === undefined) return 0;
+        if (value === null || value === undefined) return 0;
       if (typeof value === 'bigint') return Number(value);
-      if (typeof value === 'string') {
-        const parsed = parseFloat(value);
-        return isNaN(parsed) ? 0 : parsed;
-      }
-      const num = Number(value);
-      return isNaN(num) || !isFinite(num) ? 0 : num;
-    };
+        if (typeof value === 'string') {
+          const parsed = parseFloat(value);
+          return isNaN(parsed) ? 0 : parsed;
+        }
+        const num = Number(value);
+        return isNaN(num) || !isFinite(num) ? 0 : num;
+      };
 
     const sanitizedMarkets = paginatedMarkets.map((market: any) => {
       // 创建一个安全的副本，确保所有数值字段都是 Number 类型
@@ -1046,14 +1084,14 @@ export async function POST(request: Request) {
         // 🚀 如果仍然找不到，尝试所有可能的查找方式（兜底逻辑）
         if (!category) {
           category = await prisma.category.findFirst({
-            where: {
+        where: {
               OR: [
                 { id: identifier },
                 { slug: identifier },
                 { name: identifier }
               ],
-            },
-            select: { id: true },
+        },
+        select: { id: true },
           });
         }
         
@@ -1076,7 +1114,30 @@ export async function POST(request: Request) {
       console.warn('⚠️ [Market API] 前端未提供分类标识，将创建市场但不关联分类');
     }
 
-    // 🔥 创建市场数据对象
+    // 🔥 修复热门标签逻辑：检查是否包含热门分类（ID=-1 或 slug="-1"），如果包含，自动设置 isHot = true
+    const hotCategory = await prisma.category.findFirst({
+      where: {
+        OR: [
+          { slug: '-1' },
+          { slug: 'hot' },
+          { name: { contains: '热门' } },
+        ],
+      },
+      select: { id: true },
+    });
+    
+    // 如果分类列表中包含热门分类，自动设置 isHot = true（覆盖前端传入的值）
+    const hasHotCategory = hotCategory && validCategoryConnect.some(c => c.id === hotCategory.id);
+    const finalIsHot = hasHotCategory ? true : (isHot === true ? true : false);
+    
+    console.log('🔥 [Market API] 热门标签逻辑:', {
+      hotCategoryId: hotCategory?.id,
+      validCategoryIds: validCategoryConnect.map(c => c.id),
+      hasHotCategory,
+      isHotFromBody: isHot,
+      finalIsHot,
+    });
+
     const marketData: any = {
       title: body.title,
       description: body.description || "",
@@ -1089,6 +1150,7 @@ export async function POST(request: Request) {
       internalVolume: 0,
       manualOffset: 0,
       resolvedOutcome: null,
+      isHot: finalIsHot, // 🔥 修复：如果包含热门分类，自动设置为 true
     };
 
     // 🔥 管理员权限：允许管理员手动创建市场
@@ -1096,7 +1158,7 @@ export async function POST(request: Request) {
     const crypto = await import('crypto');
     const templateId = `manual-${crypto.randomUUID()}`;
     marketData.templateId = templateId;
-    
+
     // 🔥 修正 prisma.market.create 调用：根据 MarketCategory 中间表结构，使用 create 语法
     // 参考 scripts/seed-pending-markets.ts 的实现方式
     // MarketCategory 表的字段是 categoryId，不是嵌套的 category 对象

@@ -26,7 +26,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   let pageTitle: string;
 
   // 确定分类名称 - 支持特殊路由和数据库查询
-  if (slug === "hot" || slug === "trending") {
+  // 🔥 修复：支持数据库中的实际 slug（-1）以及常用别名（hot, trending）
+  if (slug === "hot" || slug === "trending" || slug === "-1") {
     categoryName = "热门";
     pageTitle = "热门市场";
   } else {
@@ -40,6 +41,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       });
 
       if (!category) {
+        console.error(`❌ [Category Page] 分类不存在: slug="${slug}"`);
         notFound(); // 返回 404 页面
       }
 

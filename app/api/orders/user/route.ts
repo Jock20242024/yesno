@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { DBService } from '@/lib/dbService';
-import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离：使用统一的 userId 提取函数
+import { requireAuth } from '@/lib/auth/utils';
 
 /**
  * 获取当前用户的订单列表 API
@@ -8,20 +8,21 @@ import { extractUserIdFromToken } from '@/lib/authUtils'; // 强制数据隔离�
  * 
  * 返回当前登录用户的所有订单列表
  * 
- * 强制数据隔离：必须使用从 Auth Token 提取的 current_user_id 进行数据库查询
+ * 强制数据隔离：必须使用从 NextAuth session 提取的 current_user_id 进行数据库查询
+ * 🔥 统一认证：使用 NextAuth 进行身份验证
  */
 export async function GET() {
   try {
-    // 强制身份过滤：从 Auth Token 提取 current_user_id
-    const authResult = await extractUserIdFromToken();
+    // 🔥 使用统一的 NextAuth 认证
+    const authResult = await requireAuth();
     
-    if (!authResult.success || !authResult.userId) {
+    if (!authResult.success) {
       return NextResponse.json(
         {
           success: false,
-          error: authResult.error || 'Not authenticated',
+          error: authResult.error,
         },
-        { status: 401 }
+        { status: authResult.statusCode }
       );
     }
 

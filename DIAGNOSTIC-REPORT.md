@@ -54,7 +54,7 @@ npx tsx scripts/audit-manual-market.ts
    ```
 
 2. **查询结果统计**
-   ```typescript
+  ```typescript
    console.log(`📊 [Markets API] 查询返回的原始记录数: ${dbMarkets.length}`);
    console.log('📋 [Markets API] 查询返回的市场 ID 列表:');
    ```
@@ -66,8 +66,8 @@ npx tsx scripts/audit-manual-market.ts
    ```
 
 ### 关键查询条件
-```typescript
-where: {
+  ```typescript
+    where: {
   reviewStatus: 'PUBLISHED',
   isActive: true,
   status: 'OPEN',

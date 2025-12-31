@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { auth } from "@/lib/authExport";
 import { prisma } from "@/lib/prisma";
 import { aggregateMarketsByTemplate, countUniqueMarketSeries } from '@/lib/marketAggregation'; // 🔥 使用公共聚合函数
 import { BASE_MARKET_FILTER, buildHotMarketFilter } from '@/lib/marketQuery'; // 🚀 统一过滤器

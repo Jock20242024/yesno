@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
-import { DBService } from '@/lib/mockData';
+import { DBService } from '@/lib/dbService'; // 🔥 修复：使用正确的 dbService 而不是 mockData
 import { MarketStatus, Outcome } from '@/types/data';
-import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
+import { auth } from "@/lib/authExport";
 
 /**
  * 管理后台 - 市场结算 API
  * POST /api/admin/resolve/[market_id]
+ * 
+ * 🔥 修复：统一使用 NextAuth 进行权限验证
  * 
  * 请求体：
  * {
@@ -17,13 +19,24 @@ export async function POST(
   { params }: { params: Promise<{ market_id: string }> }
 ) {
   try {
-    // 权限校验：使用统一的 Admin Token 验证函数（从 Cookie 读取）
-    const authResult = await verifyAdminToken(request);
-
-    if (!authResult.success) {
-      return createUnauthorizedResponse(
-        authResult.error || 'Unauthorized. Admin access required.',
-        authResult.statusCode || 401
+    // 🔥 修复：统一使用 NextAuth 进行权限验证（与其他 Admin API 保持一致）
+    const session = await auth();
+    
+    if (!session || !session.user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Admin access required.' },
+        { status: 401 }
+      );
+    }
+    
+    const userRole = (session.user as any).role;
+    const userEmail = session.user.email;
+    const adminEmail = 'yesno@yesno.com';
+    
+    if (userRole !== 'ADMIN' && userEmail !== adminEmail) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Admin access required.' },
+        { status: 401 }
       );
     }
 

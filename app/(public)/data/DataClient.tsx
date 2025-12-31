@@ -38,10 +38,7 @@ interface GlobalStat {
   isActive: boolean;
 }
 
-interface DataClientProps {
-  hotMarkets: HotMarket[];
-  stats?: Stats;
-}
+// 🔥 移除 props 依赖，组件完全自主获取数据
 
 // 合并的图标映射：Lucide 图标组件 + 字符串图标（emoji）
 const iconMap: Record<string, LucideIcon | string> = {
@@ -64,89 +61,105 @@ const iconMap: Record<string, LucideIcon | string> = {
   Default: "📈",
 };
 
-// Mock 数据（当没有真实数据时使用）
-const mockHotMarkets: HotMarket[] = [
-  {
-    id: 'mock-1',
-    title: 'BTC 价格将在 2025 年 1 月超过 $100,000',
-    description: '',
-    category: '加密货币',
-    categorySlug: 'crypto',
-    icon: 'Bitcoin',
-    yesPercent: 68,
-    noPercent: 32,
-    volume: 42000000,
-    closingDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    status: 'OPEN',
-    isHot: true,
-    rank: 1,
-  },
-  {
-    id: 'mock-2',
-    title: '2025 年 AI 领域将出现新的突破性产品',
-    description: '',
-    category: '科技',
-    categorySlug: 'technology',
-    icon: 'Cpu',
-    yesPercent: 45,
-    noPercent: 55,
-    volume: 28500000,
-    closingDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-    status: 'OPEN',
-    isHot: true,
-    rank: 2,
-  },
-  {
-    id: 'mock-3',
-    title: '下一届美国总统选举结果预测',
-    description: '',
-    category: '政治',
-    categorySlug: 'politics',
-    icon: 'Building2',
-    yesPercent: 52,
-    noPercent: 48,
-    volume: 38000000,
-    closingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    status: 'OPEN',
-    isHot: true,
-    rank: 3,
-  },
-  {
-    id: 'mock-4',
-    title: '2025 年 NBA 总冠军预测',
-    description: '',
-    category: '体育',
-    categorySlug: 'sports',
-    icon: 'Trophy',
-    yesPercent: 38,
-    noPercent: 62,
-    volume: 19500000,
-    closingDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-    status: 'OPEN',
-    isHot: true,
-    rank: 4,
-  },
-  {
-    id: 'mock-5',
-    title: '全球股市将在 2025 年 Q1 上涨 10%',
-    description: '',
-    category: '金融',
-    categorySlug: 'finance',
-    icon: 'DollarSign',
-    yesPercent: 58,
-    noPercent: 42,
-    volume: 31500000,
-    closingDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(),
-    status: 'OPEN',
-    isHot: true,
-    rank: 5,
-  },
-];
+// 🔥 已移除所有 Mock 数据引用，确保生产环境不会显示旧数据
 
-export default function DataClient({ hotMarkets, stats }: DataClientProps) {
+export function DataClient() {
   const router = useRouter();
   const [globalStats, setGlobalStats] = useState<GlobalStat[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
+  
+  // 🔥 核心修复：初始数据为 null (不要用 []，以便区分"加载中"和"无数据")
+  const [markets, setMarkets] = useState<HotMarket[] | null>(null);
+
+  /**
+   * 🔥 强制从 API 获取最新数据
+   */
+  const fetchHotMarkets = async (): Promise<HotMarket[]> => {
+    // 强制加上时间戳，绕过所有缓存
+    const timestamp = new Date().getTime();
+    const response = await fetch(`/api/markets?page=1&pageSize=100&status=OPEN&t=${timestamp}`, {
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch markets: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    if (!result.success || !result.data || !Array.isArray(result.data)) {
+      throw new Error('Invalid response format');
+    }
+
+    // 转换为 HotMarket 格式
+    const markets: HotMarket[] = result.data
+      .filter((m: any) => m.status === 'OPEN' && (m.isActive !== false))
+      .sort((a: any, b: any) => {
+        const volumeA = Number(a.totalVolume || a.volume || 0);
+        const volumeB = Number(b.totalVolume || b.volume || 0);
+        return volumeB - volumeA;
+      })
+      .slice(0, 10)
+      .map((market: any, index: number) => {
+        let yesPercent = 50;
+        let noPercent = 50;
+        
+        if (market.yesPercent !== undefined && market.noPercent !== undefined) {
+          yesPercent = market.yesPercent;
+          noPercent = market.noPercent;
+        } else if (market.totalYes && market.totalNo) {
+          const total = Number(market.totalYes) + Number(market.totalNo);
+          yesPercent = Math.round((Number(market.totalYes) / total) * 100);
+          noPercent = 100 - yesPercent;
+        }
+        
+        return {
+          id: market.id,
+          title: market.titleZh || market.title || '未命名事件',
+          description: market.descriptionZh || market.description || '',
+          category: market.category || '未分类',
+          categorySlug: market.categorySlug || 'all',
+          icon: market.categories?.[0]?.category?.icon || market.icon || 'Bitcoin',
+          yesPercent,
+          noPercent,
+          volume: Number(market.totalVolume || market.volume || 0),
+          rank: market.rank !== null && market.rank !== undefined ? market.rank : index + 1,
+          // 🔥 安全日期处理：确保 closingDate 始终是有效的日期字符串
+          closingDate: (market.closingDate && typeof market.closingDate === 'string' && market.closingDate.trim() !== '')
+            ? market.closingDate
+            : (market.endTime && typeof market.endTime === 'string' && market.endTime.trim() !== '')
+            ? market.endTime
+            : new Date().toISOString(), // 兜底：使用当前时间
+          status: market.status || 'OPEN',
+          isHot: market.isHot || false,
+        };
+      });
+    
+    return markets;
+  };
+
+  /**
+   * 🔥 核心逻辑：组件挂载后立即抓取最新数据
+   */
+  useEffect(() => {
+    const init = async () => {
+      try {
+        // 加上时间戳，防止浏览器缓存 API 请求
+        const data = await fetchHotMarkets();
+        setMarkets(data);
+      } catch (e) {
+        console.error('❌ [DataClient] 获取最新数据失败:', e);
+        setMarkets([]); // 失败则显示空状态
+      }
+    };
+    init();
+  }, []);
 
   // 获取全局指标
   useEffect(() => {
@@ -169,10 +182,63 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
     fetchGlobalStats();
   }, []);
 
-  // 判断是否使用真实数据（如果 hotMarkets 为空，且包含 mock 数据的 ID，则认为使用了 mock 数据）
-  const isUsingMockData = hotMarkets.length > 0 && hotMarkets.some(m => m.id.startsWith('mock-'));
-  const displayMarkets = hotMarkets.length > 0 && !isUsingMockData ? hotMarkets : mockHotMarkets;
-  const isRealDataEmpty = hotMarkets.length === 0 || isUsingMockData;
+  // 🔥 核心：如果 markets 为 null，强制显示骨架屏 (Skeleton)
+  // 这确保了在数据回来之前，用户看到的是占位符，而不是旧数据
+  if (markets === null) {
+    return (
+      <>
+        {/* Hero Section Skeleton */}
+        <section className="relative flex flex-col md:flex-row justify-between items-end gap-6 mb-3 pb-2 border-b border-border-dark">
+          <div className="flex flex-col gap-4 max-w-[720px] relative z-10">
+            <div className="h-12 bg-gray-100/10 animate-pulse rounded-lg w-3/4 mb-4"></div>
+            <div className="h-6 bg-gray-100/10 animate-pulse rounded-lg w-full mb-2"></div>
+            <div className="h-6 bg-gray-100/10 animate-pulse rounded-lg w-2/3"></div>
+            <div className="flex gap-4 mt-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-8 w-24 bg-gray-100/10 animate-pulse rounded-full"></div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Main Content Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-10 gap-8 items-start">
+          {/* 左侧：热门市场列表骨架 */}
+          <div className="lg:col-span-8">
+            <div className="bg-surface-dark rounded-lg border border-border-dark p-6">
+              <div className="h-8 bg-gray-100/10 animate-pulse rounded-lg w-48 mb-4"></div>
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="w-full h-24 bg-gray-100/10 animate-pulse rounded-lg border border-gray-800"></div>
+                ))}
+              </div>
+              <div className="text-center text-sm text-text-secondary mt-4">
+                正在同步全球实时数据...
+              </div>
+            </div>
+          </div>
+
+          {/* 右侧：实时数据侧边栏骨架 */}
+          <div className="lg:col-span-2">
+            <div className="bg-surface-dark rounded-lg border border-border-dark p-6 sticky top-24 max-w-[280px]">
+              <div className="h-8 bg-gray-100/10 animate-pulse rounded-lg w-32 mb-6"></div>
+              <div className="space-y-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
+                    <div className="h-16 bg-gray-100/10 animate-pulse rounded-lg"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // 🔥 渲染真实数据
+  const displayMarkets = markets;
+  const isRealDataEmpty = displayMarkets.length === 0;
   const formatNumber = (num: number) => {
     if (num >= 1000000) {
       // 显示为整数，如 $42M
@@ -217,19 +283,37 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = date.getTime() - now.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  // 🔥 安全日期格式化：防止 Invalid time value 错误
+  const formatDate = (dateString: string | null | undefined) => {
+    // 空值检查
+    if (!dateString) {
+      return 'N/A';
+    }
     
-    if (days > 0) {
-      return `${days} 天后`;
-    } else if (hours > 0) {
-      return `${hours} 小时后`;
-    } else {
-      return "即将截止";
+    try {
+      const date = new Date(dateString);
+      
+      // 检查是否为无效日期 (Invalid Date)
+      if (isNaN(date.getTime())) {
+        console.warn('⚠️ [DataClient] 无效日期:', dateString);
+        return 'N/A';
+      }
+      
+      const now = new Date();
+      const diff = date.getTime() - now.getTime();
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      
+      if (days > 0) {
+        return `${days} 天后`;
+      } else if (hours > 0) {
+        return `${hours} 小时后`;
+      } else {
+        return "即将截止";
+      }
+    } catch (e) {
+      console.error('❌ [DataClient] 日期格式化错误:', e, '原始值:', dateString);
+      return 'N/A';
     }
   };
 
@@ -271,7 +355,7 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
           <div className="lg:col-span-8">
             <div className="bg-surface-dark rounded-lg border border-border-dark p-6">
               <h2 className="text-xl font-bold text-white mb-4">
-                全网热门事件 Top 10
+                Top 10 Trending Markets
               </h2>
 
               {/* 空数据提示 */}
@@ -292,25 +376,32 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
                       <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider w-16">
                         <div className="flex items-center gap-1.5">
                           <Trophy className="w-4 h-4 text-primary" />
-                          <span>排名</span>
+                          <span>Rank</span>
                         </div>
                       </th>
-                      <th className="px-3 py-3 pl-8 text-left text-xs font-bold text-primary uppercase tracking-wider min-w-[280px]">
-                        事件
+                      <th className="px-3 py-3 pl-8 text-left text-xs font-bold text-primary uppercase tracking-wider min-w-[120px] md:min-w-[280px]">
+                        Market
                       </th>
-                      <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider min-w-[200px]">
-                        预测概率
+                      <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider min-w-[120px] md:min-w-[200px]">
+                        Odds
                       </th>
                       <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider w-24">
-                        截止日期
+                        End Date
                       </th>
                       <th className="px-3 py-3 text-right text-xs font-bold text-primary uppercase tracking-wider w-32">
-                        交易量
+                        Volume
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-dark">
-                    {displayMarkets.map((market, index) => {
+                    {displayMarkets.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center py-10 text-text-secondary">
+                          No trending data available
+                        </td>
+                      </tr>
+                    ) : (
+                      displayMarkets.map((market, index) => {
                       // 使用 rank（如果存在）或 index + 1 作为排名
                       const rankNumber = market.rank !== null && market.rank !== undefined ? market.rank : index + 1;
                       
@@ -395,7 +486,8 @@ export default function DataClient({ hotMarkets, stats }: DataClientProps) {
                           </td>
                         </tr>
                       );
-                    })}
+                    })
+                    )}
                   </tbody>
                 </table>
               </div>

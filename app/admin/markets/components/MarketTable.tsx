@@ -3,6 +3,15 @@
 import Link from "next/link";
 import dayjs from "dayjs";
 
+// 子市场详情接口（后端返回的对象）
+interface SubMarketDetail {
+  id: string;
+  endTime: string; // 结束时间
+  externalId?: string | null; // Polymarket ID
+  outcomePrices?: string | null; // 赔率数据
+  period?: number | null; // 周期（分钟）
+}
+
 interface Market {
   id: string;
   title: string;
@@ -22,9 +31,10 @@ interface Market {
     userCount?: number; // 🚀 新增：交易用户数
     orderCount?: number; // 🚀 新增：交易人次
   };
-  activeMarketIds?: string[];
-  marketIds?: string[];
-  historicalMarketIds?: string[];
+  // 🚀 修改：现在这些数组包含对象而不是字符串
+  activeMarketIds?: SubMarketDetail[];
+  marketIds?: SubMarketDetail[];
+  historicalMarketIds?: SubMarketDetail[];
 }
 
 interface MarketTableProps {
@@ -66,6 +76,32 @@ const formatTime = (timestamp: string | null | undefined) => {
   } catch {
     return "";
   }
+};
+
+// 格式化开始时间（MM-DD HH:mm）
+const formatStartTime = (endTime: string, period?: number | null) => {
+  if (!endTime) return "未知";
+  try {
+    const date = dayjs(endTime);
+    if (!date.isValid()) return "未知";
+    // 如果有周期，开始时间 = 结束时间 - 周期
+    if (period && period > 0) {
+      const startDate = date.subtract(period, 'minute');
+      return startDate.format("MM-DD HH:mm");
+    }
+    // 否则使用结束时间（减去15分钟作为默认，因为大多数工厂市场是15分钟周期）
+    const startDate = date.subtract(15, 'minute');
+    return startDate.format("MM-DD HH:mm");
+  } catch {
+    return "未知";
+  }
+};
+
+// 判断市场是否已同步（有 externalId 且有赔率数据）
+const isMarketSynced = (market: SubMarketDetail): boolean => {
+  const hasExternalId = market.externalId && market.externalId.trim() !== '';
+  const hasOutcomePrices = market.outcomePrices && market.outcomePrices.trim() !== '';
+  return hasExternalId && hasOutcomePrices;
 };
 
 // 格式化金额
@@ -373,18 +409,36 @@ export default function MarketTable({
                             {((market.activeMarketIds && market.activeMarketIds.length > 0) || 
                               (market.marketIds && market.marketIds.length > 0)) ? (
                               <div className="flex flex-wrap gap-2">
-                                {(market.activeMarketIds || market.marketIds || []).map((id: string) => (
+                                {(market.activeMarketIds || market.marketIds || []).map((marketDetail: SubMarketDetail | string) => {
+                                  // 🚀 兼容处理：如果后端返回的是字符串（旧格式），则创建一个基本对象
+                                  const detail: SubMarketDetail = typeof marketDetail === 'string' 
+                                    ? { id: marketDetail, endTime: '', period: null, externalId: null, outcomePrices: null }
+                                    : marketDetail;
+                                  
+                                  const isSynced = isMarketSynced(detail);
+                                  const timeLabel = detail.endTime 
+                                    ? formatStartTime(detail.endTime, detail.period || null)
+                                    : detail.id.substring(0, 8) + '...';
+                                  
+                                  // 样式：未同步显示红色，已同步显示绿色边框
+                                  const cardClassName = !isSynced
+                                    ? "px-2 py-1 bg-red-100 dark:bg-red-900/30 border-2 border-red-500 dark:border-red-600 text-red-900 dark:text-red-300 rounded font-medium text-xs hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                                    : "px-2 py-1 bg-white dark:bg-gray-800 border-2 border-green-400 dark:border-green-600 text-gray-900 dark:text-gray-100 rounded font-medium text-xs hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors";
+                                  
+                                  return (
                                   <Link
-                                    key={id}
+                                    key={detail.id}
                                     href={mode === 'factory'
-                                      ? `/admin/markets/edit/${id}?backTo=/admin/factory`
-                                      : `/admin/markets/edit/${id}`
+                                      ? `/admin/markets/edit/${detail.id}?backTo=/admin/factory`
+                                      : `/admin/markets/edit/${detail.id}`
                                     }
-                                    className="px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 font-mono text-xs"
+                                      className={cardClassName}
+                                      title={`同步状态: ${isSynced ? '已同步' : '未同步'}`}
                                   >
-                                    {id.substring(0, 8)}...
+                                      {timeLabel}
                                   </Link>
-                                ))}
+                                  );
+                                })}
                               </div>
                             ) : (
                               <p className="text-gray-400 dark:text-gray-500 text-xs">暂无活跃场次</p>
@@ -397,18 +451,36 @@ export default function MarketTable({
                                 历史记录 ({market.historicalMarketIds.length} 个)
                               </p>
                                 <div className="flex flex-wrap gap-2">
-                                  {market.historicalMarketIds.map((id: string) => (
+                                  {market.historicalMarketIds.map((marketDetail: SubMarketDetail | string) => {
+                                    // 🚀 兼容处理：如果后端返回的是字符串（旧格式），则创建一个基本对象
+                                    const detail: SubMarketDetail = typeof marketDetail === 'string' 
+                                      ? { id: marketDetail, endTime: '', period: null, externalId: null, outcomePrices: null }
+                                      : marketDetail;
+                                    
+                                    const isSynced = isMarketSynced(detail);
+                                    const timeLabel = detail.endTime 
+                                      ? formatStartTime(detail.endTime, detail.period || null)
+                                      : detail.id.substring(0, 8) + '...';
+                                    
+                                    // 历史记录的样式：未同步显示红色，已同步显示默认灰色
+                                    const cardClassName = !isSynced
+                                      ? "px-2 py-1 bg-red-100 dark:bg-red-900/30 border-2 border-red-500 dark:border-red-600 text-red-900 dark:text-red-300 rounded font-medium text-xs hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                                      : "px-2 py-1 bg-gray-100 dark:bg-gray-900 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-800 font-medium text-xs text-gray-500 dark:text-gray-400 transition-colors";
+                                    
+                                    return (
                                     <Link
-                                      key={id}
+                                      key={detail.id}
                                       href={mode === 'factory'
-                                        ? `/admin/markets/edit/${id}?backTo=/admin/factory`
-                                        : `/admin/markets/edit/${id}`
+                                        ? `/admin/markets/edit/${detail.id}?backTo=/admin/factory`
+                                        : `/admin/markets/edit/${detail.id}`
                                       }
-                                      className="px-2 py-1 bg-gray-100 dark:bg-gray-900 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-800 font-mono text-xs text-gray-500 dark:text-gray-400"
+                                        className={cardClassName}
+                                        title={`同步状态: ${isSynced ? '已同步' : '未同步'}`}
                                     >
-                                      {id.substring(0, 8)}...
+                                        {timeLabel}
                                     </Link>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                             </div>
                           )}

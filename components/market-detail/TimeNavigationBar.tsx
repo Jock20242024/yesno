@@ -100,58 +100,37 @@ export default function TimeNavigationBar({
     return date.local().format('HH:mm');
   };
 
-  // 处理场次点击（这个函数用于导航栏中的按钮，菜单点击在 page.tsx 中处理）
-  // 🔥 修复：允许选择未来场次和已结束场次，即使它们还没有生成
-  const handleSlotClick = async (slot: any) => {
-    // 如果场次已生成，直接跳转
+  // 🔥 修复：只处理已生成的市场，不触发生成逻辑
+  // 市场应该由后台任务提前批量生成，不应该由用户点击触发
+  const handleSlotClick = (slot: any) => {
+    // 只有场次已生成且有marketId时，才允许跳转
     if (slot.marketId && slot.marketId !== currentMarketId) {
       router.push(`/markets/${slot.marketId}`);
-      return;
     }
-    
-    // 🔥 如果场次未生成但有 templateId，调用生成接口
-    if (!slot.marketId && templateId) {
-      try {
-        const endTime = slot.endTime.utc().toISOString();
-        
-        const response = await fetch(`/api/admin/factory/templates/${templateId}/trigger`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            overrideEndTime: endTime,
-          }),
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.data?.marketId) {
-            router.push(`/markets/${result.data.marketId}`);
-          } else {
-            console.warn('生成市场失败:', result.error || '未知错误');
-          }
-        } else {
-          console.warn('生成市场请求失败:', response.status, response.statusText);
-        }
-      } catch (error) {
-        console.error('生成市场失败:', error);
-      }
-      return;
-    }
-    
-    // 如果没有 templateId，无法生成，但至少允许用户看到提示
-    if (!slot.marketId && !templateId) {
-      console.warn('该场次尚未预生成，且没有模板ID，无法生成');
-    }
+    // 如果场次未生成，不做任何操作（市场应该提前生成好）
   };
 
   // 计算槽位数据（必须在 hooks 之后，但在早期返回之前）
   const shouldRender = period && period >= 15 && period <= 1440;
   const hasSlots = slotsProp && slotsProp.length > 0;
 
-  // 生成数据（仅在需要时计算）
+  // 🔥 修复：只显示后端返回的已生成市场，不生成全天的空槽位
+  // 参考Polymarket：只显示已存在的市场，不显示未生成的市场
   const navigationData = shouldRender && hasSlots ? (() => {
-    const allDaySlots = generateAllDaySlots(period);
-    const mappedSlots = mapSlotsToAllDaySlots(allDaySlots, slotsProp || []);
+    // 将后端返回的slots转换为前端格式
+    const mappedSlots = (slotsProp || []).map((slot) => {
+      const startTimeLocal = dayjs(slot.startTime).local();
+      const endTimeLocal = dayjs(slot.endTime).local();
+      const slotKey = startTimeLocal.format('YYYY-MM-DD-HH-mm');
+      
+      return {
+        slotKey,
+        startTime: startTimeLocal,
+        endTime: endTimeLocal,
+        marketId: slot.id, // 🔥 使用slot.id作为marketId
+        slotData: slot,
+      };
+    });
     
     const now = dayjs().local();
     const activeSlotIndex = mappedSlots.findIndex(slot => {
@@ -175,49 +154,21 @@ export default function TimeNavigationBar({
 
   const { visibleSlots, currentIndex, allMappedSlots } = navigationData;
 
-  // 处理菜单中的场次点击
-  // 🔥 修复：允许选择未来场次和已结束场次，即使它们还没有生成
-  const handleMenuSlotClick = async (slot: any) => {
-    // 如果场次已生成，直接跳转
-    if (slot.marketId && slot.marketId !== currentMarketId) {
-      router.push(`/markets/${slot.marketId}`);
+  // 🔥 修复：只处理已生成的市场，不触发生成逻辑
+  // 市场应该由后台任务提前批量生成，不应该由用户点击触发
+  const handleMenuSlotClick = (slot: any) => {
+    // 如果点击的是当前市场，只关闭菜单
+    if (slot.marketId === currentMarketId) {
       setIsMenuOpen(false);
       return;
     }
     
-    // 🔥 如果场次未生成但有 templateId，调用生成接口
-    if (!slot.marketId && templateId) {
-      setIsMenuOpen(false); // 先关闭菜单
-      try {
-        const endTime = slot.endTime.utc().toISOString();
-        
-        const response = await fetch(`/api/admin/factory/templates/${templateId}/trigger`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            overrideEndTime: endTime,
-          }),
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.data?.marketId) {
-            router.push(`/markets/${result.data.marketId}`);
+    // 只有场次已生成且有marketId时，才允许跳转
+    if (slot.marketId) {
+      setIsMenuOpen(false);
+      router.push(`/markets/${slot.marketId}`);
           } else {
-            console.warn('生成市场失败:', result.error || '未知错误');
-          }
-        } else {
-          console.warn('生成市场请求失败:', response.status, response.statusText);
-        }
-      } catch (error) {
-        console.error('生成市场失败:', error);
-      }
-      return;
-    }
-    
-    // 如果没有 templateId，无法生成，但至少允许用户看到提示
-    if (!slot.marketId && !templateId) {
-      console.warn('该场次尚未预生成，且没有模板ID，无法生成');
+      // 如果场次未生成，只关闭菜单，不做任何操作（市场应该提前生成好）
       setIsMenuOpen(false);
     }
   };
@@ -302,6 +253,8 @@ export default function TimeNavigationBar({
             const isHighlighted = isActive || slotStatus === 'active';
             const timeStr = formatTime(slot.startTime);
             
+            // 🔥 修复：visibleSlots中只包含已生成的市场（marketId不为null）
+            // 所以这里不需要检查hasMarket，直接显示即可
             return (
               <button
                 key={slot.slotKey}
@@ -309,7 +262,7 @@ export default function TimeNavigationBar({
                 onClick={() => handleSlotClick(slot)}
                 className={`
                   flex-shrink-0 px-4 py-1 rounded-full text-sm font-medium transition-all relative
-                  border border-gray-700
+                  border border-gray-700 cursor-pointer
                   ${
                     isHighlighted
                       ? "bg-blue-600 text-white shadow-lg"
@@ -387,11 +340,13 @@ export default function TimeNavigationBar({
                 const isHighlighted = isActive || isCurrent;
                 const timeStr = startTimeLocal.format('HH:mm');
                 
+                // 🔥 修复：allMappedSlots中只包含已生成的市场（marketId不为null）
+                // 所以这里不需要检查hasMarket，直接显示即可
                 return (
                   <div
                     key={slot.slotKey}
                     onClick={() => handleMenuSlotClick(slot)}
-                    className={`px-4 py-3 text-sm cursor-pointer transition-colors ${
+                    className={`px-4 py-3 text-sm transition-colors cursor-pointer ${
                       isHighlighted
                         ? "bg-[#2d3339] text-white"
                         : "text-[#94a3b8] hover:bg-[#2d3339]"

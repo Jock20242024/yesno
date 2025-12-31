@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/app/api/auth/[...nextauth]/route";
+import { auth } from "@/lib/authExport";
 import { prisma } from "@/lib/prisma";
 import { createSession } from "@/lib/auth-core/sessionStore";
 import { cookies } from "next/headers";

@@ -418,10 +418,20 @@ export default function AdminUserManagement() {
                           >
                             <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
                           </button>
-                          <button className="p-1.5 rounded-md text-[#637588] dark:text-[#9da8b9] hover:bg-gray-100 dark:hover:bg-[#283545] hover:text-primary transition-colors" title="查看详情">
+                          {/* 🔥 查看详情按钮 - 跳转到用户详情页 */}
+                          <button 
+                            onClick={() => router.push(`/admin/users/${user.id}`)}
+                            className="p-1.5 rounded-md text-[#637588] dark:text-[#9da8b9] hover:bg-gray-100 dark:hover:bg-[#283545] hover:text-primary transition-colors cursor-pointer" 
+                            title="查看详情"
+                          >
                             <span className="material-symbols-outlined text-[20px]">visibility</span>
                           </button>
-                          <button className="p-1.5 rounded-md text-[#637588] dark:text-[#9da8b9] hover:bg-gray-100 dark:hover:bg-[#283545] hover:text-primary transition-colors" title="编辑">
+                          {/* 🔥 编辑按钮 - 跳转到用户编辑页 */}
+                          <button 
+                            onClick={() => router.push(`/admin/users/${user.id}/edit`)}
+                            className="p-1.5 rounded-md text-[#637588] dark:text-[#9da8b9] hover:bg-gray-100 dark:hover:bg-[#283545] hover:text-primary transition-colors cursor-pointer" 
+                            title="编辑用户"
+                          >
                             <span className="material-symbols-outlined text-[20px]">edit</span>
                           </button>
                           {isBanned ? (

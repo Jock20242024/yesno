@@ -17,16 +17,15 @@ const notoSansSC = Noto_Sans_SC({
 });
 
 export const metadata: Metadata = {
-  title: "yesno - 预测市场",
-  description: "预测未来，赢取丰厚奖励",
+  title: "yesno - Prediction Market",
+  description: "Predict the future, earn rewards. Join the global prediction market.",
 };
 
-// 响应式视口配置：支持移动端和PC端
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 5,
-  userScalable: true,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
@@ -56,7 +55,7 @@ export default function RootLayout({
         }} />
       </head>
       <body
-        className={`${inter.variable} ${notoSansSC.variable} bg-background-dark text-white min-h-screen flex flex-col font-display selection:bg-primary selection:text-black`}
+        className={`${inter.variable} ${notoSansSC.variable} bg-background-dark text-white min-h-screen flex flex-col font-display selection:bg-primary selection:text-black max-w-[100vw] overflow-x-hidden`}
       >
         <Providers>
           {children}

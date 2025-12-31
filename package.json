@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "check:positions": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/check-positions.ts",
+    "check:orders": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/check-orders.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -10,7 +12,9 @@
     "cron:market-factory": "ts-node --compiler-options {\"module\":\"commonjs\"} scripts/market-factory-cron.ts",
     "clean:markets": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/reset-markets.ts",
     "diagnose-file": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/diagnose-to-file.ts",
-    "fix:eth-icon": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/fix-eth-icon.ts"
+    "fix:eth-icon": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/fix-eth-icon.ts",
+    "fix:all-data": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/fix-all-data.ts",
+    "diagnose:odds": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/diagnose-odds-sync.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"commonjs\"} prisma/seed.ts"
@@ -28,6 +32,7 @@
     "lucide-react": "^0.294.0",
     "next": "^14.0.0",
     "next-auth": "^5.0.0-beta.30",
+    "next-intl": "^4.6.1",
     "node-cron": "^3.0.3",
     "prisma": "^6.0.0",
     "qrcode.react": "^4.2.0",

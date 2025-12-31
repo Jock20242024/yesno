@@ -1,8 +1,15 @@
+"use client";
+
 import MarketTable from "@/components/MarketTable";
 import MarketOverview from "@/components/MarketOverview";
-import { MARKET_DATA } from "@/lib/data";
 import { Globe, TrendingUp, Shield } from "lucide-react";
 
+/**
+ * 首页 - 完全客户端渲染，从 API 获取数据
+ * 
+ * 🔥 核心修复：移除了 MARKET_DATA Mock 数据
+ * 现在 MarketTable 完全从 API 获取数据，确保显示最新内容
+ */
 export default function LandingPage() {
   return (
     <div className="layout-container flex h-full grow flex-col w-full lg:max-w-[1440px] lg:mx-auto px-4 lg:px-10 py-8">
@@ -10,15 +17,15 @@ export default function LandingPage() {
       <section className="flex flex-col md:flex-row justify-between items-end gap-6 mb-10 pb-8 border-b border-border-dark">
         <div className="flex flex-col gap-4 max-w-[720px]">
           <h1 className="text-white text-3xl md:text-4xl lg:text-5xl font-black leading-tight tracking-tight">
-            <span className="text-primary">预测未来</span>，赢取丰厚奖励
+            <span className="text-primary">预测未来</span>, 赢取丰厚奖励
           </h1>
           <p className="text-text-secondary text-lg font-normal leading-normal max-w-[600px]">
-            加入全球预测市场。不仅是旁观者，更是参与者。交易您对世界大事的看法，在每一份不确定中发现价值。
+            加入全球预测市场，参与各类事件的预测和交易，实时查看价格变化和趋势
           </p>
           <div className="flex gap-4 mt-2">
             <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark px-3 py-1.5 rounded-full border border-border-dark">
               <Globe className="w-[18px] h-[18px] text-primary" />
-              全球热点
+              全球趋势
             </div>
             <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark px-3 py-1.5 rounded-full border border-border-dark">
               <TrendingUp className="w-[18px] h-[18px] text-primary" />
@@ -36,7 +43,8 @@ export default function LandingPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* 左侧：排行榜 - 75% */}
         <main className="lg:col-span-9 flex flex-col gap-6">
-          <MarketTable data={MARKET_DATA} />
+          {/* 🔥 不传递 data prop，让 MarketTable 完全从 API 获取数据 */}
+          <MarketTable />
         </main>
         
         {/* 右侧：市场概览 - 25% */}

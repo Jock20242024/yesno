@@ -6,6 +6,7 @@ import Link from "next/link";
 import { User } from "@/types/api";
 
 interface RankingUser {
+  id: string;
   rank: number;
   avatar: string;
   name: string;
@@ -14,10 +15,10 @@ interface RankingUser {
 }
 
 const timeTabs = [
-  { id: "today", label: "今天" },
-  { id: "weekly", label: "每周" },
-  { id: "monthly", label: "每月" },
-  { id: "all", label: "全部" },
+  { id: "today", label: "Today" },
+  { id: "weekly", label: "Weekly" },
+  { id: "monthly", label: "Monthly" },
+  { id: "all", label: "All" },
 ];
 
 export default function RankingTable() {
@@ -96,7 +97,8 @@ export default function RankingTable() {
   }, [searchQuery]);
 
   // 将 API 返回的 User 数据转换为组件使用的格式
-  const filteredRankings: RankingUser[] = rankingData.map((user) => ({
+  const filteredRankings = rankingData.map((user) => ({
+    id: user.id,
     rank: user.rank,
     avatar: user.avatarUrl || "",
     name: user.username,
@@ -105,7 +107,7 @@ export default function RankingTable() {
   }));
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="w-full max-w-full overflow-hidden flex flex-col gap-6">
       {/* 顶部导航 Tabs */}
       <div className="flex items-center gap-2 border-b border-zinc-800">
         {timeTabs.map((tab) => (
@@ -129,7 +131,7 @@ export default function RankingTable() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="text"
-            placeholder="按名称搜索"
+            placeholder="Search by name"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-pm-green transition-colors"
@@ -158,20 +160,21 @@ export default function RankingTable() {
       {/* 排行榜表格 */}
       {!isLoading && !error && (
         <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
+          <div className="w-full overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  排名
+                  Rank
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  用户
+                  User
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  利润/亏损
+                  P&L
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  体量
+                  Volume
                 </th>
               </tr>
             </thead>
@@ -179,7 +182,7 @@ export default function RankingTable() {
               {filteredRankings.length > 0 ? (
                 filteredRankings.map((user) => (
                   <tr
-                    key={user.rank}
+                    key={user.id}
                     className="hover:bg-zinc-800/50 transition-colors"
                   >
                     <td className="px-6 py-4">
@@ -199,7 +202,7 @@ export default function RankingTable() {
                     </td>
                     <td className="px-6 py-4">
                       <Link
-                        href={`/rank/${user.name}`}
+                        href={`/rank/${user.id}`}
                         className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                       >
                         <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#D4AF37] flex-shrink-0 bg-pm-card" style={{ boxShadow: '0 0 8px rgba(212, 175, 55, 0.3)' }}>
@@ -233,12 +236,13 @@ export default function RankingTable() {
               ) : (
                 <tr>
                   <td colSpan={4} className="px-6 py-8 text-center text-zinc-400">
-                    暂无数据
+                    No data available
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
