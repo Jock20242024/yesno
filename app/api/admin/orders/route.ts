@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
     
     // 🔥 修复：直接从数据库查询 isAdmin
-    const dbUser = await prisma.user.findUnique({
+    const dbUser = await prisma.users.findUnique({
       where: { email: userEmail },
       select: { id: true, isAdmin: true },
     });
@@ -72,17 +72,17 @@ export async function GET(request: NextRequest) {
 
     // 🔥 查询订单总数和分页数据（包含用户和市场信息）
     const [total, dbOrders] = await Promise.all([
-      prisma.order.count({ where }),
-      prisma.order.findMany({
+      prisma.orders.count({ where }),
+      prisma.orders.findMany({
         where,
         include: {
-          user: {
+          users: {
             select: {
               id: true,
               email: true,
             },
           },
-          market: {
+          markets: {
             select: {
               id: true,
               title: true,
@@ -101,10 +101,10 @@ export async function GET(request: NextRequest) {
     const orders = dbOrders.map((order) => ({
       id: order.id,
       userId: order.userId,
-      userEmail: order.user.email,
+      userEmail: order.users.email,
       marketId: order.marketId,
-      marketTitle: order.market.title,
-      marketStatus: order.market.status,
+      marketTitle: order.markets.title,
+      marketStatus: order.markets.status,
       outcomeSelection: order.outcomeSelection,
       amount: Number(order.amount || 0),
       feeDeducted: Number(order.feeDeducted || 0),

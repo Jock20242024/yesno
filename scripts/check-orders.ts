@@ -12,7 +12,7 @@ async function checkOrders() {
     console.log('🔍 开始查询 Order 数据...\n');
     
     // 查询所有最近的订单记录（按创建时间倒序）
-    const orders = await prisma.order.findMany({
+    const orders = await prisma.orders.findMany({
       include: {
         market: {
           select: {

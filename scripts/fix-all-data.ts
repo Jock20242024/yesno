@@ -35,7 +35,7 @@ async function fixCategories() {
   for (const categoryData of CATEGORIES) {
     try {
       // 使用 upsert 确保分类存在
-      const category = await prisma.category.upsert({
+      const category = await prisma.categories.upsert({
         where: { slug: categoryData.slug },
         update: {
           name: categoryData.name,

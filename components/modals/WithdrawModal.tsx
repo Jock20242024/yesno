@@ -5,6 +5,7 @@ import { X, Loader2, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { formatUSD } from "@/lib/utils";
 import { CRYPTO_CONFIG, parseFee } from "@/lib/constants/cryptoConfig";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface WithdrawModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export default function WithdrawModal({
   onClose,
   availableBalance,
 }: WithdrawModalProps) {
+  const { t } = useLanguage();
   const [selectedCrypto, setSelectedCrypto] = useState<CryptoType>("USDC");
   const [address, setAddress] = useState("");
   const [selectedNetwork, setSelectedNetwork] = useState<NetworkId>("POLYGON");
@@ -71,8 +73,8 @@ export default function WithdrawModal({
     setIsLoading(false);
     const selectedNetworkConfig = availableNetworks.find(n => n.id === selectedNetwork);
     try {
-      toast.success("提现成功", {
-        description: `已提交提现申请，预计 ${selectedNetworkConfig?.arrival || "5-10 分钟"} 到账`,
+      toast.success(t('wallet.withdraw.success'), {
+        description: t('wallet.withdraw.success_desc', { time: selectedNetworkConfig?.arrival || "5-10 分钟" }),
         duration: 3000,
       });
     } catch (e) {
@@ -92,7 +94,7 @@ export default function WithdrawModal({
       <div className="bg-pm-card rounded-xl border border-white/10 shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         {/* 模态框头部 */}
         <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-pm-card z-10">
-          <h2 className="text-xl font-bold text-white">提现</h2>
+          <h2 className="text-xl font-bold text-white">{t('wallet.withdraw.title')}</h2>
           <button
             onClick={onClose}
             disabled={isLoading}
@@ -107,7 +109,7 @@ export default function WithdrawModal({
           {/* 步骤一：选择币种 */}
           <div>
             <label className="block text-sm font-medium text-zinc-500 mb-2">
-              选择币种
+              {t('wallet.withdraw.select_crypto')}
             </label>
             <div className="flex gap-2">
               <button
@@ -153,14 +155,14 @@ export default function WithdrawModal({
               htmlFor="withdraw-address"
               className="block text-sm font-medium text-zinc-500 mb-2"
             >
-              提现地址
+              {t('wallet.withdraw.address_label')}
             </label>
             <input
               id="withdraw-address"
               type="text"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder={selectedNetwork === "TRC20" ? "TX8..." : "0x..."}
+              placeholder={selectedNetwork === "TRC20" ? t('wallet.withdraw.address_placeholder_trc20') : t('wallet.withdraw.address_placeholder_erc20')}
               disabled={isLoading}
               className="w-full bg-pm-bg border border-white/10 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all disabled:opacity-50 font-mono text-sm"
               required
@@ -170,7 +172,7 @@ export default function WithdrawModal({
           {/* 步骤三：转账网络 */}
           <div>
             <label className="block text-sm font-medium text-zinc-500 mb-2">
-              转账网络
+              {t('wallet.withdraw.network_label')}
             </label>
             <div className="relative">
               <button
@@ -182,7 +184,7 @@ export default function WithdrawModal({
                 <div className="text-left">
                   <div className="text-sm font-bold">{selectedNetworkConfig?.name}</div>
                   <div className="text-xs text-zinc-500 mt-0.5">
-                    手续费 {selectedNetworkConfig?.fee} · 预计 {selectedNetworkConfig?.arrival} 到账
+                    {t('wallet.withdraw.network_fee_label')} {selectedNetworkConfig?.fee ?? ''} · {t('wallet.withdraw.est_arrival', { time: selectedNetworkConfig?.arrival ?? '' })}
                   </div>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-zinc-500 transition-transform ${showNetworkDropdown ? "rotate-180" : ""}`} />
@@ -209,7 +211,7 @@ export default function WithdrawModal({
                       >
                         <div className="text-sm font-bold text-white">{network.name}</div>
                         <div className="text-xs text-zinc-500 mt-0.5">
-                          手续费 {network.fee} · 预计 {network.arrival} 到账
+                          {t('wallet.withdraw.network_fee_label')} {network.fee} · {t('wallet.withdraw.est_arrival', { time: network.arrival })}
                         </div>
                       </button>
                     ))}
@@ -226,11 +228,11 @@ export default function WithdrawModal({
                 htmlFor="withdraw-amount"
                 className="block text-sm font-medium text-zinc-500"
               >
-                提现金额
+                {t('wallet.withdraw.amount_label')}
               </label>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-zinc-500">
-                  可用: {formatUSD(availableBalance)}
+                  {t('wallet.withdraw.available')}: {formatUSD(availableBalance)}
                 </span>
                 <button
                   type="button"
@@ -238,7 +240,7 @@ export default function WithdrawModal({
                   disabled={isLoading}
                   className="text-xs text-emerald-500 hover:text-emerald-400 font-bold px-2 py-1 rounded hover:bg-emerald-500/10 transition-all disabled:opacity-50"
                 >
-                  Max
+                  {t('wallet.withdraw.max')}
                 </button>
               </div>
             </div>
@@ -248,7 +250,7 @@ export default function WithdrawModal({
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
+                placeholder={t('wallet.withdraw.amount_placeholder')}
                 min="0"
                 max={availableBalance}
                 step="0.01"
@@ -265,13 +267,13 @@ export default function WithdrawModal({
           {/* 信息汇总 - 实时更新 */}
           <div className="bg-pm-bg rounded-lg border border-white/10 p-4 space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-zinc-500">网络手续费 (Network Fee)</span>
+              <span className="text-zinc-500">{t('wallet.withdraw.network_fee')}</span>
               <span className="font-mono font-bold text-white">
                 {formatUSD(networkFee)}
               </span>
             </div>
             <div className="flex items-center justify-between text-sm pt-2 border-t border-white/10">
-              <span className="text-zinc-500">实际到账 (Receive Amount)</span>
+              <span className="text-zinc-500">{t('wallet.withdraw.receive_amount')}</span>
               <span className="font-mono font-bold text-emerald-500">
                 {formatUSD(actualAmount)}
               </span>
@@ -287,10 +289,10 @@ export default function WithdrawModal({
             {isLoading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                处理中...
+                {t('wallet.withdraw.processing')}
               </>
             ) : (
-              "确认提现"
+              t('wallet.withdraw.submit')
             )}
           </button>
         </form>

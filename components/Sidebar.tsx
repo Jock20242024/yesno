@@ -2,8 +2,10 @@
 
 import { UserCircle, TrendingUp, BarChart3, ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 export default function Sidebar() {
+  const { t } = useLanguage();
   return (
     <aside className="lg:col-span-4 xl:col-span-3 flex flex-col gap-6 sticky top-24 h-fit">
       {/* 注册提示卡片 */}
@@ -13,10 +15,10 @@ export default function Sidebar() {
           <div className="flex flex-col gap-2">
             <h3 className="text-white text-lg font-bold flex items-center gap-2">
               <UserCircle className="w-5 h-5 text-primary" />
-              开启您的预测之旅
+              {t('home.sidebar.start_journey')}
             </h3>
             <p className="text-text-secondary text-sm">
-              注册 YesNo 账户，即可参与全球数千个热门话题的预测交易。
+              {t('home.sidebar.register_desc')}
             </p>
           </div>
           <div className="flex flex-col gap-3">
@@ -24,13 +26,13 @@ export default function Sidebar() {
               href="/login"
               className="w-full h-10 rounded-lg bg-primary hover:bg-primary-hover text-[#18181b] text-sm font-bold shadow-md transition-all flex items-center justify-center"
             >
-              创建免费账户
+              {t('home.sidebar.create_account')}
             </Link>
             <Link
               href="/login"
               className="w-full h-10 rounded-lg bg-[#3f3f46] hover:bg-[#52525b] text-white text-sm font-bold border border-border-dark transition-all flex items-center justify-center"
             >
-              已有账号？登录
+              {t('home.sidebar.have_account')}
             </Link>
           </div>
         </div>
@@ -46,16 +48,16 @@ export default function Sidebar() {
         />
         <div className="absolute bottom-0 left-0 w-full p-5 flex flex-col gap-2">
           <div className="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded bg-primary text-[#18181b] text-[10px] font-bold uppercase tracking-wider">
-            新人限定
+            {t('home.sidebar.newcomer_badge')}
           </div>
           <h3 className="text-white text-lg font-bold leading-tight">
-            注册即送 100 体验金
+            {t('home.sidebar.register_bonus')}
           </h3>
           <p className="text-text-secondary text-xs">
-            零风险体验预测市场，盈利归您，亏损免单。
+            {t('home.sidebar.bonus_desc')}
           </p>
           <div className="mt-2 flex items-center text-primary text-xs font-bold gap-1 group-hover:gap-2 transition-all">
-            领取福利 <ArrowRight className="w-3.5 h-3.5" />
+            {t('home.sidebar.claim_bonus')} <ArrowRight className="w-3.5 h-3.5" />
           </div>
         </div>
       </div>
@@ -64,21 +66,21 @@ export default function Sidebar() {
       <div className="rounded-xl border border-border-dark bg-surface-dark p-5">
         <h3 className="text-white text-sm font-bold mb-4 flex items-center gap-2">
           <BarChart3 className="w-[18px] h-[18px] text-text-secondary" />
-          预测市场实时数据
+          {t('home.sidebar.title')}
         </h3>
         <div className="flex flex-col gap-4">
           <div className="flex justify-between items-center pb-3 border-b border-border-dark/50">
-            <span className="text-text-secondary text-xs">24h 交易量</span>
+            <span className="text-text-secondary text-xs whitespace-nowrap">{t('home.sidebar.volume_24h')}</span>
             <span className="text-white font-mono font-medium">
               $12,405,920
             </span>
           </div>
           <div className="flex justify-between items-center pb-3 border-b border-border-dark/50">
-            <span className="text-text-secondary text-xs">活跃预测事件</span>
+            <span className="text-text-secondary text-xs whitespace-nowrap">{t('home.sidebar.active_events')}</span>
             <span className="text-white font-mono font-medium">2,840</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-text-secondary text-xs">累计发放奖励</span>
+            <span className="text-text-secondary text-xs whitespace-nowrap">{t('home.sidebar.total_rewards')}</span>
             <span className="text-primary font-mono font-medium">$45M+</span>
           </div>
         </div>

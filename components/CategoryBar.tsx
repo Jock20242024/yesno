@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as Icons from "lucide-react";
 import { LucideIcon } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface CategoryItem {
   slug: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   isHighlight?: boolean;
 }
 
@@ -48,54 +49,70 @@ const getIconComponent = (iconName: string | null | undefined): LucideIcon => {
   return Icons.Home;
 };
 
-// 固定分类（系统内置）- 只保留"数据"，"热门"从数据库获取
-const fixedCategories: CategoryItem[] = [
-  {
-    slug: "data",
-    label: "数据",
-    icon: Icons.LineChart,
-    isHighlight: false,
-  },
-];
-
-// 默认分类（当数据库为空时的 fallback）
-const defaultCategories: CategoryItem[] = [
-  {
-    slug: "crypto",
-    label: "加密货币",
-    icon: Icons.Bitcoin,
-    isHighlight: false,
-  },
-  {
-    slug: "politics",
-    label: "政治",
-    icon: Icons.Building2,
-    isHighlight: false,
-  },
-  {
-    slug: "sports",
-    label: "体育",
-    icon: Icons.Trophy,
-    isHighlight: false,
-  },
-  {
-    slug: "finance",
-    label: "金融",
-    icon: Icons.DollarSign,
-    isHighlight: false,
-  },
-  {
-    slug: "technology",
-    label: "科技",
-    icon: Icons.Cpu,
-    isHighlight: false,
-  },
-];
+// 🔥 强制英文对齐：定义初始语言常量
+const INITIAL_LANG = 'en' as const;
 
 export default function CategoryBar() {
   const pathname = usePathname();
+  const { t, language } = useLanguage();
+  const [mounted, setMounted] = useState(false);
   const [dynamicCategories, setDynamicCategories] = useState<CategoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [categoriesData, setCategoriesData] = useState<ApiCategory[]>([]);
+
+  // 🔥 修复 Hydration 错误：等待客户端挂载
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // 🔥 强制英文对齐：翻译辅助函数，确保未挂载时返回英文
+  const getTranslation = useCallback((key: string, fallback: string): string => {
+    return mounted ? t(key) : fallback;
+  }, [mounted, t]);
+
+  // 固定分类（系统内置）- 只保留"数据"，"热门"从数据库获取
+  const fixedCategories: CategoryItem[] = useMemo(() => [
+    {
+      slug: "data",
+      label: mounted ? t('home.categories.data') : 'Data',
+      icon: Icons.LineChart,
+      isHighlight: false,
+    },
+  ], [t, mounted]);
+
+  // 默认分类（当数据库为空时的 fallback）- 🔥 强制英文对齐
+  const defaultCategories: CategoryItem[] = useMemo(() => [
+    {
+      slug: "crypto",
+      label: mounted ? t('home.categories.crypto') : 'Crypto',
+      icon: Icons.Bitcoin,
+      isHighlight: false,
+    },
+    {
+      slug: "politics",
+      label: mounted ? t('home.categories.politics') : 'Politics',
+      icon: Icons.Building2,
+      isHighlight: false,
+    },
+    {
+      slug: "sports",
+      label: mounted ? t('home.categories.sports') : 'Sports',
+      icon: Icons.Trophy,
+      isHighlight: false,
+    },
+    {
+      slug: "finance",
+      label: mounted ? t('home.categories.finance') : 'Finance',
+      icon: Icons.DollarSign,
+      isHighlight: false,
+    },
+    {
+      slug: "technology",
+      label: mounted ? t('home.categories.technology') : 'Technology',
+      icon: Icons.Cpu,
+      isHighlight: false,
+    },
+  ], [t, mounted]);
 
   // 从 API 获取分类列表
   useEffect(() => {
@@ -133,29 +150,51 @@ export default function CategoryBar() {
                   IconComponent = getIconComponent(cat.icon);
                 }
 
+                // 🔥 强制英文对齐：翻译分类名称，优先使用翻译键，如果不存在则使用英文 fallback（不使用数据库中的中文 name）
+                let translatedLabel: string;
+                
+                // 🔥 英文 fallback 映射（根据常见分类 slug）
+                const englishFallbacks: Record<string, string> = {
+                  'crypto': 'Crypto',
+                  'politics': 'Politics',
+                  'sports': 'Sports',
+                  'finance': 'Finance',
+                  'technology': 'Technology',
+                  'tech': 'Tech',
+                };
+                
+                if (cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门") {
+                  translatedLabel = getTranslation('home.categories.hot', 'Trending');
+                } else {
+                  // 🔥 强制根据 slug 查找翻译键（如 home.categories.crypto, home.categories.politics 等）
+                  const translationKey = `home.categories.${cat.slug}`;
+                  // 🔥 使用英文 fallback，而不是数据库中的 cat.name（可能是中文）
+                  const fallback = englishFallbacks[cat.slug] || cat.slug.charAt(0).toUpperCase() + cat.slug.slice(1);
+                  const translated = getTranslation(translationKey, fallback);
+                  
+                  // 🔥 如果翻译键存在且返回的不是 key 本身，使用翻译；否则使用英文 fallback
+                  if (translated && translated !== translationKey) {
+                    translatedLabel = translated;
+                  } else {
+                    // 🔥 如果翻译不存在，使用英文 fallback（不使用数据库中的中文 name）
+                    translatedLabel = fallback;
+                  }
+                }
+
                 return {
                   slug: cat.slug === "-1" ? "hot" : cat.slug, // 🔥 修复：将数据库中的 -1 转换为 hot 用于路由
-                  label: cat.name,
+                  label: translatedLabel,
                   icon: IconComponent,
                   isHighlight: cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门", // 热门分类高亮显示
                 };
               });
 
-            setDynamicCategories(apiCategories);
-            console.log(`✅ [CategoryBar] 已加载 ${apiCategories.length} 个动态分类`);
-          } else {
-            // 🔥 Fallback：如果数据库为空，使用默认分类
-            console.warn('⚠️ [CategoryBar] 数据库为空，使用默认分类');
-            setDynamicCategories(defaultCategories);
+            setCategoriesData(topLevelCategories);
+
           }
-        } else {
-          console.warn('⚠️ [CategoryBar] API 返回数据格式错误，使用默认分类:', data);
-          setDynamicCategories(defaultCategories);
         }
       } catch (error) {
-        console.error("❌ [CategoryBar] 获取分类列表失败，使用默认分类:", error);
-        // 🔥 Fallback：API 调用失败时使用默认分类
-        setDynamicCategories(defaultCategories);
+        console.error("❌ [CategoryBar] 获取分类列表失败:", error);
       } finally {
         setIsLoading(false);
       }
@@ -164,8 +203,63 @@ export default function CategoryBar() {
     fetchCategories();
   }, []);
 
+  // 🔥 关键修复：当语言变化时，重新翻译分类名称
+  useEffect(() => {
+    if (categoriesData.length > 0) {
+      const apiCategories: CategoryItem[] = categoriesData
+        .sort((a: ApiCategory & { sortOrder?: number }, b: ApiCategory & { sortOrder?: number }) => {
+          const aOrder = a.sortOrder !== undefined ? a.sortOrder : a.displayOrder;
+          const bOrder = b.sortOrder !== undefined ? b.sortOrder : b.displayOrder;
+          return aOrder - bOrder;
+        })
+        .map((cat: ApiCategory) => {
+          let IconComponent: LucideIcon;
+          if (cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门") {
+            IconComponent = Icons.Flame;
+          } else {
+            IconComponent = getIconComponent(cat.icon);
+          }
+
+          let translatedLabel: string;
+          const englishFallbacks: Record<string, string> = {
+            'crypto': 'Crypto',
+            'politics': 'Politics',
+            'sports': 'Sports',
+            'finance': 'Finance',
+            'technology': 'Technology',
+            'tech': 'Tech',
+          };
+          
+          if (cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门") {
+            translatedLabel = getTranslation('home.categories.hot', 'Trending');
+          } else {
+            const translationKey = `home.categories.${cat.slug}`;
+            const fallback = englishFallbacks[cat.slug] || cat.slug.charAt(0).toUpperCase() + cat.slug.slice(1);
+            const translated = getTranslation(translationKey, fallback);
+            
+            if (translated && translated !== translationKey) {
+              translatedLabel = translated;
+            } else {
+              translatedLabel = fallback;
+            }
+          }
+
+          return {
+            slug: cat.slug === "-1" ? "hot" : cat.slug,
+            label: translatedLabel,
+            icon: IconComponent,
+            isHighlight: cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门",
+          };
+        });
+
+      setDynamicCategories(apiCategories);
+    } else if (!isLoading) {
+      setDynamicCategories(defaultCategories);
+    }
+  }, [categoriesData, language, getTranslation, defaultCategories, isLoading]);
+
   // 合并固定分类和动态分类
-  const categories = [...fixedCategories, ...dynamicCategories];
+  const categories = useMemo(() => [...fixedCategories, ...dynamicCategories], [fixedCategories, dynamicCategories]);
 
   // 精准匹配函数
   const getIsActive = (slug: string): boolean => {
@@ -183,7 +277,9 @@ export default function CategoryBar() {
     <div className="sticky top-[63px] z-40 bg-black/95 backdrop-blur border-b border-border-dark w-full">
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-4 md:px-6 py-2.5">
         {isLoading ? (
-          <div className="text-zinc-400 text-xs">加载分类中...</div>
+          <div className="text-zinc-400 text-xs whitespace-nowrap" suppressHydrationWarning>
+            {mounted ? t('home.categories.loading') : 'Loading categories...'}
+          </div>
         ) : (
           categories.map((category) => {
           const Icon = category.icon;
@@ -202,7 +298,7 @@ export default function CategoryBar() {
                 }`}
               >
                 <Icon className="w-4 h-4" />
-                <span>{category.label}</span>
+                <span suppressHydrationWarning>{category.label}</span>
               </Link>
             );
           }
@@ -221,16 +317,12 @@ export default function CategoryBar() {
                 }`}
               >
                 <div className="flame-icon-wrapper">
-                  <Icon 
-                    className="w-4 h-4 flame-icon" 
-                    style={{
-                      color: '#f97316',
-                      filter: 'drop-shadow(0 0 8px rgba(249, 115, 22, 1)) drop-shadow(0 0 4px rgba(239, 68, 68, 0.8))',
-                      strokeWidth: 2.5,
-                    }}
+                  <Icon
+                    className="w-4 h-4 flame-icon"
+                    {...({ color: '#f97316', strokeWidth: 2.5 } as any)}
                   />
                 </div>
-                <span>{category.label}</span>
+                <span suppressHydrationWarning>{category.label}</span>
               </Link>
             );
           }
@@ -247,7 +339,7 @@ export default function CategoryBar() {
               }`}
             >
               <Icon className="w-4 h-4" />
-              <span>{category.label}</span>
+              <span suppressHydrationWarning>{category.label}</span>
             </Link>
           );
           })

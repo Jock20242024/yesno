@@ -16,7 +16,7 @@ async function createHeartbeat() {
     console.log('💓 正在创建/更新心跳记录...');
     console.log(`   时间: ${nowUtc}`);
     
-    const result = await prisma.systemSettings.upsert({
+    const result = await prisma.system_settings.upsert({
       where: { key: 'lastFactoryRunAt' },
       update: { value: nowUtc },
       create: { key: 'lastFactoryRunAt', value: nowUtc },

@@ -61,19 +61,19 @@ export default function SystemAccountsPage() {
               id: '',
               email: 'system.fee@yesno.com',
               balance: 0,
-              createdAt: new Date(),
+              createdAt: new Date().toISOString(), // 🔥 修复类型：使用 ISO 字符串格式
             },
             amm: {
               id: '',
               email: 'system.amm@yesno.com',
               balance: 0,
-              createdAt: new Date(),
+              createdAt: new Date().toISOString(), // 🔥 修复类型：使用 ISO 字符串格式
             },
             liquidity: {
               id: '',
               email: 'system.liquidity@yesno.com',
               balance: 0,
-              createdAt: new Date(),
+              createdAt: new Date().toISOString(), // 🔥 修复类型：使用 ISO 字符串格式
             },
           });
           return;
@@ -93,19 +93,19 @@ export default function SystemAccountsPage() {
             id: '',
             email: 'system.fee@yesno.com',
             balance: 0,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(), // 🔥 修复类型：使用 ISO 字符串格式
           },
           amm: {
             id: '',
             email: 'system.amm@yesno.com',
             balance: 0,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(), // 🔥 修复类型：使用 ISO 字符串格式
           },
           liquidity: {
             id: '',
             email: 'system.liquidity@yesno.com',
             balance: 0,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(), // 🔥 修复类型：使用 ISO 字符串格式
           },
         });
       } finally {

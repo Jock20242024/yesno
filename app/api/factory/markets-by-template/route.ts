@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 查询该模板下的所有市场
-    const markets = await prisma.market.findMany({
+    const markets = await prisma.markets.findMany({
       where: {
         templateId,
         isFactory: true,

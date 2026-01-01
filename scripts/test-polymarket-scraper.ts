@@ -15,7 +15,7 @@ async function main() {
     
     // 🔥 重置同步标记：清空 DataSource 表中的同步时间记录
     console.log('🔄 重置同步标记...');
-    await prisma.dataSource.updateMany({
+    await prisma.data_sources.updateMany({
       where: {
         sourceName: 'Polymarket',
       },

@@ -4,6 +4,7 @@ import { StoreProvider } from '@/app/context/StoreContext';
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { NotificationProvider } from "@/components/providers/NotificationProvider";
 import { ErrorBoundary } from "@/components/providers/ErrorBoundary";
+import { LanguageProvider } from "@/i18n/LanguageContext";
 import Navbar from "@/components/Navbar";
 import CategoryBar from "@/components/CategoryBar";
 import { ToastProvider } from "@/components/providers/ToastProvider";
@@ -39,15 +40,17 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <StoreProvider>
-          <NotificationProvider>
-            <ConditionalUI>
-              {children}
-            </ConditionalUI>
-          </NotificationProvider>
-        </StoreProvider>
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <StoreProvider>
+            <NotificationProvider>
+              <ConditionalUI>
+                {children}
+              </ConditionalUI>
+            </NotificationProvider>
+          </StoreProvider>
+        </AuthProvider>
+      </LanguageProvider>
     </ErrorBoundary>
   );
 }

@@ -5,7 +5,7 @@ async function main() {
   console.log('🧹 开始清理误入热门分类的市场...\n');
 
   // 1. 找到热门分类
-  const hotCategory = await prisma.category.findFirst({
+  const hotCategory = await prisma.categories.findFirst({
     where: {
       OR: [
         { slug: '-1' },
@@ -74,7 +74,7 @@ async function main() {
   let cleanedCount = 0;
 
   for (const market of marketsToClean) {
-    await prisma.marketCategory.deleteMany({
+    await prisma.market_categories.deleteMany({
       where: {
         marketId: market.id,
         categoryId: hotCategory.id,

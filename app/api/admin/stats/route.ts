@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { auth } from "@/lib/authExport";
 import prisma from '@/lib/prisma';
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    const stats = await prisma.globalStat.findMany({
+    const stats = await prisma.global_stats.findMany({
       orderBy: [
         { sortOrder: 'asc' },
         { createdAt: 'asc' },
@@ -75,8 +76,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 创建指标
-    const newStat = await prisma.globalStat.create({
+    const newStat = await prisma.global_stats.create({
       data: {
+        id: randomUUID(),
+        updatedAt: new Date(),
         label: label.trim(),
         value: value !== undefined ? parseFloat(value) : 0,
         unit: unit || null,

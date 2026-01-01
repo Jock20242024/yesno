@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from "crypto";
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     // 获取所有采集器任务状态
-    const tasks = await prisma.scraperTask.findMany({
+    const tasks = await prisma.scraper_tasks.findMany({
       orderBy: {
         lastRunTime: 'desc',
       },
@@ -24,8 +25,10 @@ export async function GET(request: NextRequest) {
     
     if (!globalStatsTaskExists) {
       // 创建默认任务记录
-      await prisma.scraperTask.create({
+      await prisma.scraper_tasks.create({
         data: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           name: 'GlobalStats_Calc',
           lastRunTime: new Date(),
           status: 'NORMAL',
@@ -33,11 +36,11 @@ export async function GET(request: NextRequest) {
           frequency: 10,
         },
       });
-      console.log(`✅ [Scraper Status API] 已创建默认 GlobalStats_Calc 任务记录`);
+
     }
 
     // 重新获取所有任务（包含刚创建的）
-    const allTasks = await prisma.scraperTask.findMany({
+    const allTasks = await prisma.scraper_tasks.findMany({
       orderBy: {
         lastRunTime: 'desc',
       },

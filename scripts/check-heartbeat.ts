@@ -13,7 +13,7 @@ const prisma = new PrismaClient();
 
 async function checkHeartbeat() {
   try {
-    const setting = await prisma.systemSettings.findUnique({
+    const setting = await prisma.system_settings.findUnique({
       where: { key: 'lastFactoryRunAt' },
     });
     

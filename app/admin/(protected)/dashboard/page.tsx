@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Loader2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, Users, DollarSign, ShoppingCart, FileText, Settings, Activity, Play, Pause } from "lucide-react";
 
 interface DashboardStats {
@@ -113,11 +114,11 @@ function SystemStatusCard() {
         if (result.success) {
         setIsActive(newStatus);
         // 显示成功提示（可以集成 toast）
-        console.log(`✅ ${result.data.message}`);
+
       }
     } catch (error) {
       console.error('更新调度器状态失败:', error);
-      alert('更新状态失败，请重试');
+      toast.error('更新状态失败，请重试');
     } finally {
       setIsToggling(false);
     }

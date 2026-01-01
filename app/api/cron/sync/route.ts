@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { PolymarketAdapter } from '@/lib/scrapers/polymarketAdapter';
 import { prisma } from '@/lib/prisma';
 
@@ -36,9 +37,11 @@ async function updateScraperTask(
   message?: string
 ) {
   try {
-    await prisma.scraperTask.upsert({
+    await prisma.scraper_tasks.upsert({
       where: { name: taskName },
       create: {
+        id: randomUUID(),
+        updatedAt: new Date(),
         name: taskName,
         lastRunTime: new Date(),
         status,
@@ -51,7 +54,7 @@ async function updateScraperTask(
         message: message || null,
       },
     });
-    console.log(`✅ [Cron Sync] 已更新 ScraperTask: ${taskName}, status: ${status}`);
+
   } catch (error) {
     console.error(`❌ [Cron Sync] 更新 ScraperTask 失败:`, error);
   }
@@ -72,9 +75,6 @@ export async function GET(request: NextRequest) {
     //     { status: 401 }
     //   );
     // }
-
-    console.log(`🔄 [Cron Sync] ========== 开始自动化采集任务 ==========`);
-    console.log(`⏰ [Cron Sync] 执行时间: ${new Date().toISOString()}`);
 
     // 创建适配器（limit=1000 全量抓取）
     const adapter = new PolymarketAdapter(1000);

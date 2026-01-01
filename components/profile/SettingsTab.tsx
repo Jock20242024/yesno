@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { User, Mail, Lock, Bell, Save, CheckCircle } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 export default function SettingsTab() {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -35,12 +37,12 @@ export default function SettingsTab() {
       <div className="bg-[#0F111A] rounded-xl border border-pm-border p-6">
         <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
           <User className="w-5 h-5" />
-          个人资料
+          {t('profile.settings.profile.title')}
         </h3>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-pm-text-dim mb-2">
-              昵称
+              {t('profile.settings.profile.display_name')}
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-pm-text-dim" />
@@ -49,14 +51,14 @@ export default function SettingsTab() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 className="w-full bg-pm-card border border-pm-border rounded-lg pl-10 pr-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
-                placeholder="请输入昵称"
+                placeholder={t('profile.settings.profile.display_name_placeholder')}
               />
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-pm-text-dim mb-2">
-              邮箱
+              {t('profile.settings.profile.email')}
             </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-pm-text-dim" />
@@ -76,12 +78,12 @@ export default function SettingsTab() {
       <div className="bg-[#0F111A] rounded-xl border border-pm-border p-6">
         <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
           <Lock className="w-5 h-5" />
-          安全设置
+          {t('profile.settings.security.title')}
         </h3>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-pm-text-dim mb-2">
-              当前密码
+              {t('profile.settings.security.current_password')}
             </label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-pm-text-dim" />
@@ -90,14 +92,14 @@ export default function SettingsTab() {
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 className="w-full bg-pm-card border border-pm-border rounded-lg pl-10 pr-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
-                placeholder="请输入当前密码"
+                placeholder={t('profile.settings.security.current_password_placeholder')}
               />
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-pm-text-dim mb-2">
-              新密码
+              {t('profile.settings.security.new_password')}
             </label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-pm-text-dim" />
@@ -106,11 +108,11 @@ export default function SettingsTab() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="w-full bg-pm-card border border-pm-border rounded-lg pl-10 pr-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
-                placeholder="请输入新密码（留空则不修改）"
+                placeholder={t('profile.settings.security.new_password_placeholder')}
               />
             </div>
             <p className="mt-1 text-xs text-pm-text-dim">
-              留空则不修改密码
+              {t('profile.settings.security.password_hint')}
             </p>
           </div>
         </form>
@@ -120,13 +122,13 @@ export default function SettingsTab() {
       <div className="bg-[#0F111A] rounded-xl border border-pm-border p-6">
         <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
           <Bell className="w-5 h-5" />
-          通知设置
+          {t('profile.settings.notifications.title')}
         </h3>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-white font-medium">邮件通知</div>
-              <div className="text-sm text-pm-text-dim">接收重要邮件通知</div>
+              <div className="text-white font-medium">{t('profile.settings.notifications.email')}</div>
+              <div className="text-sm text-pm-text-dim">{t('profile.settings.notifications.email_desc')}</div>
             </div>
             <button
               onClick={() => setEmailNotifications(!emailNotifications)}
@@ -144,8 +146,8 @@ export default function SettingsTab() {
 
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-white font-medium">推送通知</div>
-              <div className="text-sm text-pm-text-dim">接收实时推送通知</div>
+              <div className="text-white font-medium">{t('profile.settings.notifications.push')}</div>
+              <div className="text-sm text-pm-text-dim">{t('profile.settings.notifications.push_desc')}</div>
             </div>
             <button
               onClick={() => setPushNotifications(!pushNotifications)}
@@ -170,12 +172,12 @@ export default function SettingsTab() {
           className="flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-pm-green hover:bg-green-400 text-white font-bold transition-all"
         >
           <Save className="w-4 h-4" />
-          保存设置
+          {t('profile.settings.save')}
         </button>
         {showSaveSuccess && (
           <span className="text-pm-green text-sm font-medium flex items-center gap-1">
             <CheckCircle className="w-4 h-4" />
-            已保存
+            {t('profile.settings.saved')}
           </span>
         )}
       </div>

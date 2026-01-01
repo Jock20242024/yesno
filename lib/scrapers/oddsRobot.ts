@@ -13,6 +13,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 import { filterMarketsByPriceChange, calculateDiffHitRate } from '@/lib/odds/diffSync';
 import { addOddsUpdateJobs, getQueueBacklog, getQueueStats } from '@/lib/queue/oddsQueue';
 import type { OddsUpdateJobData } from '@/lib/queue/oddsQueue';
@@ -57,12 +58,12 @@ function addLog(level: 'info' | 'warn' | 'error', message: string) {
   // 日志依然会存储到 recentLogs 供前端查看
   if (level === 'error') {
     const emoji = '❌';
-    console.log(`${emoji} [OddsRobot] ${message}`);
+
   }
   // 在开发环境下，也输出 warn 级别的日志（但不输出 info）
   else if (level === 'warn' && process.env.NODE_ENV === 'development') {
     const emoji = '⚠️';
-    console.log(`${emoji} [OddsRobot] ${message}`);
+
   }
 }
 
@@ -154,16 +155,16 @@ export async function syncOdds(): Promise<OddsSyncResult> {
     addLog('info', '开始查询数据库中需要同步的活跃市场...');
     
     // 🔥 先检查数据库中的市场总数和符合条件的数量（用于调试）
-    const totalMarkets = await prisma.market.count({ where: { isActive: true } });
-    const polymarketMarkets = await prisma.market.count({ where: { source: 'POLYMARKET', isActive: true } });
-    const openPolymarketMarkets = await prisma.market.count({ 
+    const totalMarkets = await prisma.markets.count({ where: { isActive: true } });
+    const polymarketMarkets = await prisma.markets.count({ where: { source: 'POLYMARKET', isActive: true } });
+    const openPolymarketMarkets = await prisma.markets.count({ 
       where: { source: 'POLYMARKET', status: 'OPEN', isActive: true } 
     });
     
     addLog('info', `数据库统计: 总市场数=${totalMarkets}, POLYMARKET市场数=${polymarketMarkets}, 活跃上架市场数=${openPolymarketMarkets}`);
     
     // 🔥 红蓝双轨制：同时处理POLYMARKET来源和工厂生成的市场（isFactory=true）
-    const activeMarkets = await prisma.market.findMany({
+    const activeMarkets = await prisma.markets.findMany({
       where: {
         OR: [
           { source: 'POLYMARKET', status: 'OPEN', isActive: true },
@@ -177,13 +178,9 @@ export async function syncOdds(): Promise<OddsSyncResult> {
         isFactory: true, // 需要判断是否为工厂生成的市场
         source: true,
         templateId: true, // 🔥 需要 templateId 来获取 symbol 和 period
+        symbol: true, // 🔥 直接使用 market.symbol 字段
         period: true, // 🔥 需要 period 来匹配 externalId
         closingDate: true, // 🔥 需要 closingDate 来匹配 externalId
-        marketTemplate: {
-          select: {
-            symbol: true, // 🔥 需要 symbol 来匹配 externalId
-          },
-        },
       },
       take: 1000, // 限制每次处理的数量，确保 30 秒内完成
     });
@@ -198,9 +195,11 @@ export async function syncOdds(): Promise<OddsSyncResult> {
       addLog('warn', `⚠️ 查询结果为空！请检查数据库中是否有符合以下条件的市场：source='POLYMARKET', status='OPEN', isActive=true`);
       
       // 🔥 即使没有市场，也要更新数据库记录
-      await prisma.scraperTask.upsert({
+      await prisma.scraper_tasks.upsert({
         where: { name: 'OddsRobot' },
         create: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           name: 'OddsRobot',
           status: 'NORMAL',
           lastRunTime: startTime,
@@ -322,19 +321,19 @@ export async function syncOdds(): Promise<OddsSyncResult> {
 
           // 🔥 如果市场没有 externalId 且是工厂市场，尝试自动绑定
           let finalExternalId = market.externalId;
-          if (!finalExternalId && (market as any).isFactory && market.templateId && market.marketTemplate?.symbol && market.period && market.closingDate) {
+          if (!finalExternalId && (market as any).isFactory && market.templateId && (market as any).symbol && market.period && market.closingDate) {
             // 🔥 添加15分钟市场的特殊日志
             const is15Min = market.period === 15;
             if (is15Min) {
               addLog('info', `🔍 [OddsRobot] ⏰ 15分钟市场 ${market.id} (${marketInfo.title}) 没有 externalId，尝试自动绑定...`);
-              addLog('info', `🔍 [OddsRobot] ⏰ 15分钟市场详情: symbol=${market.marketTemplate.symbol}, period=${market.period}, closingDate=${new Date(market.closingDate).toISOString()}`);
+              addLog('info', `🔍 [OddsRobot] ⏰ 15分钟市场详情: symbol=${(market as any).symbol}, period=${market.period}, closingDate=${new Date(market.closingDate).toISOString()}`);
             } else {
               addLog('info', `🔍 [OddsRobot] 市场 ${market.id} (${marketInfo.title}) 没有 externalId，尝试自动绑定...`);
             }
             try {
               // 🔥 传递市场状态和市场ID，确保强制刷新逻辑生效并立即同步赔率
               const matchedId = await tryBindExternalId(
-                market.marketTemplate.symbol,
+                (market as any).symbol,
                 market.period,
                 new Date(market.closingDate),
                 'OPEN', // 传递市场状态，触发强制刷新逻辑
@@ -348,7 +347,7 @@ export async function syncOdds(): Promise<OddsSyncResult> {
                   addLog('info', `✅ [OddsRobot] 成功为市场 ${market.id} 匹配 externalId: ${matchedId}`);
                 }
                 // 更新数据库中的 externalId
-                await prisma.market.update({
+                await prisma.markets.update({
                   where: { id: market.id },
                   data: { externalId: matchedId },
                 });
@@ -684,9 +683,11 @@ export async function syncOdds(): Promise<OddsSyncResult> {
       messageData.error = `提取失败 ${skippedCount} 个，队列准备失败 ${queueJobFailures.length} 个`;
     }
     
-    await prisma.scraperTask.upsert({
+    await prisma.scraper_tasks.upsert({
       where: { name: 'OddsRobot' },
       create: {
+        id: randomUUID(),
+        updatedAt: new Date(),
         name: 'OddsRobot',
         status: 'NORMAL',
         lastRunTime: endTime,
@@ -703,7 +704,7 @@ export async function syncOdds(): Promise<OddsSyncResult> {
     // 记录操作日志（使用系统用户或跳过）
     try {
       // 🔥 查找系统用户或第一个管理员用户
-      const systemUser = await prisma.user.findFirst({
+      const systemUser = await prisma.users.findFirst({
         where: {
           OR: [
             { email: 'yesno@yesno.com' },
@@ -715,8 +716,10 @@ export async function syncOdds(): Promise<OddsSyncResult> {
       });
 
       if (systemUser?.id) {
-        await prisma.adminLog.create({
+        await prisma.admin_logs.create({
           data: {
+            id: randomUUID(),
+            updatedAt: new Date(),
             adminId: systemUser.id,
             actionType: 'ODDS_ROBOT_SYNC',
             details: `赔率同步完成: 检查 ${checkedCount} 个，加入队列 ${queueJobs.length} 个，过滤 ${filteredCount} 个（命中率: ${diffHitRate}%），耗时 ${duration}ms`,
@@ -755,9 +758,11 @@ export async function syncOdds(): Promise<OddsSyncResult> {
       error: error instanceof Error ? error.message : String(error),
     };
     
-    await prisma.scraperTask.upsert({
+    await prisma.scraper_tasks.upsert({
       where: { name: 'OddsRobot' },
       create: {
+        id: randomUUID(),
+        updatedAt: new Date(),
         name: 'OddsRobot',
         status: 'ABNORMAL',
         lastRunTime: new Date(),
@@ -788,7 +793,7 @@ export async function syncOdds(): Promise<OddsSyncResult> {
  * 每 30 秒执行一次同步
  */
 export async function startOddsRobot() {
-  console.log('🤖 [OddsRobot] 启动赔率同步机器人...');
+
   addLog('info', '========== 赔率机器人正式启动，正在扫描活跃池... ==========');
   
   // 启动队列工作器
@@ -803,8 +808,7 @@ export async function startOddsRobot() {
     addLog('info', '定时任务触发：开始新一轮赔率同步...');
     await syncOdds();
   }, 30 * 1000); // 30 秒
-  
-  console.log('✅ [OddsRobot] 赔率同步机器人已启动，每 30 秒执行一次');
+
   addLog('info', '赔率同步机器人定时任务已启动，每 30 秒执行一次');
 }
 
@@ -814,5 +818,5 @@ export async function startOddsRobot() {
 export async function stopOddsRobot() {
   const { stopOddsWorker } = await import('@/lib/queue/oddsQueue');
   await stopOddsWorker();
-  console.log('🔒 [OddsRobot] 赔率同步机器人已停止');
+
 }

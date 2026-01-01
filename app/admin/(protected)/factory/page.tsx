@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import StatsCards from "./components/StatsCards";
 import TemplateList from "./components/TemplateList";
 import CreateTemplateModal from "./components/CreateTemplateModal";
@@ -101,15 +102,15 @@ export default function FactoryPage() {
       });
       const data = await response.json();
       if (data.success) {
-        alert('市场生成成功！');
+        toast.success('市场生成成功！');
         fetchTemplates();
         fetchStats();
       } else {
-        alert(`生成失败: ${data.error}`);
+        toast.error(`生成失败: ${data.error}`);
       }
     } catch (error) {
       console.error("触发生成失败:", error);
-      alert("触发生成失败");
+      toast.error("触发生成失败");
     } finally {
       setTriggeringId(null);
     }
@@ -137,11 +138,11 @@ export default function FactoryPage() {
         fetchTemplates();
         fetchStats();
       } else {
-        alert(data.error || "更新模板状态失败");
+        toast.error(data.error || "更新模板状态失败");
       }
     } catch (error) {
       console.error("更新模板状态失败:", error);
-      alert("更新模板状态失败");
+      toast.error("更新模板状态失败");
     }
   };
 

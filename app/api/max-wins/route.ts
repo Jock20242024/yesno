@@ -26,14 +26,14 @@ export async function GET() {
     const usersWithMaxWins = await Promise.all(
       regularUsers.map(async (user) => {
         // 获取用户本月以来的所有持仓
-        const positions = await prisma.position.findMany({
+        const positions = await prisma.positions.findMany({
           where: {
             userId: user.id,
             status: 'OPEN',
             createdAt: { gte: monthStart },
           },
           include: {
-            market: {
+            markets: {
               select: {
                 id: true,
                 status: true,
@@ -58,10 +58,10 @@ export async function GET() {
                   : 'YES',
               },
               {
-                status: position.market?.status || 'OPEN',
-                resolvedOutcome: position.market?.resolvedOutcome || null,
-                totalYes: position.market?.totalYes || 0,
-                totalNo: position.market?.totalNo || 0,
+                status: position.markets?.status || 'OPEN',
+                resolvedOutcome: position.markets?.resolvedOutcome || null,
+                totalYes: position.markets?.totalYes || 0,
+                totalNo: position.markets?.totalNo || 0,
               }
             );
 

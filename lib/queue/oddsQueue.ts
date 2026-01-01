@@ -45,7 +45,6 @@ export function getOddsQueue(): Queue {
         },
       });
 
-      console.log('✅ [OddsQueue] 队列实例已创建');
     } catch (error: any) {
       console.error('❌ [OddsQueue] 创建队列实例失败:', error.message);
       throw error;
@@ -104,7 +103,7 @@ export function startOddsWorker(): void {
 
       try {
         // 🚀 先查询市场当前状态，检查是否需要重置 AMM Pool
-        const currentMarket = await prisma.market.findUnique({
+        const currentMarket = await prisma.markets.findUnique({
           where: { id: marketId },
           select: {
             id: true,
@@ -143,18 +142,16 @@ export function startOddsWorker(): void {
           updateData.totalYes = calculatedYes;
           updateData.totalNo = calculatedNo;
 
-          console.log(`🔄 [OddsQueue] 市场 ${marketId} 重置 AMM Pool: YES=${calculatedYes.toFixed(2)}, NO=${calculatedNo.toFixed(2)} (概率: YES=${yesProbability}%, NO=${noProbability}%)`);
         } else {
-          console.log(`ℹ️ [OddsQueue] 市场 ${marketId} 已有交易（totalVolume=${currentMarket.totalVolume}），跳过 Pool 重置`);
+
         }
 
         // 更新数据库
-        await prisma.market.update({
+        await prisma.markets.update({
           where: { id: marketId },
           data: updateData,
         });
 
-        console.log(`✅ [OddsQueue] 市场 ${marketId} 更新成功`);
         return { success: true, marketId };
       } catch (error: any) {
         console.error(`❌ [OddsQueue] 市场 ${marketId} 更新失败:`, error.message);
@@ -172,7 +169,7 @@ export function startOddsWorker(): void {
   );
 
   oddsWorker.on('completed', (job) => {
-    console.log(`✅ [OddsQueue] 任务完成: ${job.id}`);
+
   });
 
   oddsWorker.on('failed', (job, err) => {
@@ -183,7 +180,6 @@ export function startOddsWorker(): void {
     console.error('❌ [OddsQueue] 工作器错误:', err);
   });
 
-  console.log('✅ [OddsQueue] 工作器已启动');
 }
 
 /**
@@ -193,7 +189,7 @@ export async function stopOddsWorker(): Promise<void> {
   if (oddsWorker) {
     await oddsWorker.close();
     oddsWorker = null;
-    console.log('🔒 [OddsQueue] 工作器已停止');
+
   }
 }
 
@@ -244,7 +240,7 @@ export async function getQueueBacklog(): Promise<number> {
 export async function clearQueue(): Promise<void> {
   const queue = getOddsQueue();
   await queue.obliterate({ force: true });
-  console.log('🗑️ [OddsQueue] 队列已清空');
+
 }
 
 /**

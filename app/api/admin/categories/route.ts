@@ -3,6 +3,7 @@ import { auth } from "@/lib/authExport";
 import { prisma } from "@/lib/prisma";
 import { aggregateMarketsByTemplate, countUniqueMarketSeries } from '@/lib/marketAggregation'; // 🔥 使用公共聚合函数
 import { BASE_MARKET_FILTER, buildHotMarketFilter } from '@/lib/marketQuery'; // 🚀 统一过滤器
+import { randomUUID } from 'crypto';
 
 // 🔥 强制禁用缓存，确保实时获取数据库数据
 export const dynamic = 'force-dynamic';
@@ -15,8 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 [Admin Categories GET] ========== 开始处理获取分类列表请求 ==========');
-    
+
     // 权限校验：使用 NextAuth session 验证管理员身份
     const session = await auth();
     
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 🔥 运行时验证 prisma 实例
-    if (!prisma || !prisma.category) {
+    if (!prisma || !prisma.categories) {
       console.error('❌ [Categories API GET] Prisma client or category model is not available');
       return NextResponse.json(
         {
@@ -61,11 +61,11 @@ export async function GET(request: NextRequest) {
 
     // 🔥 彻底清空后台分类接口过滤器：物理删除所有过滤，直接执行 findMany()
     // 确保返回数据库里所有分类记录，不管它有没有父类，不管它是什么状态
-    console.log('🔍 [Admin Categories GET] 开始查询分类（无任何过滤条件，返回全量数据）...');
-    const categories = await prisma.category.findMany({
+
+    const categories = await prisma.categories.findMany({
       // 🔥 物理删除所有 where 条件
       include: {
-        parent: {
+        categories: {
           select: {
             id: true,
             name: true,
@@ -76,14 +76,11 @@ export async function GET(request: NextRequest) {
       orderBy: { sortOrder: 'asc' },
     });
 
-    console.log(`✅ [Admin Categories GET] 查询成功，返回 ${categories.length} 个分类`);
-    console.log(`🛠️ 后台分类接口返回数据量: ${categories.length}`);
-    
     // 🔥 调试：打印前3个分类的详细信息
     if (categories.length > 0) {
-      console.log('📋 [Admin Categories GET] 前3个分类示例:');
+
       categories.slice(0, 3).forEach((cat, index) => {
-        console.log(`  ${index + 1}. ID: ${cat.id}, Name: ${cat.name}, Slug: ${cat.slug}, Status: ${cat.status}`);
+
       });
     }
 
@@ -133,7 +130,7 @@ export async function GET(request: NextRequest) {
 
           // 🚀 使用统一的查询条件进行统计
           // 🚀 关键修复：必须查询与前端相同的字段，以便进行相同的时间过滤
-          const marketsWithBaseFilter = await prisma.market.findMany({
+          const marketsWithBaseFilter = await prisma.markets.findMany({
             where: whereCondition,
             select: {
               id: true,
@@ -154,10 +151,10 @@ export async function GET(request: NextRequest) {
           const uniqueMarketCount = aggregatedMarkets.length;
           
           // 保留原有 markets 查询用于调试日志（如果需要）
-          const markets = await prisma.market.findMany({
+          const markets = await prisma.markets.findMany({
             where: {
               ...BASE_MARKET_FILTER,
-              categories: {
+              market_categories: {
                 some: {
                   categoryId: { in: getAllCategoryIds(category, categories) },
                 },
@@ -177,14 +174,6 @@ export async function GET(request: NextRequest) {
           const marketsWithTemplate = markets.filter(m => m.templateId);
           const independentMarkets = markets.filter(m => !m.templateId);
           const uniqueTemplateIds = new Set(marketsWithTemplate.map(m => m.templateId));
-
-          console.log(`📊 [Admin Categories API] 分类 "${category.name}" 统计:`, {
-            rawCount: markets.length,
-            uniqueCount: uniqueMarketCount,
-            aggregatedCount: uniqueTemplateIds.size,
-            independentCount: independentMarkets.length,
-            formula: `${uniqueTemplateIds.size} (聚合项) + ${independentMarkets.length} (独立项) = ${uniqueMarketCount}`,
-          });
 
           return {
             ...category,
@@ -226,13 +215,13 @@ export async function GET(request: NextRequest) {
           updatedAt: category.updatedAt ? new Date(category.updatedAt).toISOString() : null,
         };
         
-        // 🔥 安全处理 parent 对象
-        if (category.parent) {
+        // 🔥 安全处理 parent 对象（categories 关系）
+        if (category.categories) {
           try {
             sanitizedCategory.parent = {
-              id: String(category.parent.id || ''),
-              name: String(category.parent.name || ''),
-              slug: String(category.parent.slug || ''),
+              id: String(category.categories.id || ''),
+              name: String(category.categories.name || ''),
+              slug: String(category.categories.slug || ''),
             };
           } catch {
             sanitizedCategory.parent = null;
@@ -248,22 +237,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log('✅ [Admin Categories GET] 数据序列化完成，准备返回响应');
-    console.log(`📊 [Admin Categories GET] 序列化后的分类数量: ${sanitizedCategories.length}`);
-
     // 2. 严格返回前端期待的结构
     try {
       const response = {
         success: true,
         data: sanitizedCategories
       };
-      
-      console.log(`📤 [Admin Categories GET] 返回响应，数据量: ${response.data.length}`);
-      
+
       // 🔥 使用 JSON.stringify 验证数据是否可以序列化
       const jsonString = JSON.stringify(response);
-      console.log(`✅ [Admin Categories GET] JSON 序列化成功，长度: ${jsonString.length}`);
-      
+
       return NextResponse.json(response);
     } catch (jsonError: any) {
       console.error('❌ [Admin Categories GET] JSON 序列化失败:', jsonError);
@@ -331,7 +314,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 🔥 运行时验证 prisma 实例
-    if (!prisma || !prisma.category) {
+    if (!prisma || !prisma.categories) {
       console.error('❌ [Categories API POST] Prisma client or category model is not available');
       return NextResponse.json(
         {
@@ -344,15 +327,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { name, icon, displayOrder, sortOrder, parentId, status } = body;
-    
-    console.log(`📥 [Categories API POST] 接收到的数据:`, { 
-      name, 
-      icon, 
-      displayOrder, 
-      sortOrder, 
-      parentId: parentId || 'null',
-      status 
-    });
 
     // 验证必填字段
     if (!name || !name.trim()) {
@@ -366,7 +340,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 🔍 打印数据库中已有的所有分类（用于调试）
-    const allCategories = await prisma.category.findMany({
+    const allCategories = await prisma.categories.findMany({
       select: {
         id: true,
         name: true,
@@ -374,9 +348,9 @@ export async function POST(request: NextRequest) {
         parentId: true,
       },
     });
-    console.log('📋 [Categories API POST] 数据库中已有的所有分类:');
+
     allCategories.forEach(cat => {
-      console.log(`  - ID: ${cat.id}, Name: ${cat.name}, Slug: ${cat.slug}, ParentId: ${cat.parentId || 'null'}`);
+
     });
 
     // 🔥 数据库已允许 name 重名，代码层严禁再进行任何 name 字段的重复性校验
@@ -388,7 +362,7 @@ export async function POST(request: NextRequest) {
     let parentSlug: string | null = null;
     
     if (parentId) {
-      const parentCategory = await prisma.category.findUnique({
+      const parentCategory = await prisma.categories.findUnique({
         where: { id: parentId },
     });
 
@@ -425,7 +399,7 @@ export async function POST(request: NextRequest) {
       finalSlug = baseSlug;
     
     while (true) {
-      const existingSlug = await prisma.category.findFirst({
+      const existingSlug = await prisma.categories.findFirst({
         where: {
           slug: finalSlug,
         },
@@ -459,7 +433,7 @@ export async function POST(request: NextRequest) {
 
       // 检查 slug 是否已存在
       while (true) {
-        const existingSlug = await prisma.category.findFirst({
+        const existingSlug = await prisma.categories.findFirst({
           where: {
             slug: finalSlug,
           },
@@ -479,14 +453,11 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    
-    console.log(`✅ [Categories API POST] 生成的最终 slug: ${finalSlug}${finalParentId ? ` (父分类: ${parentSlug})` : ' (顶级分类)'}`);
-
 
     // 如果没有指定 sortOrder，使用当前分类数量
     let finalSortOrder = displayOrder; // 兼容旧字段名
     if (finalSortOrder === undefined || finalSortOrder === null) {
-      const categoryCount = await prisma.category.count({
+      const categoryCount = await prisma.categories.count({
         where: parentId ? { parentId: finalParentId } : { parentId: null },
       });
       finalSortOrder = categoryCount;
@@ -499,10 +470,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 创建分类
-    console.log(`📝 [Categories API POST] 创建分类 - Name: ${name.trim()}, Slug: ${finalSlug}, ParentId: ${finalParentId || 'null'}, Level: ${level}`);
-    
-    const newCategory = await prisma.category.create({
+
+    const newCategory = await prisma.categories.create({
       data: {
+        id: randomUUID(),
         name: name.trim(),
         slug: finalSlug,
         icon: icon || null,
@@ -511,10 +482,9 @@ export async function POST(request: NextRequest) {
         parentId: finalParentId, // 确保 parentId 正确保存
         level: level,
         status: status || 'active',
+        updatedAt: new Date(),
       },
     });
-    
-    console.log(`✅ [Categories API POST] 分类创建成功 - ID: ${newCategory.id}, ParentId: ${newCategory.parentId || 'null'}`);
 
     return NextResponse.json({
       success: true,

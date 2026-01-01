@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface UserPosition {
   yesShares: number;
@@ -36,12 +37,20 @@ interface TradeSidebarProps {
   onTradeSuccess?: (data: {
     updatedMarketPrice: { yesPercent: number; noPercent: number };
     userPosition: { outcome: 'YES' | 'NO'; shares: number; avgPrice: number; totalValue: number };
+    order?: {
+      id: string;
+      outcome: 'YES' | 'NO';
+      amount: number;
+      shares: number;
+      price: number;
+      fee: number;
+    };
   }) => void; // 交易成功回调
 }
 
 export interface TradeSidebarRef {
   focusInput: () => void;
-  switchToSell: () => void;
+  switchToSell: (outcome?: "yes" | "no", shares?: number) => void;
   setLimitPriceAndSwitch: (price: number) => void; // 🔥 新增：设置限价并切换到 LIMIT 模式
 }
 
@@ -62,11 +71,13 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   totalNo = 0, // 🔥 市场总 NO 流动性
   onTradeSuccess,
 }, ref) => {
+  const { t } = useLanguage();
+  
   // 🔥 逻辑守卫：确保必要数据存在
   if (!marketId) {
     return (
       <div className="w-full bg-pm-card rounded-xl border border-pm-border p-6">
-        <div className="text-pm-text-dim text-center py-8">加载交易面板数据中...</div>
+        <div className="text-pm-text-dim text-center py-8">{t('market.orderbook.loading_order_data')}</div>
       </div>
     );
   }
@@ -155,8 +166,24 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     focusInput: () => {
       inputRef.current?.focus();
     },
-    switchToSell: () => {
+    switchToSell: (outcome?: "yes" | "no", shares?: number) => {
+      // 🔥 修复：切换到卖出模式，并可选地设置 outcome 和份额
       onTabChange("sell");
+      
+      // 如果提供了 outcome，设置选中的 outcome
+      if (outcome) {
+        setSelectedOutcome(outcome);
+      }
+      
+      // 如果提供了 shares，自动填充最大份额
+      if (shares !== undefined && shares > 0) {
+        onAmountChange(shares.toString());
+      }
+      
+      // 重置为市价单（默认）
+      setOrderType('MARKET');
+      
+      // 延迟聚焦输入框，确保状态更新完成
       setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
@@ -259,37 +286,37 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     return (
       <div className="w-full lg:w-[380px] flex-shrink-0">
         <div className="flex flex-col gap-4 bg-pm-card border border-pm-border p-6 rounded-2xl">
-          <h2 className="text-xl font-bold text-white mb-2">市场已结束</h2>
+          <h2 className="text-xl font-bold text-white mb-2">{t('market.trade.market_closed')}</h2>
           
           {isWinner ? (
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6 text-center">
               <div className="text-blue-400 font-bold text-lg mb-1 flex items-center justify-center gap-2">
                 <Trophy className="w-5 h-5" />
-                恭喜获胜!
+                {t('market.trade.congratulations')}
               </div>
-              <div className="text-zinc-400 text-sm mb-4">您压中了 {winningOutcome}</div>
+              <div className="text-zinc-400 text-sm mb-4">{t('market.trade.you_bet_on')} {winningOutcome}</div>
               <div className="text-3xl font-bold text-white mb-2 font-mono">
                 {formatUSD(winAmount)}
               </div>
-              <div className="text-zinc-500 text-sm mb-6">可兑换金额</div>
+              <div className="text-zinc-500 text-sm mb-6">{t('market.trade.redeemable_amount')}</div>
               <button
                 onClick={handleRedeem}
                 disabled={isLoading}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    处理中...
+                    {t('market.trade.processing')}
                   </>
                 ) : (
-                  "兑换奖金 (Redeem)"
+                  t('market.trade.redeem')
                 )}
               </button>
             </div>
           ) : (
             <div className="bg-zinc-800/50 rounded-xl p-6 text-center text-zinc-500">
-              <div className="text-sm">市场已结束 (Market Closed)</div>
+              <div className="text-sm">{t('market.trade.market_closed_msg')}</div>
             </div>
           )}
         </div>
@@ -500,7 +527,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     
     // 🔥 如果 WalletContext 未就绪，返回 null 以显示加载状态
     if (!isWalletReady) {
-      console.log('💰 [TradeSidebar] WalletContext 未就绪，返回 null 显示加载状态');
+
       return null;
     }
     
@@ -508,7 +535,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     if (currentUser?.balance !== undefined && currentUser.balance !== null) {
       const balanceNum = Number(currentUser.balance);
       if (!isNaN(balanceNum) && balanceNum >= 0) {
-        console.log('💰 [TradeSidebar] 使用 currentUser.balance:', balanceNum);
+
         return balanceNum;
       }
     }
@@ -518,7 +545,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       // 🔥 修复：安全处理 balance，使用 String().replace() 防错处理
       const parsedFromUser = parseFloat(String(user.balance || 0).replace(/[$,]/g, ''));
       if (!isNaN(parsedFromUser) && parsedFromUser >= 0) {
-        console.log('💰 [TradeSidebar] 使用 user.balance:', parsedFromUser);
+
         return parsedFromUser;
       }
     }
@@ -528,7 +555,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     // 排除所有已知的测试值：2450.32, 1900.46, 2437.799 等
     const knownTestValues = [2450.32, 1900.46, 1900.45, 2437.799, 2437.8, 145.0];
     if (storeBalance > 0 && !knownTestValues.includes(storeBalance)) {
-      console.log('💰 [TradeSidebar] 使用 storeBalance (已验证非测试值):', storeBalance);
+
       return storeBalance;
     }
     
@@ -539,7 +566,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     }
     
     // WalletContext 就绪但余额还未加载，返回 null 显示加载状态
-    console.log('💰 [TradeSidebar] WalletContext 就绪但余额未加载，显示加载状态');
+
     return null;
   }, [isLoggedIn, isWalletReady, currentUser?.balance, user?.balance, storeBalance]);
 
@@ -551,14 +578,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     const shares = selectedOutcome === "yes" ? userPosition.yesShares : userPosition.noShares;
     // 🔥 调试日志：确认数据传递正确
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔍 [TradeSidebar] availableShares 计算:', {
-        activeTab,
-        selectedOutcome,
-        userPosition,
-        yesShares: userPosition.yesShares,
-        noShares: userPosition.noShares,
-        calculatedShares: shares,
-      });
+
     }
     return shares;
   }, [activeTab, userPosition, selectedOutcome]);
@@ -658,17 +678,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       if (activeTab === "buy") {
         // API 路径修正：使用 /api/orders 作为下注 API（/api/bet 不存在）
         // 最终 API 健壮性：确保后端 API 接收到正确的 UUID 后，能够成功执行原子交易
-        console.log('🔍 [TradeSidebar] 准备调用下注 API:', {
-          url: '/api/orders',
-          method: 'POST',
-          marketId: marketIdStr,
-          marketIdType: typeof marketIdStr,
-          marketIdLength: marketIdStr.length,
-          isUUID: isUUID,
-          outcomeSelection: outcome,
-          amount: amountNum,
-        });
-        
+
         const response = await fetch("/api/orders", {
           method: "POST",
           headers: {
@@ -723,12 +733,6 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         }
 
         const result = await response.json();
-        
-        console.log('✅ [TradeSidebar] 下注 API 调用成功:', {
-          success: result.success,
-          orderId: result.data?.order?.id,
-          updatedBalance: result.data?.updatedBalance,
-        });
 
         if (result.success && result.data) {
           // 更新用户余额
@@ -759,25 +763,42 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
             const newYesPercent = totalVolume > 0 ? (totalYes / totalVolume) * 100 : 50;
             const newNoPercent = totalVolume > 0 ? (totalNo / totalVolume) * 100 : 50;
 
-            // 调用交易成功回调，传递更新的价格
+            // 调用交易成功回调，传递更新的价格和订单信息
             if (onTradeSuccess) {
-              // 计算用户仓位（简化版本，实际应从订单数据计算）
-              const shares = estShares; // 使用之前计算的预估份额
-              const avgPrice = selectedPrice;
-              const totalValue = shares * 1.0; // 假设每份额价值 $1
 
-              onTradeSuccess({
+              // 从 API 响应中获取实际的订单和持仓数据
+              const orderData = result.data.order;
+              const positionData = result.data.position;
+              
+              // 计算实际成交价格（如果持仓数据存在，使用持仓的平均价格；否则使用预估价格）
+              const actualPrice = positionData?.avgPrice || selectedPrice;
+              const actualShares = positionData?.shares || estShares;
+              const orderFee = orderData.feeDeducted || (amountNum * feeRate);
+              
+              const callbackData = {
                 updatedMarketPrice: {
                   yesPercent: newYesPercent,
                   noPercent: newNoPercent,
                 },
                 userPosition: {
                   outcome: outcome as 'YES' | 'NO',
-                  shares: shares,
-                  avgPrice: avgPrice,
-                  totalValue: totalValue,
+                  shares: actualShares,
+                  avgPrice: actualPrice,
+                  totalValue: actualShares * 1.0,
                 },
-              });
+                order: {
+                  id: orderData.id,
+                  outcome: outcome as 'YES' | 'NO',
+                  amount: orderData.amount,
+                  shares: actualShares,
+                  price: actualPrice,
+                  fee: orderFee,
+                },
+              };
+
+              onTradeSuccess(callbackData);
+            } else {
+              console.warn('⚠️ [TradeSidebar] onTradeSuccess callback is not defined!');
             }
           }
 
@@ -836,14 +857,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         }
       } else {
         // 🔥 卖出功能：调用真实 API
-        console.log('🔍 [TradeSidebar] 准备调用卖出 API:', {
-          url: '/api/orders/sell',
-          method: 'POST',
-          marketId: marketIdStr,
-          outcome,
-          shares: amountNum,
-        });
-        
+
         const response = await fetch("/api/orders/sell", {
           method: "POST",
           headers: {
@@ -896,7 +910,6 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         }
 
         const result = await response.json();
-        console.log('✅ [TradeSidebar] 卖出成功:', result);
 
         if (result.success && result.data) {
           onAmountChange("");
@@ -983,23 +996,23 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         <div className="flex bg-pm-bg p-1 rounded-lg border border-pm-border">
           <button
             onClick={() => onTabChange("buy")}
-            className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${
+            className={`flex-1 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap ${
               activeTab === "buy"
                 ? "bg-pm-card text-white shadow-sm border border-pm-border/50"
                 : "text-pm-text-dim hover:text-white"
             }`}
           >
-            买入
+            {t('market.trade.buy')}
           </button>
           <button
             onClick={() => onTabChange("sell")}
-            className={`flex-1 py-2 text-sm font-bold transition-all ${
+            className={`flex-1 py-2 text-sm font-bold transition-all whitespace-nowrap ${
               activeTab === "sell"
                 ? "bg-pm-card text-white shadow-sm border border-pm-border/50"
                 : "text-pm-text-dim hover:text-white"
             }`}
           >
-            卖出
+            {t('market.trade.sell')}
           </button>
         </div>
 
@@ -1007,23 +1020,23 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         <div className="flex bg-pm-bg p-1 rounded-lg border border-pm-border">
           <button
             onClick={() => setOrderType('MARKET')}
-            className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${
+            className={`flex-1 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap ${
               orderType === 'MARKET'
                 ? 'bg-pm-card text-white shadow-sm border border-pm-border/50'
                 : 'text-pm-text-dim hover:text-white'
             }`}
           >
-            Market (市价)
+            {t('market.trade.market')}
           </button>
           <button
             onClick={() => setOrderType('LIMIT')}
-            className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${
+            className={`flex-1 py-2 text-xs font-bold rounded-md transition-all whitespace-nowrap ${
               orderType === 'LIMIT'
                 ? 'bg-pm-card text-white shadow-sm border border-pm-border/50'
                 : 'text-pm-text-dim hover:text-white'
             }`}
           >
-            Limit (限价)
+            {t('market.trade.limit')}
           </button>
         </div>
 
@@ -1031,9 +1044,9 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         {orderType === 'LIMIT' && (
           <div>
             <div className="flex justify-between text-xs font-medium mb-2">
-              <span className="text-pm-text-dim">限价 (Limit Price)</span>
+              <span className="text-pm-text-dim">{t('market.trade.limit_price')}</span>
               <span className="text-pm-text-dim">
-                当前: {formatUSD(marketPrice)}
+                {t('market.trade.current_price')}: {formatUSD(marketPrice)}
               </span>
             </div>
             <div className="relative">
@@ -1105,10 +1118,10 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
               </span>
             </div>
             {limitPriceNum > 0 && limitPriceNum < 0.01 && (
-              <p className="text-xs text-amber-500 mt-1">限价不能低于 $0.01</p>
+              <p className="text-xs text-amber-500 mt-1">{t('market.trade.limit_price_too_low')}</p>
             )}
             {limitPriceNum > 0 && limitPriceNum > 0.99 && (
-              <p className="text-xs text-amber-500 mt-1">限价不能高于 $0.99</p>
+              <p className="text-xs text-amber-500 mt-1">{t('market.trade.limit_price_too_high')}</p>
             )}
           </div>
         )}
@@ -1168,10 +1181,10 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         {/* 输入框 Label */}
         <div className="flex justify-between text-xs font-medium">
           <span className="text-pm-text-dim">
-            {activeTab === "buy" ? "金额 (Amount)" : "份额 (Shares)"}
+            {activeTab === "buy" ? t('market.trade.amount') : t('market.trade.shares')}
           </span>
           <span className="text-pm-text-dim flex items-center gap-1">
-            可用:{" "}
+            {t('market.trade.available')}:{" "}
             {activeTab === "buy" ? (
               availableBalance === null ? (
                 <span className="text-white font-mono">
@@ -1201,7 +1214,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
             className="w-full bg-pm-bg border border-pm-border rounded-xl px-4 py-4 pr-20 text-2xl font-bold text-white placeholder:text-pm-border focus:outline-none focus:border-pm-green focus:ring-1 focus:ring-pm-green"
           />
           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 font-medium text-sm">
-            {activeTab === "buy" ? "USD" : "Shares"}
+            {activeTab === "buy" ? "USD" : t('market.trade.shares')}
           </span>
         </div>
 
@@ -1210,29 +1223,29 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           {/* 价格显示 */}
           <div className="flex justify-between items-center text-sm">
             <span className="text-pm-text-dim">
-              {orderType === 'MARKET' ? '市场价格' : '限价'}
+              {orderType === 'MARKET' ? t('market.trade.market_price') : t('market.trade.limit_price_label')}
             </span>
             <span className="text-white font-mono font-medium">
               {orderType === 'MARKET' 
                 ? formatUSD(marketPrice) 
-                : (limitPriceNum > 0 && isLimitPriceValid ? formatUSD(limitPriceNum) : formatUSD(marketPrice) + ' (未设置)')}
+                : (limitPriceNum > 0 && isLimitPriceValid ? formatUSD(limitPriceNum) : formatUSD(marketPrice) + ' ' + t('market.trade.limit_price_not_set'))}
             </span>
           </div>
           {orderType === 'MARKET' && (
             <div className="text-xs text-pm-text-dim">
-              按当前市场最优价格成交
+              {t('market.trade.fill_at_best_price')}
             </div>
           )}
           {orderType === 'LIMIT' && (!limitPriceNum || !isLimitPriceValid) && (
             <div className="text-xs text-amber-500">
-              请设置有效的限价（$0.01 - $0.99）
+              {t('market.trade.set_limit_price')}
             </div>
           )}
 
           {/* 滑点提示（小字显示） */}
           {priceImpact > 0 && amountNum > 0 && (
             <div className="flex justify-between items-center text-xs">
-              <span className="text-zinc-500">价格影响</span>
+              <span className="text-zinc-500">{t('market.trade.price_impact')}</span>
               <span className="text-zinc-500 font-mono">{priceImpact.toFixed(2)}%</span>
             </div>
           )}
@@ -1243,7 +1256,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
               {/* Buy 模式：大字显示预估份额 */}
               <div className="pt-2 mt-2 border-t border-pm-border/50">
                 <div className="flex justify-between items-baseline">
-                  <span className="text-pm-text-dim text-sm">预估份额</span>
+                  <span className="text-pm-text-dim text-sm">{t('market.trade.estimated_shares')}</span>
                   <span className="text-2xl font-bold text-white font-mono tabular-nums">
                     {estShares > 0 ? estShares.toFixed(4) : "0.0000"}
                   </span>
@@ -1255,7 +1268,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
               {/* Sell 模式：大字显示预估收到 */}
               <div className="pt-2 mt-2 border-t border-pm-border/50">
                 <div className="flex justify-between items-baseline">
-                  <span className="text-pm-text-dim text-sm">预估收到</span>
+                  <span className="text-pm-text-dim text-sm">{t('market.trade.estimated_return')}</span>
                   <span className="text-2xl font-bold text-white font-mono tabular-nums">
                     {estReturn > 0 ? formatUSD(estReturn) : "$0.00"}
                   </span>
@@ -1263,7 +1276,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
               </div>
               {userPosition && (
                 <div className="flex justify-between items-center text-xs text-zinc-500">
-                  <span>平均成本</span>
+                  <span>{t('market.trade.average_cost')}</span>
                   <span className="font-mono">
                     {formatUSD(selectedOutcome === "yes" ? userPosition.yesAvgPrice : userPosition.noAvgPrice)}
                   </span>
@@ -1275,7 +1288,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           {/* ROI */}
           {amountNum > 0 && (
             <div className="pt-2 mt-2 border-t border-pm-border/50 flex justify-between items-center text-sm">
-              <span className="text-pm-text-dim">收益率 (ROI)</span>
+              <span className="text-pm-text-dim">{t('market.trade.roi')}</span>
               <span className={`font-mono font-bold ${
                 roi >= 0 ? "text-pm-green" : "text-pm-red"
               }`}>
@@ -1288,8 +1301,8 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         {/* 余额/份额不足提示 */}
         {isInsufficientBalance && (
           <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20">
-            <p className="text-xs text-rose-500 font-medium text-center">
-              {activeTab === "buy" ? "余额不足" : "份额不足"}
+            <p className="text-xs text-rose-500 font-medium text-center whitespace-nowrap">
+              {activeTab === "buy" ? t('market.trade.insufficient_balance') : t('market.trade.insufficient_shares')}
             </p>
           </div>
         )}
@@ -1298,7 +1311,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         {activeTab === "sell" && (!userPosition || (selectedOutcome === "yes" && userPosition.yesShares === 0) || (selectedOutcome === "no" && userPosition.noShares === 0)) && (
           <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
             <p className="text-xs text-amber-500 font-medium text-center">
-              您当前没有持仓，无法卖出
+              {t('market.trade.no_position')}
             </p>
           </div>
         )}
@@ -1318,7 +1331,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         {activeTab === "buy" && isPriceAtMax && (
           <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
             <p className="text-xs text-amber-500 font-medium text-center">
-              价格已达上限，无法买入
+              {t('market.trade.price_at_max')}
             </p>
           </div>
         )}
@@ -1347,14 +1360,14 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           {isTrading || isSubmitting ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              Processing...
+              {t('market.trade.processing')}
             </>
           ) : activeTab === "buy" && isPriceAtMax ? (
-            "等待清算"
+            t('market.trade.waiting_settlement')
           ) : isLoggedIn ? (
-            `${activeTab === "buy" ? "买入" : "卖出"} ${selectedOutcome === "yes" ? "Yes" : "No"}`
+            `${activeTab === "buy" ? (selectedOutcome === "yes" ? t('market.trade.buy_yes') : t('market.trade.buy_no')) : (selectedOutcome === "yes" ? t('market.trade.sell_yes') : t('market.trade.sell_no'))}`
           ) : (
-            "登录以交易"
+            t('market.trade.login_to_trade')
           )}
         </button>
       </div>

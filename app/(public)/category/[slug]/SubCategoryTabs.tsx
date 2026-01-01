@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface Category {
   id: string;
@@ -19,9 +20,11 @@ interface SubCategoryTabsProps {
   slug: string;
   activeFilter: string;
   onFilterChange: (filterId: string) => void;
+  onHasSubCategoriesChange?: (hasSubCategories: boolean) => void;
 }
 
-export default function SubCategoryTabs({ slug, activeFilter, onFilterChange }: SubCategoryTabsProps) {
+export default function SubCategoryTabs({ slug, activeFilter, onFilterChange, onHasSubCategoriesChange }: SubCategoryTabsProps) {
+  const { t } = useLanguage();
   const [subCategories, setSubCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [allCount, setAllCount] = useState<number>(0); // 🔥 "全部"选项的数量
@@ -45,40 +48,44 @@ export default function SubCategoryTabs({ slug, activeFilter, onFilterChange }: 
               count: child.count ?? 0, // 确保 count 字段存在
             }));
             setSubCategories(childrenWithCount);
-            // 🚀 物理对齐：直接使用后端递归计算好的 count
-            // 后端 API 已经通过 getAllCategoryIds 正确计算了父分类及其所有子分类聚合后的唯一系列总数
             setAllCount(currentCategory.count || 0);
+            onHasSubCategoriesChange?.(true);
           } else {
             // 如果没有子分类，检查是否当前分类本身是子分类
             // 如果是，显示同级分类
             if (currentCategory?.parentId) {
               const parent = data.data.find((cat: Category) => cat.id === currentCategory.parentId);
-              if (parent?.children) {
+              if (parent?.children && parent.children.length > 0) {
                 const siblingsWithCount = parent.children.map((child: Category) => ({
                   ...child,
                   count: child.count ?? 0, // 确保 count 字段存在
                 }));
                 setSubCategories(siblingsWithCount);
-                // 🚀 物理对齐：直接使用后端递归计算好的 count
-                // 后端 API 已经通过 getAllCategoryIds 正确计算了父分类及其所有子分类聚合后的唯一系列总数
                 setAllCount(parent.count || 0);
+                onHasSubCategoriesChange?.(true);
+              } else {
+                setSubCategories([]);
+                setAllCount(0);
+                onHasSubCategoriesChange?.(false);
               }
             } else {
               setSubCategories([]);
               setAllCount(0);
+              onHasSubCategoriesChange?.(false);
             }
           }
         }
       } catch (error) {
         console.error("获取子分类失败:", error);
         setSubCategories([]);
+        onHasSubCategoriesChange?.(false);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchCategories();
-  }, [slug]);
+  }, [slug, onHasSubCategoriesChange]);
 
   if (isLoading) {
     return null; // 加载中时不显示
@@ -103,7 +110,7 @@ export default function SubCategoryTabs({ slug, activeFilter, onFilterChange }: 
         }`}
       >
         {/* 🔥 点击子菜单文字不变颜色，效果跟父级一样 */}
-        <span>全部</span>
+        <span>{t('common.time.all')}</span>
         {/* 🔥 数字格式化：添加小括号，使用较淡的灰色 */}
         <span className="ml-1 text-xs opacity-60 text-[#64748b]">
           ({allCount})

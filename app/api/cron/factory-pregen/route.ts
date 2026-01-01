@@ -27,21 +27,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('⏰ [PreGen Cron] T+1 预产制任务启动...');
-
     const now = dayjs.utc();
     const pregenHours = 48; // 预生成 48 小时的市场
     const targetEndTime = now.add(pregenHours, 'hour').toDate();
 
     // 查询所有活跃模板
-    const activeTemplates = await prisma.marketTemplate.findMany({
+    const activeTemplates = await prisma.market_templates.findMany({
       where: {
         isActive: true,
         status: 'ACTIVE',
       },
     });
-
-    console.log(`📊 [PreGen Cron] 找到 ${activeTemplates.length} 个活跃模板`);
 
     const stats = {
       templatesProcessed: 0,
@@ -58,7 +54,7 @@ export async function GET(request: NextRequest) {
         const expectedMarketCount = Math.ceil(pregenHours * marketsPerHour);
         
         // 查找未来 48 小时内已存在的市场
-        const existingMarkets = await prisma.market.findMany({
+        const existingMarkets = await prisma.markets.findMany({
           where: {
             templateId: template.id,
             isFactory: true,
@@ -71,8 +67,6 @@ export async function GET(request: NextRequest) {
             closingDate: 'asc',
           },
         });
-
-        console.log(`📊 [PreGen Cron] 模板 ${template.name}: 已存在 ${existingMarkets.length} 个未来市场，期望 ${expectedMarketCount} 个`);
 
         // 如果数量不足，需要批量创建
         if (existingMarkets.length < expectedMarketCount) {
@@ -106,7 +100,7 @@ export async function GET(request: NextRequest) {
             // 由于 getNextPeriodTime 已经处理了对齐，这里直接使用计算结果
             
             // 🔥 修复：检查是否已存在该时间点的市场（使用精确匹配，与 createMarketFromTemplate 一致）
-            const existingMarket = await prisma.market.findFirst({
+            const existingMarket = await prisma.markets.findFirst({
               where: {
                 templateId: template.id,
                 isFactory: true,
@@ -133,7 +127,7 @@ export async function GET(request: NextRequest) {
                 id: template.id,
                 name: template.name,
                 titleTemplate: (template as any).titleTemplate || null,
-                displayTemplate: (template as any).displayTemplate || null,
+                // displayTemplate: (template as any).displayTemplate || null, // Not in MarketTemplate interface
                 symbol: template.symbol,
                 period: template.period,
                 categorySlug: (template as any).categorySlug || null,
@@ -149,7 +143,7 @@ export async function GET(request: NextRequest) {
               stats.marketsCreated++;
               
               if (createdCount % 10 === 0) {
-                console.log(`📊 [PreGen Cron] 模板 ${template.name}: 已创建 ${createdCount} 个市场...`);
+
               }
             } catch (createError: any) {
               console.error(`❌ [PreGen Cron] 模板 ${template.name} 创建市场失败:`, createError.message);
@@ -160,10 +154,10 @@ export async function GET(request: NextRequest) {
           }
 
           if (createdCount > 0) {
-            console.log(`✅ [PreGen Cron] 模板 ${template.name} 预生成完成，共创建 ${createdCount} 个市场`);
+
           }
         } else {
-          console.log(`✅ [PreGen Cron] 模板 ${template.name} 已有足够的未来市场，跳过`);
+
         }
 
         stats.templatesProcessed++;
@@ -172,8 +166,6 @@ export async function GET(request: NextRequest) {
         stats.errors++;
       }
     }
-
-    console.log(`✅ [PreGen Cron] T+1 预产制任务完成: 处理 ${stats.templatesProcessed} 个模板，创建 ${stats.marketsCreated} 个市场，错误 ${stats.errors}`);
 
     return NextResponse.json({
       success: true,

@@ -5,7 +5,6 @@ import {
   Calendar,
   CalendarDays,
   CalendarRange,
-  TrendingUp,
   Building2,
   type LucideIcon,
 } from "lucide-react";
@@ -15,6 +14,7 @@ export interface FilterOption {
   label: string;
   icon: LucideIcon;
   count?: number; // 🔥 该筛选选项下的市场数量
+  translatedLabel?: string; // 翻译后的标签
 }
 
 export interface CategoryFiltersConfig {
@@ -44,24 +44,19 @@ export const CATEGORY_FILTERS_CONFIG: CategoryFiltersConfig = {
       icon: Clock,
     },
     {
-      id: "daily",
-      label: "日常",
+      id: "1d",
+      label: "每天",
       icon: Calendar,
     },
     {
-      id: "weekly",
+      id: "1w",
       label: "每周",
       icon: CalendarDays,
     },
     {
-      id: "monthly",
-      label: "月度",
+      id: "1M",
+      label: "每月",
       icon: CalendarRange,
-    },
-    {
-      id: "etf",
-      label: "ETF",
-      icon: TrendingUp,
     },
   ],
   finance: [
@@ -86,18 +81,18 @@ export const CATEGORY_FILTERS_CONFIG: CategoryFiltersConfig = {
       icon: Clock,
     },
     {
-      id: "daily",
-      label: "日常",
+      id: "1d",
+      label: "每天",
       icon: Calendar,
     },
     {
-      id: "weekly",
+      id: "1w",
       label: "每周",
       icon: CalendarDays,
     },
     {
-      id: "monthly",
-      label: "月度",
+      id: "1M",
+      label: "每月",
       icon: CalendarRange,
     },
     {
@@ -107,4 +102,3 @@ export const CATEGORY_FILTERS_CONFIG: CategoryFiltersConfig = {
     },
   ],
 };
-

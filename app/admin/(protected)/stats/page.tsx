@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { X, Edit2, Trash2, Plus, RefreshCw, Play, Loader2 } from "lucide-react";
 
 interface GlobalStat {
@@ -69,7 +70,7 @@ export default function StatsManagementPage() {
       }
     } catch (error) {
       console.error("获取指标列表失败:", error);
-      alert("获取指标列表失败，请稍后重试");
+      toast.error("获取指标列表失败，请稍后重试");
     } finally {
       setIsLoading(false);
     }
@@ -151,21 +152,20 @@ export default function StatsManagementPage() {
       const result = await response.json();
 
       if (result.success) {
-        alert(`✅ ${result.message}`);
+        toast.info(`✅ ${result.message}`);
         // 刷新状态
         await fetchGlobalStatsCalcStatus();
         await fetchStats(); // 刷新指标列表（因为 isActive 可能改变了）
       } else {
-        alert(`❌ 操作失败: ${result.error}`);
+        toast.error(`❌ 操作失败: ${result.error}`);
       }
     } catch (error) {
       console.error("开启/关闭脚本 B 失败:", error);
-      alert("操作失败，请稍后重试");
+      toast.error("操作失败，请稍后重试");
     } finally {
       setIsTogglingGlobalStats(false);
     }
   };
-
 
   // 手动运行采集
   const handleRunScraper = async (sourceName: string) => {
@@ -180,17 +180,17 @@ export default function StatsManagementPage() {
       const result = await response.json();
 
                 if (result.success) {
-                  alert(`✅ ${result.message}`);
+                  toast.info(`✅ ${result.message}`);
                   // 刷新采集源列表
                   await fetchDataSources();
                   // 刷新指标列表
                   await fetchStats();
                 } else {
-                  alert(`❌ 采集失败: ${result.error}`);
+                  toast.error(`❌ 采集失败: ${result.error}`);
                 }
     } catch (error) {
       console.error("运行采集失败:", error);
-      alert("运行采集失败，请稍后重试");
+      toast.error("运行采集失败，请稍后重试");
     } finally {
       setRunningScraper(null);
     }
@@ -260,7 +260,7 @@ export default function StatsManagementPage() {
   // 处理提交（新建或编辑）
   const handleSubmit = async () => {
     if (!formData.label.trim()) {
-      alert("指标名称不能为空");
+      toast.info("指标名称不能为空");
       return;
     }
 
@@ -294,13 +294,13 @@ export default function StatsManagementPage() {
       if (data.success) {
         await fetchStats();
         handleCloseDialog();
-        alert(editingStat ? "指标更新成功！" : "指标创建成功！");
+        toast.success(editingStat ? "指标更新成功！" : "指标创建成功！");
       } else {
-        alert(data.error || "操作失败，请稍后重试");
+        toast.error(data.error || "操作失败，请稍后重试");
       }
     } catch (error) {
       console.error("操作失败:", error);
-      alert("操作失败，请稍后重试");
+      toast.error("操作失败，请稍后重试");
     } finally {
       setIsSubmitting(false);
     }
@@ -322,13 +322,13 @@ export default function StatsManagementPage() {
 
       if (data.success) {
         await fetchStats();
-        alert("指标删除成功！");
+        toast.success("指标删除成功！");
       } else {
-        alert(data.error || "删除失败，请稍后重试");
+        toast.error(data.error || "删除失败，请稍后重试");
       }
     } catch (error) {
       console.error("删除失败:", error);
-      alert("删除失败，请稍后重试");
+      toast.error("删除失败，请稍后重试");
     }
   };
 

@@ -26,15 +26,7 @@ export async function POST(
     const session = await auth();
     
     // 🔥 调试日志：打印 session 信息
-    console.log('🔍 [Settle API] Session 信息:', {
-      hasSession: !!session,
-      hasUser: !!(session?.user),
-      userId: session?.user?.id,
-      userEmail: session?.user?.email,
-      userRole: (session?.user as any)?.role,
-      isAdmin: (session?.user as any)?.isAdmin,
-    });
-    
+
     if (!session || !session.user) {
       console.error('❌ [Settle API] Session 验证失败: session 或 user 为空');
       return NextResponse.json(
@@ -53,20 +45,13 @@ export async function POST(
       );
     }
     
-    const dbUser = await prisma.user.findUnique({
+    const dbUser = await prisma.users.findUnique({
       where: { email: userEmail },
       select: { id: true, isAdmin: true, isBanned: true },
     });
     
     // 🔥 调试日志：打印数据库查询结果
-    console.log('🔍 [Settle API] 数据库用户查询结果:', {
-      found: !!dbUser,
-      userId: dbUser?.id,
-      isAdmin: dbUser?.isAdmin,
-      isBanned: dbUser?.isBanned,
-      email: userEmail,
-    });
-    
+
     if (!dbUser) {
       console.error('❌ [Settle API] 用户不存在于数据库');
       return NextResponse.json(
@@ -90,8 +75,6 @@ export async function POST(
         { status: 403 }
       );
     }
-    
-    console.log('✅ [Settle API] 权限验证通过，用户ID:', dbUser.id);
 
     const { market_id } = await params;
 

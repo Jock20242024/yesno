@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useState } from "react";
 import { Plus, Play, Pause, Download, Languages, X } from "lucide-react";
 
@@ -90,11 +91,11 @@ export default function TemplateList({
           onRefresh();
         }
       } else {
-        alert(data.error || "保存翻译失败");
+        toast.error(data.error || "保存翻译失败");
       }
     } catch (error) {
       console.error("保存翻译失败:", error);
-      alert("保存翻译失败");
+      toast.error("保存翻译失败");
     } finally {
       setIsSavingTranslation(false);
     }

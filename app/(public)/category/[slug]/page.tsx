@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { CATEGORY_FILTERS_CONFIG } from "@/lib/constants/categoryFilters";
+// 🔥 物理隔离：移除外部配置依赖，使用本地判断
 import CategoryClient from "./CategoryClient";
 import prisma from '@/lib/prisma';
 
@@ -20,7 +20,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = await params;
 
   // 检查该分类是否有筛选配置
-  const hasFilters = !!CATEGORY_FILTERS_CONFIG[slug];
+  // 🔥 物理隔离：本地硬编码判断，crypto 和 finance 分类有筛选器
+  const hasFilters = slug === 'crypto' || slug === 'finance';
 
   let categoryName: string;
   let pageTitle: string;
@@ -33,7 +34,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   } else {
     // 🔥 从数据库查询分类信息（动态路由）
     try {
-      const category = await prisma.category.findFirst({
+      const category = await prisma.categories.findFirst({
         where: {
           slug: slug,
           status: 'active',

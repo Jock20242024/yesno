@@ -44,13 +44,13 @@ export async function GET(request: Request) {
     const usersWithStats = await Promise.all(
       regularUsers.map(async (user) => {
         // 1. 获取用户的所有持仓（用于计算盈亏和持仓价值）
-        const positions = await prisma.position.findMany({
+        const positions = await prisma.positions.findMany({
           where: {
             userId: user.id,
             status: 'OPEN',
           },
           include: {
-            market: {
+            markets: {
               select: {
                 id: true,
                 status: true,
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
         if (timeFilter) {
           ordersWhere.createdAt = { gte: timeFilter };
         }
-        const orders = await prisma.order.findMany({
+        const orders = await prisma.orders.findMany({
           where: ordersWhere,
         });
 
@@ -87,10 +87,10 @@ export async function GET(request: Request) {
                   : 'YES',
               },
               {
-                status: position.market?.status || 'OPEN',
-                resolvedOutcome: position.market?.resolvedOutcome || null,
-                totalYes: position.market?.totalYes || 0,
-                totalNo: position.market?.totalNo || 0,
+                status: position.markets?.status || 'OPEN',
+                resolvedOutcome: position.markets?.resolvedOutcome || null,
+                totalYes: position.markets?.totalYes || 0,
+                totalNo: position.markets?.totalNo || 0,
               }
             );
 

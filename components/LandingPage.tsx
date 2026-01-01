@@ -3,6 +3,7 @@
 import MarketTable from "@/components/MarketTable";
 import MarketOverview from "@/components/MarketOverview";
 import { Globe, TrendingUp, Shield } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 /**
  * 首页 - 完全客户端渲染，从 API 获取数据
@@ -11,29 +12,31 @@ import { Globe, TrendingUp, Shield } from "lucide-react";
  * 现在 MarketTable 完全从 API 获取数据，确保显示最新内容
  */
 export default function LandingPage() {
+  const { t } = useLanguage();
+  
   return (
     <div className="layout-container flex h-full grow flex-col w-full lg:max-w-[1440px] lg:mx-auto px-4 lg:px-10 py-8">
       {/* Hero Section */}
       <section className="flex flex-col md:flex-row justify-between items-end gap-6 mb-10 pb-8 border-b border-border-dark">
         <div className="flex flex-col gap-4 max-w-[720px]">
           <h1 className="text-white text-3xl md:text-4xl lg:text-5xl font-black leading-tight tracking-tight">
-            <span className="text-primary">预测未来</span>, 赢取丰厚奖励
+            <span className="text-primary">{t('home.hero.title_prefix')}</span>, {t('home.hero.title_suffix')}
           </h1>
           <p className="text-text-secondary text-lg font-normal leading-normal max-w-[600px]">
-            加入全球预测市场，参与各类事件的预测和交易，实时查看价格变化和趋势
+            {t('home.hero.subtitle')}
           </p>
-          <div className="flex gap-4 mt-2">
-            <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark px-3 py-1.5 rounded-full border border-border-dark">
-              <Globe className="w-[18px] h-[18px] text-primary" />
-              全球趋势
+          <div className="flex flex-wrap gap-4 mt-2">
+            <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark px-3 py-1.5 rounded-full border border-border-dark whitespace-nowrap">
+              <Globe className="w-[18px] h-[18px] text-primary flex-shrink-0" />
+              {t('home.hero.feature_global')}
             </div>
-            <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark px-3 py-1.5 rounded-full border border-border-dark">
-              <TrendingUp className="w-[18px] h-[18px] text-primary" />
-              实时赔率
+            <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark px-3 py-1.5 rounded-full border border-border-dark whitespace-nowrap">
+              <TrendingUp className="w-[18px] h-[18px] text-primary flex-shrink-0" />
+              {t('home.hero.feature_odds')}
             </div>
-            <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark px-3 py-1.5 rounded-full border border-border-dark">
-              <Shield className="w-[18px] h-[18px] text-primary" />
-              安全透明
+            <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark px-3 py-1.5 rounded-full border border-border-dark whitespace-nowrap">
+              <Shield className="w-[18px] h-[18px] text-primary flex-shrink-0" />
+              {t('home.hero.feature_security')}
             </div>
           </div>
         </div>

@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useMemo } from "react";
 import dayjs from "@/lib/dayjs"; // 🔥 使用全局初始化的 dayjs
 import { Drawer } from "vaul";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface SlotItem {
   id: string;
@@ -59,6 +60,7 @@ const getDefaultChartData = (currentPrice: number) => {
 export default function PriceChart({ yesPercent, marketStatus = "open", marketResult = null, slots = [], currentMarketId, period, templateId, height = 300, data, hideNavigation = false, isFactory = false }: PriceChartProps) {
   // 🔥 关键：所有 hooks 必须在早期返回之前调用
   const router = useRouter();
+  const { t, language } = useLanguage();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const activeSlotRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -253,9 +255,10 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
     return date.local().format('HH:mm');
   };
   
-  // 🔥 格式化日期：用于标题显示（12月22日），使用本地时区
+  // 🔥 格式化日期：用于标题显示，根据语言切换格式
   const formatDate = (date: dayjs.Dayjs): string => {
-    return date.local().format('M月D日');
+    const dateFormat = language === 'en' ? 'MMM D' : 'M月D日';
+    return date.local().format(dateFormat);
   };
   
   // 条件渲染：如果 period 在 15-1440 分钟之间，显示场次导航；否则显示周期切换栏
@@ -333,7 +336,7 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
           </ResponsiveContainer>
           <div className="absolute top-4 left-[65%] bg-pm-card border border-pm-border px-3 py-2 rounded-lg shadow-xl hidden group-hover:block z-10">
             <div className="text-[10px] text-pm-text-dim mb-0.5 font-medium uppercase tracking-wider">
-              {formatDate(dayjs().local())}, 当地时间 ({userTimeZone})
+              {formatDate(dayjs().local())}, {t('market.time.local_time')} ({userTimeZone})
             </div>
             <div className="text-lg font-bold text-pm-green leading-none">
               {yesPercent}% Yes
@@ -456,7 +459,7 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
         </ResponsiveContainer>
         <div className="absolute top-4 left-[65%] bg-pm-card border border-pm-border px-3 py-2 rounded-lg shadow-xl hidden group-hover:block z-10">
           <div className="text-[10px] text-pm-text-dim mb-0.5 font-medium uppercase tracking-wider">
-            {formatDate(currentDate)}, 当地时间 ({userTimeZone})
+            {formatDate(currentDate)}, {t('market.time.local_time')} ({userTimeZone})
           </div>
           <div className="text-lg font-bold text-pm-green leading-none">
             {yesPercent}% Yes
@@ -517,7 +520,7 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
           onClick={() => setDrawerOpen(true)}
           className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium bg-pm-card text-pm-text-dim hover:bg-pm-card-hover border border-pm-border transition-all flex-shrink-0"
         >
-          <span>更多的</span>
+          <span>{t('market.chart.more')}</span>
           <ChevronUp className="w-4 h-4" />
         </button>
       </div>
@@ -531,7 +534,7 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
             <div className="flex items-center justify-between p-4 border-b border-pm-border flex-shrink-0">
               <div>
                 <Drawer.Title className="text-lg font-bold text-white mb-1">选择交易场次</Drawer.Title>
-                <p className="text-sm text-pm-text-dim">{formatDate(currentDate)}, 当地时间 ({userTimeZone})</p>
+                <p className="text-sm text-pm-text-dim">{formatDate(currentDate)}, {t('market.time.local_time')} ({userTimeZone})</p>
               </div>
               <Drawer.Close className="p-2 hover:bg-pm-card-hover rounded-lg transition-colors cursor-pointer">
                 <X className="w-5 h-5 text-pm-text-dim" />

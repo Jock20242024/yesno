@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     // 查找所有没有 externalId 的 OPEN 工厂市场
     // 🔥 修复：Prisma中查询null应该直接使用null，不需要包装
-    const marketsToBind = await prisma.market.findMany({
+    const marketsToBind = await prisma.markets.findMany({
       where: {
         isFactory: true,
         isActive: true,
@@ -47,24 +47,19 @@ export async function POST(request: NextRequest) {
         externalId: null, // ✅ 直接使用 null
         templateId: { not: null },
         period: { not: null },
-        closingDate: { not: null },
+        symbol: { not: null }, // 使用 symbol 字段替代 marketTemplate
+        closingDate: { not: null as any },
       },
       select: {
         id: true,
         title: true,
         templateId: true,
         period: true,
+        symbol: true, // 直接使用 market 的 symbol 字段
         closingDate: true,
-        marketTemplate: {
-          select: {
-            symbol: true,
-          },
-        },
       },
       take: 500, // 限制一次处理的数量
     });
-
-    console.log(`🔍 [BatchBind] 找到 ${marketsToBind.length} 个需要绑定 externalId 的工厂市场`);
 
     const results = {
       total: marketsToBind.length,
@@ -75,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     // 批量处理
     for (const market of marketsToBind) {
-      if (!market.templateId || !market.marketTemplate?.symbol || !market.period || !market.closingDate) {
+      if (!market.templateId || !market.symbol || !market.period || !market.closingDate) {
         results.failed++;
         results.errors.push({
           marketId: market.id,
@@ -87,18 +82,18 @@ export async function POST(request: NextRequest) {
 
       try {
         const externalId = await tryBindExternalId(
-          market.marketTemplate.symbol,
+          market.symbol,
           market.period,
           new Date(market.closingDate)
         );
 
         if (externalId) {
-          await prisma.market.update({
+          await prisma.markets.update({
             where: { id: market.id },
             data: { externalId },
           });
           results.success++;
-          console.log(`✅ [BatchBind] 市场 ${market.id} 成功绑定 externalId: ${externalId}`);
+
         } else {
           results.failed++;
           results.errors.push({

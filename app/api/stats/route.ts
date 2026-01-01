@@ -15,7 +15,7 @@ export const revalidate = 0;
 export async function GET() {
   try {
     // 获取所有激活的全局指标（包含手动覆盖和偏移字段）
-    const stats = await prisma.globalStat.findMany({
+    const stats = await prisma.global_stats.findMany({
       where: {
         isActive: true,
       },

@@ -27,7 +27,7 @@ async function main() {
     // 🔥 注意：使用 Category 表，不是 MarketCategory 表
     // MarketCategory 是关联表，用于连接 Market 和 Category
     // 而 Category 才是存储分类信息（name, slug）的表
-    await prisma.category.upsert({
+    await prisma.categories.upsert({
       where: { slug: cat.slug }, // 使用 slug 作为唯一标识符
       update: {
         name: cat.name, // 如果已存在，更新名称和显示顺序

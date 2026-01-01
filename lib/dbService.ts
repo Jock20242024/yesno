@@ -10,6 +10,7 @@ import {
   TransactionStatus
 } from '@/types/data';
 import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 
 /**
  * ============================================
@@ -28,7 +29,7 @@ export const DBService = {
    * @returns Promise<User[]> 用户数组
    */
   async getAllUsers(): Promise<User[]> {
-    const dbUsers = await prisma.user.findMany({
+    const dbUsers = await prisma.users.findMany({
       orderBy: { createdAt: 'desc' },
     });
     
@@ -38,7 +39,7 @@ export const DBService = {
     return dbUsers.map((dbUser) => ({
       id: dbUser.id,
       email: dbUser.email,
-      passwordHash: dbUser.passwordHash,
+      passwordHash: dbUser.passwordHash || '',
       balance: dbUser.balance,
       isAdmin: dbUser.isAdmin,
       isBanned: dbUser.isBanned,
@@ -52,7 +53,7 @@ export const DBService = {
    * @returns Promise<User | null> 用户对象
    */
   async findUserByEmail(email: string): Promise<User | null> {
-    const dbUser = await prisma.user.findUnique({
+    const dbUser = await prisma.users.findUnique({
       where: { email },
     });
     
@@ -61,7 +62,7 @@ export const DBService = {
     return {
       id: dbUser.id,
       email: dbUser.email,
-      passwordHash: dbUser.passwordHash,
+      passwordHash: dbUser.passwordHash || '',
       balance: dbUser.balance,
       isAdmin: dbUser.isAdmin,
       isBanned: dbUser.isBanned,
@@ -75,7 +76,7 @@ export const DBService = {
    * @returns Promise<User | null> 用户对象
    */
   async findUserById(userId: string): Promise<User | null> {
-    const dbUser = await prisma.user.findUnique({
+    const dbUser = await prisma.users.findUnique({
       where: { id: userId },
     });
     
@@ -84,7 +85,7 @@ export const DBService = {
     return {
       id: dbUser.id,
       email: dbUser.email,
-      passwordHash: dbUser.passwordHash,
+      passwordHash: dbUser.passwordHash || '',
       balance: dbUser.balance,
       isAdmin: dbUser.isAdmin,
       isBanned: dbUser.isBanned,
@@ -122,8 +123,10 @@ export const DBService = {
     try {
       // 严格只传递必需字段：email, passwordHash, balance, isAdmin, isBanned
       // 显式排除 walletAddress 等可选字段，让数据库自动设置为 null
-      const dbUser = await prisma.user.create({
+      const dbUser = await prisma.users.create({
         data: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           email,
           passwordHash,
           balance: initialBalance,
@@ -135,7 +138,7 @@ export const DBService = {
       return {
         id: dbUser.id,
         email: dbUser.email,
-        passwordHash: dbUser.passwordHash,
+        passwordHash: dbUser.passwordHash || '',
         balance: dbUser.balance,
         isAdmin: dbUser.isAdmin,
         isBanned: dbUser.isBanned,
@@ -164,7 +167,7 @@ export const DBService = {
       if (data.isAdmin !== undefined) updateData.isAdmin = data.isAdmin;
       if (data.isBanned !== undefined) updateData.isBanned = data.isBanned;
 
-      const dbUser = await prisma.user.update({
+      const dbUser = await prisma.users.update({
         where: { id: userId },
         data: updateData,
       });
@@ -172,7 +175,7 @@ export const DBService = {
       return {
         id: dbUser.id,
         email: dbUser.email,
-        passwordHash: dbUser.passwordHash,
+        passwordHash: dbUser.passwordHash || '',
         balance: dbUser.balance,
         isAdmin: dbUser.isAdmin,
         isBanned: dbUser.isBanned,
@@ -206,9 +209,9 @@ export const DBService = {
     // 🔥 支持通过多对多关系筛选分类（使用 ID 集合进行物理隔离查询）
     if (categorySlug) {
       // 1. 先获取当前分类及其直属子分类 ID
-      const category = await prisma.category.findUnique({
+      const category = await prisma.categories.findUnique({
         where: { slug: categorySlug },
-        include: { children: { select: { id: true } } }
+        include: { other_categories: { select: { id: true } } }
       });
       
       // 2. 严禁"裸奔"：如果 Slug 没对上，直接返回空数组，不准返回全量市场
@@ -219,7 +222,7 @@ export const DBService = {
       
       // 3. 🔥 修复 ID 匹配：确保即使没有子分类，categoryIds 也能正确包含当前分类 ID
       // 即使 children 为空或 undefined，至少也会包含 category.id
-      const childrenIds = category.children?.map(c => c.id) || [];
+      const childrenIds = category.other_categories?.map(c => c.id) || [];
       const categoryIds = [category.id, ...childrenIds];
       
       // 4. 使用这个 ID 集合进行查询
@@ -231,20 +234,20 @@ export const DBService = {
       
       const childCount = categoryIds.length - 1; // 减去父类本身
       if (childCount > 0) {
-        console.log(`✅ [DBService] 分类 '${categorySlug}' (ID: ${category.id})，查询包含 ${categoryIds.length} 个分类的市场（父类 + ${childCount} 个子分类）`);
+
       } else {
-        console.log(`✅ [DBService] 分类 '${categorySlug}' (ID: ${category.id})，查询仅该分类的市场（无子分类，categoryIds=[${category.id}]）`);
+
       }
     }
 
     let dbMarkets;
     try {
-      dbMarkets = await prisma.market.findMany({
+      dbMarkets = await prisma.markets.findMany({
         where,
         include: {
-          categories: {
+          market_categories: {
             include: {
-              category: {
+              categories: {
                 select: {
                   name: true,
                   slug: true,
@@ -256,7 +259,7 @@ export const DBService = {
         // 🔥 添加交易量排序逻辑：按 totalVolume 降序排列，交易量最大的市场排在最前面
         orderBy: { totalVolume: 'desc' },
       });
-      console.log(`✅ [DBService] getAllMarkets 查询成功，返回 ${dbMarkets.length} 个市场`);
+
     } catch (dbError) {
       console.error('❌ [DBService] getAllMarkets 数据库查询失败:');
       console.error('查询条件:', JSON.stringify(where, null, 2));
@@ -327,14 +330,14 @@ export const DBService = {
           totalYes: safeTotalYes, // 🔥 确保是 Number 类型
           totalNo: safeTotalNo, // 🔥 确保是 Number 类型
           feeRate: safeFeeRate, // 🔥 确保是 Number 类型
-          category: dbMarket.categories[0]?.category?.name || dbMarket.category || undefined,
-          categorySlug: dbMarket.categories[0]?.category?.slug || dbMarket.categorySlug || undefined,
+          category: dbMarket.market_categories[0]?.categories?.name || dbMarket.category || undefined,
+          categorySlug: dbMarket.market_categories[0]?.categories?.slug || dbMarket.categorySlug || undefined,
           createdAt: dbMarket.createdAt.toISOString(),
           // 添加 isHot 字段（用于前端筛选）
           ...(dbMarket.isHot !== undefined && { isHot: dbMarket.isHot } as any),
           // 添加 volume 字段（用于排序，兼容性字段）
           volume: safeTotalVolume, // 🔥 确保是 Number 类型
-          totalVolume: safeTotalVolume, // 🔥 确保是 Number 类型（重复但保持一致）
+          // totalVolume: safeTotalVolume, // 🔥 移除重复属性，使用 volume
           // 🔥 添加 yesPercent 和 noPercent 字段（用于显示）
           yesPercent: safeYesPercent, // 🔥 确保是有效的数字
           noPercent: safeNoPercent, // 🔥 确保是有效的数字
@@ -397,7 +400,7 @@ export const DBService = {
     try {
       // 🔥 统一"身份证"校验逻辑：支持双重查找（slug 或 id）
       // 由于目前 Market 表没有 slug 字段，先用 ID 查找，如果将来添加了 slug 字段，可以同时支持
-      const dbMarket = await prisma.market.findFirst({
+      const dbMarket = await prisma.markets.findFirst({
         where: {
           OR: [
             { id: marketId }, // 🔥 先尝试按 ID 匹配（兼容没有 slug 的手动市场）
@@ -504,27 +507,15 @@ export const DBService = {
           },
         };
       }
-      
-      console.log('💾 [DBService] addMarket 准备创建市场，数据:', JSON.stringify(marketCreateData, null, 2));
-      
+
       // 🔥 管理员权限：允许通过 DBService 创建市场（用于后台管理）
       // 为新市场生成 templateId（使用 manual- 前缀标识手动创建）
       const crypto = await import('crypto');
       const templateId = `manual-${crypto.randomUUID()}`;
       marketCreateData.templateId = templateId;
       
-      const dbMarket = await prisma.market.create({
+      const dbMarket = await prisma.markets.create({
         data: marketCreateData,
-      });
-
-      console.log('✅ [DBService] addMarket 成功创建市场:', {
-        id: dbMarket.id,
-        title: dbMarket.title,
-        source: dbMarket.source,
-        isActive: dbMarket.isActive,
-        isHot: dbMarket.isHot,
-        categoryId: options?.categoryId,
-        templateId: templateId,
       });
 
       return {
@@ -575,7 +566,7 @@ export const DBService = {
       // 🔥 支持 externalId 字段更新
       if ((data as any).externalId !== undefined) updateData.externalId = (data as any).externalId;
 
-      const dbMarket = await prisma.market.update({
+      const dbMarket = await prisma.markets.update({
         where: { id: marketId },
         data: updateData,
       });
@@ -617,8 +608,10 @@ export const DBService = {
       throw new Error('addOrder: order.userId is required and must be a non-empty string (must be extracted from Auth Token)');
     }
     
-    const dbOrder = await prisma.order.create({
+    const dbOrder = await prisma.orders.create({
       data: {
+        id: randomUUID(),
+        updatedAt: new Date(),
         userId: order.userId, // 强制数据隔离：使用从 Auth Token 提取的 current_user_id
         marketId: order.marketId,
         outcomeSelection: order.outcomeSelection,
@@ -672,7 +665,7 @@ export const DBService = {
     
     // 强制 DB 过滤：WHERE userId = current_user_id
     // 查询结构强制修复：明确且强制地包含基于传入 current_user_id 的过滤条件
-    const dbOrders = await prisma.order.findMany({
+    const dbOrders = await prisma.orders.findMany({
       where: { userId }, // 强制数据隔离：只返回当前用户的订单，WHERE user_id = current_user_id
       orderBy: { createdAt: 'desc' },
     });
@@ -701,7 +694,7 @@ export const DBService = {
   async findOrdersByMarketId(marketId: string): Promise<Order[]> {
     // ⚠️ 注意：此查询不包含 userId 过滤，返回所有用户的订单
     // 仅用于管理员操作，不应用于用户数据查询
-    const dbOrders = await prisma.order.findMany({
+    const dbOrders = await prisma.orders.findMany({
       where: { marketId },
       orderBy: { createdAt: 'desc' },
     });
@@ -735,7 +728,7 @@ export const DBService = {
       if (data.feeDeducted !== undefined) updateData.feeDeducted = data.feeDeducted;
 
       // ⚠️ 注意：此更新不包含 userId 过滤，调用方必须验证用户权限
-      const dbOrder = await prisma.order.update({
+      const dbOrder = await prisma.orders.update({
         where: { id: orderId },
         data: updateData,
       });
@@ -774,8 +767,10 @@ export const DBService = {
       throw new Error('addDeposit: deposit.userId is required and must be a non-empty string (must be extracted from Auth Token)');
     }
     
-    const dbDeposit = await prisma.deposit.create({
+    const dbDeposit = await prisma.deposits.create({
       data: {
+        id: randomUUID(),
+        updatedAt: new Date(),
         userId: deposit.userId, // 强制数据隔离：使用从 Auth Token 提取的 current_user_id
         amount: deposit.amount,
         txHash: deposit.txHash,
@@ -809,8 +804,10 @@ export const DBService = {
       throw new Error('addWithdrawal: withdrawal.userId is required and must be a non-empty string (must be extracted from Auth Token)');
     }
     
-    const dbWithdrawal = await prisma.withdrawal.create({
+    const dbWithdrawal = await prisma.withdrawals.create({
       data: {
+        id: randomUUID(),
+        updatedAt: new Date(),
         userId: withdrawal.userId, // 强制数据隔离：使用从 Auth Token 提取的 current_user_id
         amount: withdrawal.amount,
         targetAddress: withdrawal.targetAddress,
@@ -861,11 +858,11 @@ export const DBService = {
     // 强制 DB 过滤：WHERE userId = current_user_id
     // 查询结构强制修复：明确且强制地包含基于传入 current_user_id 的过滤条件
     const [dbDeposits, dbWithdrawals] = await Promise.all([
-      prisma.deposit.findMany({
+      prisma.deposits.findMany({
         where: { userId }, // 强制数据隔离：只返回当前用户的充值记录，WHERE user_id = current_user_id
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.withdrawal.findMany({
+      prisma.withdrawals.findMany({
         where: { userId }, // 强制数据隔离：只返回当前用户的提现记录，WHERE user_id = current_user_id
         orderBy: { createdAt: 'desc' },
       }),
@@ -896,7 +893,7 @@ export const DBService = {
    * @returns Promise<Withdrawal[]> 待处理的提现请求列表
    */
   async findPendingWithdrawals(): Promise<Withdrawal[]> {
-    const dbWithdrawals = await prisma.withdrawal.findMany({
+    const dbWithdrawals = await prisma.withdrawals.findMany({
       where: { status: TransactionStatus.PENDING },
       orderBy: { createdAt: 'desc' },
     });
@@ -922,7 +919,7 @@ export const DBService = {
    */
   async findWithdrawalById(withdrawalId: string): Promise<Withdrawal | null> {
     // ⚠️ 注意：此查询不包含 userId 过滤，调用方必须验证用户权限
-    const dbWithdrawal = await prisma.withdrawal.findUnique({
+    const dbWithdrawal = await prisma.withdrawals.findUnique({
       where: { id: withdrawalId },
     });
 
@@ -946,7 +943,7 @@ export const DBService = {
    */
   async updateWithdrawalStatus(withdrawalId: string, status: TransactionStatus): Promise<Withdrawal | null> {
     try {
-      const dbWithdrawal = await prisma.withdrawal.update({
+      const dbWithdrawal = await prisma.withdrawals.update({
         where: { id: withdrawalId },
         data: { status },
       });

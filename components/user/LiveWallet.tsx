@@ -28,7 +28,6 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   const { isLoggedIn, isLoading: authLoading, logout, handleApiGuestResponse } = useAuth();
 
   // 🔴 [AUTH_LEAK] 诊断日志：记录 Auth 状态
-  console.log('🔴 [AUTH_LEAK] isLoggedIn:', isLoggedIn, 'authLoading:', authLoading);
 
   // 🔥 架构修复：不要在 authLoading 为 true 时就去解析余额
   // 只有当 isLoggedIn 为 true 时才发起请求
@@ -40,9 +39,7 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
     try {
       // 给 URL 加上时间戳参数，防止浏览器死缓存
       const timestampedUrl = url + '?t=' + new Date().getTime();
-      
-      console.log('💰 [LiveWallet] Fetching total balance from:', timestampedUrl);
-      
+
       // 🔥 彻底对齐数据：使用与 Dashboard 完全一致的 headers
       const response = await fetch(timestampedUrl, {
         method: 'GET',
@@ -53,14 +50,12 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
         },
       });
 
-      console.log('💰 [LiveWallet] Response status:', response.status, response.statusText);
-
       // 🔥 修复：统一使用 AuthProvider 的 handleApiGuestResponse 处理 isGuest/401
       // 先处理响应状态，检测 401 或 isGuest
       if (!response.ok && response.status === 401) {
         // 401 状态码，先调用 handleApiGuestResponse 处理
         if (handleApiGuestResponse(response)) {
-          console.log('🔴 [LiveWallet] 已触发退出登录，返回 -1 表示需要重新登录');
+
           return -1; // 使用 -1 作为特殊标记，表示需要重新登录
         }
         return 0;
@@ -74,11 +69,10 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
 
       // 解析响应数据
       const result = await response.json();
-      console.log('💰 [LiveWallet] Fetched assets data:', result);
-      
+
       // 检测 isGuest: true
       if (handleApiGuestResponse(response, result)) {
-        console.log('🔴 [LiveWallet] 已触发退出登录，返回 -1 表示需要重新登录');
+
         return -1; // 使用 -1 作为特殊标记，表示需要重新登录
       }
       
@@ -87,9 +81,7 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
       const totalBalance = result?.success && result?.data?.totalBalance 
         ? result.data.totalBalance 
         : 0;
-      
-      console.log('💰 [LiveWallet] Parsed totalBalance:', totalBalance);
-      
+
       return totalBalance;
     } catch (error) {
       console.error('💰 [LiveWallet] Fetcher error:', error);
@@ -114,7 +106,6 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   );
 
   // 调试日志
-  console.log('💰 [LiveWallet] Total balance state:', { totalBalance, isLoading, error, isLoggedIn, authLoading, shouldFetch });
 
   // 🔥 架构修复：认证加载中或未登录时，不显示任何内容（或显示 $0.00）
   if (authLoading || !isLoggedIn) {
@@ -158,7 +149,7 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   }).format(displayBalance);
 
   // 显示状态：格式化后的余额（强制显示，即使是 0 也要显示）
-  console.log('💰 [LiveWallet] Rendering balance:', displayBalance, formattedBalance);
+
   return (
     <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className}`}>
       {formattedBalance}

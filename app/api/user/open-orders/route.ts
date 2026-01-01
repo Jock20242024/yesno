@@ -30,14 +30,14 @@ export async function GET() {
     const userId = authResult.userId;
 
     // 🔥 核心修复：查询 PENDING 状态的 LIMIT 订单，必须关联 Market 表
-    const openOrders = await prisma.order.findMany({
+    const openOrders = await prisma.orders.findMany({
       where: {
         userId,
         status: 'PENDING', // 🔥 核心：只查询未成交的订单
         orderType: 'LIMIT', // 🔥 只查询限价单（市价单立即成交，不会有挂单）
       },
       include: {
-        market: {
+        markets: {
           select: {
             id: true,
             title: true,
@@ -53,27 +53,14 @@ export async function GET() {
       },
     });
 
-    console.log('🔍 [Open Orders API] 查询结果:', {
-      userId,
-      orderCount: openOrders.length,
-      orders: openOrders.map(o => ({
-        id: o.id,
-        marketId: o.marketId,
-        marketTitle: o.market?.title,
-        status: o.status,
-        orderType: o.orderType,
-        limitPrice: o.limitPrice,
-      })),
-    });
-
     // 格式化订单数据
     const formattedOrders = openOrders.map((order) => ({
       id: order.id,
       marketId: order.marketId,
-      marketTitle: order.market?.title || `市场 ${order.marketId}`,
-      marketImage: order.market?.image || order.market?.iconUrl || null,
-      marketStatus: order.market?.status,
-      marketClosingDate: order.market?.closingDate?.toISOString(),
+      marketTitle: order.markets?.title || `市场 ${order.marketId}`,
+      marketImage: order.markets?.image || order.markets?.iconUrl || null,
+      marketStatus: order.markets?.status,
+      marketClosingDate: order.markets?.closingDate?.toISOString(),
       outcome: order.outcomeSelection,
       type: order.type || 'BUY',
       orderType: order.orderType || 'LIMIT',

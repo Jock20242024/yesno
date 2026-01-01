@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { auth } from "@/lib/authExport";
 import prisma from '@/lib/prisma';
 import dayjs from '@/lib/dayjs';
@@ -34,7 +35,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 🔥 物理清空所有模板数据
-    const result = await prisma.marketTemplate.deleteMany({});
+    const result = await prisma.market_templates.deleteMany({});
     
     return NextResponse.json({
       success: true,
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     // 🔥 周期与价格规则排序：按 period 从小到大排序（按时间权重）
     // 显示效果：15 分钟 (15) → 1 小时 (60) → 4 小时 (240) → 1 天 (1440) → 一周 (10080)
-    const templates = await prisma.marketTemplate.findMany({
+    const templates = await prisma.market_templates.findMany({
       orderBy: { period: 'asc' }, // 按周期从小到大排序
     });
 
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
     const formattedTemplates = await Promise.all(templates.map(async (t) => {
       // 🚀 优化：检查未来储备（而非当前这一秒）
       // 查询所有OPEN状态的工厂市场
-      const futureMarkets = await prisma.market.findMany({
+      const futureMarkets = await prisma.markets.findMany({
         where: {
           templateId: t.id,
           isFactory: true,
@@ -197,7 +198,7 @@ export async function POST(request: NextRequest) {
 
     // 🔥 唯一性检查：只有当 symbol、period、type 完全一致时才提示冲突
     // 如果标的不同（如 BTC vs ETH），必须允许同时存在
-    const existingTemplate = await prisma.marketTemplate.findFirst({
+    const existingTemplate = await prisma.market_templates.findFirst({
       where: {
         symbol: symbol.trim(), // 🔥 精确匹配 symbol
         period: periodNum,
@@ -217,8 +218,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 🔥 正常创建新模板（Create 必须是独立的操作）
-    const template = await prisma.marketTemplate.create({
+    const template = await prisma.market_templates.create({
       data: {
+        id: randomUUID(),
+        updatedAt: new Date(),
         name, // 必须传，不能为 null
         nameZh: nameZh || null, // 🔥 中文名称（人工翻译）
         titleTemplate: titleTemplate || null, // 🔥 模板标题（支持占位符）
@@ -236,8 +239,6 @@ export async function POST(request: NextRequest) {
         // 🔥 注意：Schema 中没有 priceOffset 字段，不要传
       },
     });
-
-    console.log(`✅ [Template Create] 模板已创建: ${template.id}, symbol="${template.symbol}", period=${template.period}`);
 
     return NextResponse.json({
       success: true,

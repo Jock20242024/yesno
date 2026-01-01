@@ -8,11 +8,12 @@ import { hashPassword } from '@/services/authService';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { createSession } from '@/lib/auth-core/sessionStore';
+import { generateReferralCode, isValidReferralCode } from '@/lib/utils/referral';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email, password, provider = 'email' } = body;
+    const { email, password, provider = 'email', referralCode } = body;
 
     // 此 API 仅支持邮箱注册，OAuth 注册通过 NextAuth 处理
     if (provider !== 'email') {
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     }
 
     // 检查用户是否已存在（仅根据 email）
-    const existingUser = await prisma.user.findUnique({ 
+    const existingUser = await prisma.users.findUnique({ 
       where: { email } 
     });
     
@@ -62,6 +63,33 @@ export async function POST(request: Request) {
       );
     }
 
+    // 处理邀请码逻辑
+    let invitedById: string | undefined = undefined;
+    if (referralCode && isValidReferralCode(referralCode)) {
+      // 查找邀请人
+      const inviter = await prisma.users.findUnique({
+        where: { referralCode },
+        select: { id: true },
+      });
+      if (inviter) {
+        invitedById = inviter.id;
+      }
+    }
+
+    // 生成唯一的邀请码
+    let newReferralCode = generateReferralCode();
+    let codeExists = true;
+    while (codeExists) {
+      const existing = await prisma.users.findUnique({
+        where: { referralCode: newReferralCode },
+      });
+      if (!existing) {
+        codeExists = false;
+      } else {
+        newReferralCode = generateReferralCode();
+      }
+    }
+
     // 创建用户数据
     const data: any = {
       email,
@@ -70,10 +98,12 @@ export async function POST(request: Request) {
       balance: 0.0,
       isAdmin: false,
       isBanned: false,
+      referralCode: newReferralCode,
+      invitedById: invitedById || undefined,
     };
 
     // 创建用户
-    const user = await prisma.user.create({
+    const user = await prisma.users.create({
       data,
     });
 

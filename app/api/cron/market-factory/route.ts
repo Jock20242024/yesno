@@ -38,14 +38,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('⏰ [Cron] 定时任务触发: 工厂自动接力与结算');
-
     // 1. 先执行自动结算（结算已到期的市场）
-    console.log('⚖️ [Cron] 步骤1: 执行自动结算扫描...');
+
     const settlementStats = await runSettlementScanner();
 
     // 2. 再执行自动接力（创建下一个周期的市场）
-    console.log('🔄 [Cron] 步骤2: 执行自动接力引擎...');
+
     await runRelayEngine();
     
     return NextResponse.json({

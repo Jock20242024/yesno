@@ -27,8 +27,7 @@ export const revalidate = 0;
  */
 export async function GET(request: Request) {
   try {
-    console.log('📊 [Markets API] ========== 开始处理获取市场列表请求 ==========');
-    
+
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const status = searchParams.get('status') as 'OPEN' | 'RESOLVED' | 'CLOSED' | null;
@@ -38,16 +37,6 @@ export async function GET(request: Request) {
     // 🔥 提升默认查询数量到 100，确保在聚合后依然有足够多的不同币种展示
     const pageSize = parseInt(searchParams.get('pageSize') || '100');
     const includePending = searchParams.get('includePending') === 'true'; // 仅管理员可设置
-
-    console.log('📊 [Markets API] 查询参数:', {
-      category,
-      status,
-      search,
-      templateId,
-      page,
-      pageSize,
-      includePending,
-    });
 
     // 🔥 注意：DBService.getAllMarkets 已经包含 isActive: true 过滤
 
@@ -101,8 +90,8 @@ export async function GET(request: Request) {
         totalYes: safeTotalYes,
         totalNo: safeTotalNo,
         feeRate: safeFeeRate,
-        category: dbMarket.categories[0]?.category?.name || dbMarket.category || undefined,
-        categorySlug: dbMarket.categories[0]?.category?.slug || dbMarket.categorySlug || undefined,
+        category: dbMarket.market_categories?.[0]?.categories?.name || dbMarket.category || undefined,
+        categorySlug: dbMarket.market_categories?.[0]?.categories?.slug || dbMarket.categorySlug || undefined,
         createdAt: dbMarket.createdAt.toISOString(),
         volume: safeTotalVolume,
         yesPercent: safeYesPercent,
@@ -134,18 +123,16 @@ export async function GET(request: Request) {
     let filteredMarkets: any[] = [];
     
     // 🔥 修复：如果指定了 status 参数，需要构建自定义的 baseFilter，不限制 status
-    const customBaseFilter = status 
+    const customBaseFilter: { isActive: boolean; reviewStatus: 'PUBLISHED'; status?: 'OPEN' } = status 
       ? { isActive: true, reviewStatus: 'PUBLISHED' as const } // 不限制 status
       : BASE_MARKET_FILTER; // 默认只查询 OPEN 状态
     
     try {
       if (category === 'hot' || category === '-1') {
-        console.log('🔥 [Markets API] 获取热门市场');
-        console.log(`🔍 [Markets API] category 参数: ${category}，使用统一热门过滤器`);
-        
+
         // 🚀 使用统一的热门市场过滤器（异步版本，获取真实的热门分类UUID）
         // 🔥 修复：传入自定义的 baseFilter 以支持 status 筛选
-        const whereCondition = await buildHotMarketFilter(customBaseFilter);
+        const whereCondition = await buildHotMarketFilter(customBaseFilter as typeof BASE_MARKET_FILTER);
         if (status) {
           // 🔥 如果指定了 status，添加到查询条件中
           const statusMap: Record<string, string> = {
@@ -159,15 +146,13 @@ export async function GET(request: Request) {
             (whereCondition as any).status = targetStatus;
           }
         }
-        
-        console.log('📋 [Markets API] 热门市场查询条件:', JSON.stringify(whereCondition, null, 2));
-        
-        const dbMarkets = await prisma.market.findMany({
+
+        const dbMarkets = await prisma.markets.findMany({
           where: whereCondition,
           include: {
-            categories: {
+            market_categories: {
               include: {
-                category: {
+                categories: {
                   select: {
                     name: true,
                     slug: true,
@@ -194,7 +179,7 @@ export async function GET(request: Request) {
         filteredMarkets = [...aggregatedMarkets, ...independentMarkets];
       } else if (templateId) {
         // 🔥 按 templateId 筛选市场（用于详情页获取同模板的所有场次）
-        console.log('📊 [Markets API] 按 templateId 筛选市场:', templateId);
+
         // 🔥 修复：如果指定了 status 参数，使用自定义 baseFilter
         const whereCondition: any = {
           ...customBaseFilter,
@@ -212,12 +197,12 @@ export async function GET(request: Request) {
             whereCondition.status = targetStatus;
           }
         }
-        const dbMarkets = await prisma.market.findMany({
+        const dbMarkets = await prisma.markets.findMany({
           where: whereCondition,
           include: {
-            categories: {
+            market_categories: {
               include: {
-                category: {
+                categories: {
                   select: {
                     name: true,
                     slug: true,
@@ -243,7 +228,7 @@ export async function GET(request: Request) {
         filteredMarkets = [...aggregatedMarkets, ...independentMarkets];
       } else if (category === 'all') {
         // 所有市场：使用基础过滤器
-        console.log('📊 [Markets API] 获取所有市场');
+
         // 🔥 修复：如果指定了 status 参数，使用自定义 baseFilter
         const whereCondition: any = { ...customBaseFilter };
         if (status) {
@@ -258,12 +243,12 @@ export async function GET(request: Request) {
             whereCondition.status = targetStatus;
           }
         }
-        const dbMarkets = await prisma.market.findMany({
+        const dbMarkets = await prisma.markets.findMany({
           where: whereCondition,
           include: {
-            categories: {
+            market_categories: {
               include: {
-                category: {
+                categories: {
                   select: {
                     name: true,
                     slug: true,
@@ -294,13 +279,12 @@ export async function GET(request: Request) {
         filteredMarkets = [...aggregatedMarkets, ...independentMarkets];
       } else if (category) {
         // 🚀 普通分类筛选：使用统一过滤器
-        console.log(`📊 [Markets API] 获取分类 '${category}' 的市场`);
-        
+
         // 先根据 slug 获取分类及其所有子分类
-        const categoryRecord = await prisma.category.findUnique({
+        const categoryRecord = await prisma.categories.findUnique({
           where: { slug: category },
           include: {
-            children: {
+            other_categories: {
               select: { id: true },
             },
           },
@@ -311,14 +295,13 @@ export async function GET(request: Request) {
           filteredMarkets = [];
         } else {
           // 🚀 第一步：实现递归分类查询 - 获取父分类及其所有子分类的ID
-          const categoryIds = [categoryRecord.id, ...categoryRecord.children.map(child => child.id)];
-          console.log(`📊 [Markets API] 分类 '${category}' 及其子分类ID:`, categoryIds);
-          
+          const categoryIds = [categoryRecord.id, ...categoryRecord.other_categories.map(child => child.id)];
+
           // 使用包含所有分类ID的过滤器
           // 🔥 修复：如果指定了 status 参数，使用自定义 baseFilter
           const whereCondition: any = {
             ...customBaseFilter,
-            categories: {
+            market_categories: {
               some: {
                 categoryId: {
                   in: categoryIds, // 🚀 使用 in 查询包含父分类及其所有子分类
@@ -339,12 +322,12 @@ export async function GET(request: Request) {
             }
           }
           
-          const dbMarkets = await prisma.market.findMany({
+          const dbMarkets = await prisma.markets.findMany({
             where: whereCondition,
             include: {
-              categories: {
+              market_categories: {
                 include: {
-                  category: {
+                  categories: {
                     select: {
                       name: true,
                       slug: true,
@@ -372,7 +355,7 @@ export async function GET(request: Request) {
         }
       } else {
         // 🔥 修复：当 category 为 null 或空时，使用基础过滤器查询所有市场
-        console.log('📊 [Markets API] 无分类参数，获取所有市场（使用基础过滤器）');
+
         // 🔥 修复：如果指定了 status 参数，使用自定义 baseFilter
         const whereCondition: any = { ...customBaseFilter };
         if (status) {
@@ -387,12 +370,12 @@ export async function GET(request: Request) {
             whereCondition.status = targetStatus;
           }
         }
-        const dbMarkets = await prisma.market.findMany({
+        const dbMarkets = await prisma.markets.findMany({
           where: whereCondition,
           include: {
-            categories: {
+            market_categories: {
               include: {
-                category: {
+                categories: {
                   select: {
                     name: true,
                     slug: true,
@@ -417,14 +400,7 @@ export async function GET(request: Request) {
         const aggregatedMarkets = aggregateMarketsByTemplate(marketsWithTemplate);
         filteredMarkets = [...aggregatedMarkets, ...independentMarkets];
       }
-      console.log('✅ [Markets API] DBService.getAllMarkets 返回', filteredMarkets.length, '个市场');
-      console.log('✅ [Markets API] 返回结果详情:', {
-        totalMarkets: filteredMarkets.length,
-        firstMarketId: filteredMarkets[0]?.id,
-        firstMarketTitle: filteredMarkets[0]?.title,
-        firstMarketCategory: filteredMarkets[0]?.category,
-        firstMarketCategorySlug: filteredMarkets[0]?.categorySlug,
-      });
+
     } catch (dbError) {
       console.error('❌ [Markets API] 数据库查询失败:');
       console.error('错误类型:', dbError instanceof Error ? dbError.constructor.name : typeof dbError);
@@ -480,7 +456,6 @@ export async function GET(request: Request) {
     filteredMarkets = [...aggregatedMarkets, ...independentMarkets];
     
     const afterAggregationCount = filteredMarkets.length;
-    console.log(`📊 [Markets API] 最终处理结果: 聚合项 ${aggregatedMarkets.length} 个，独立项 ${independentMarkets.length} 个，总计 ${afterAggregationCount} 个（处理前 ${beforeAggregationCount} 个）`);
 
     // 分页处理（使用聚合后的数量）
     const startIndex = (page - 1) * pageSize;
@@ -488,13 +463,6 @@ export async function GET(request: Request) {
     const paginatedMarkets = filteredMarkets.slice(startIndex, endIndex);
 
     // 序列化调试：确保所有字段都能被正确序列化
-    console.log('📊 [Markets API] 准备返回数据:', {
-      totalMarkets: filteredMarkets.length,
-      paginatedCount: paginatedMarkets.length,
-      page,
-      pageSize,
-      totalPages: Math.ceil(filteredMarkets.length / pageSize),
-    });
 
     // 确保所有日期字段都是字符串格式（ISO 8601），并包含所有字段
     // 🔥 添加 displayVolume 字段
@@ -598,7 +566,7 @@ export async function GET(request: Request) {
             ...market,
             displayVolume: market.totalVolume || 0,
             volume: market.totalVolume || 0,
-            volume24h: market.totalVolume || 0,
+            volume24h: market.volume24h || market.totalVolume || 0,
             yesPercent,
             noPercent,
             currentPrice,
@@ -607,7 +575,6 @@ export async function GET(request: Request) {
             image: market.image || null,
             imageUrl: market.image || market.iconUrl || '',
             iconUrl: market.iconUrl || market.image || '',
-            volume24h: market.volume24h || market.totalVolume || 0,
             commentsCount: (market as any).commentsCount || 0,
             source: 'INTERNAL',
             externalVolume: 0,
@@ -617,7 +584,7 @@ export async function GET(request: Request) {
         }
         })
         .filter((m): m is NonNullable<typeof m> => m !== null); // 🚀 过滤掉 isActive=false 的市场
-      console.log('✅ [Markets API] 序列化完成，共', serializedMarkets.length, '个市场');
+
     } catch (serializeError) {
       console.error('❌ [Markets API] 序列化市场数据失败:');
       console.error('错误类型:', serializeError instanceof Error ? serializeError.constructor.name : typeof serializeError);
@@ -625,8 +592,6 @@ export async function GET(request: Request) {
       console.error('错误堆栈:', serializeError instanceof Error ? serializeError.stack : 'N/A');
       throw serializeError; // 重新抛出，让外层 catch 处理
     }
-
-    console.log('✅ [Markets API] ========== 市场列表获取成功 ==========');
 
     const totalPages = Math.ceil(filteredMarkets.length / pageSize);
     const hasMore = page < totalPages;

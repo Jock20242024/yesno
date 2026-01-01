@@ -17,7 +17,7 @@ async function migrateCategoryIds() {
     console.log('\n🔄 ========== 开始迁移 Category ID ==========\n');
 
     // 1. 查找所有非 UUID 格式的分类
-    const allCategories = await prisma.category.findMany({});
+    const allCategories = await prisma.categories.findMany({});
     const nonUuidCategories = allCategories.filter(
       cat => !UUID_REGEX.test(cat.id)
     );
@@ -36,10 +36,10 @@ async function migrateCategoryIds() {
     // 2. 检查关联关系
     const oldIds = nonUuidCategories.map(cat => cat.id);
     const [marketCategories, childCategories] = await Promise.all([
-      prisma.marketCategory.findMany({
+      prisma.market_categories.findMany({
         where: { categoryId: { in: oldIds } },
       }),
-      prisma.category.findMany({
+      prisma.categories.findMany({
         where: { parentId: { in: oldIds } },
       }),
     ]);
@@ -133,7 +133,7 @@ async function migrateCategoryIds() {
     });
 
     // 5. 检查是否还有非 UUID 的 parentId（可能父分类已迁移，需要更新引用）
-    const remainingCategories = await prisma.category.findMany({});
+    const remainingCategories = await prisma.categories.findMany({});
     const remainingNonUuidParentIds = remainingCategories.filter(
       cat => cat.parentId && !UUID_REGEX.test(cat.parentId)
     );
@@ -146,7 +146,7 @@ async function migrateCategoryIds() {
       for (const cat of remainingNonUuidParentIds) {
         const newParentId = idMapping.get(cat.parentId!);
         if (newParentId) {
-          await prisma.category.update({
+          await prisma.categories.update({
             where: { id: cat.id },
             data: { parentId: newParentId },
           });
@@ -160,7 +160,7 @@ async function migrateCategoryIds() {
     console.log('\n✅ ========== Category ID 迁移完成 ==========\n');
 
     // 5. 验证结果
-    const finalCategories = await prisma.category.findMany({});
+    const finalCategories = await prisma.categories.findMany({});
     const finalNonUuidCategories = finalCategories.filter(
       cat => !UUID_REGEX.test(cat.id)
     );

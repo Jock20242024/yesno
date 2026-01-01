@@ -194,12 +194,12 @@ async function updateScraperTaskStatus(
 ): Promise<void> {
   const taskName = 'GlobalStats_Calc';
   try {
-    const existing = await prisma.scraperTask.findUnique({
+    const existing = await prisma.scraper_tasks.findUnique({
       where: { name: taskName },
     });
 
     if (existing) {
-      await prisma.scraperTask.update({
+      await prisma.scraper_tasks.update({
         where: { name: taskName },
         data: {
           lastRunTime: new Date(),
@@ -208,7 +208,7 @@ async function updateScraperTaskStatus(
         },
       });
     } else {
-      await prisma.scraperTask.create({
+      await prisma.scraper_tasks.create({
         data: {
           name: taskName,
           lastRunTime: new Date(),

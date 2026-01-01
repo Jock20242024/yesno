@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { ChevronUp } from "lucide-react";
 import dayjs from "@/lib/dayjs";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface SlotItem {
   id: string;
@@ -30,6 +31,7 @@ export default function TimeNavigationBar({
 }: TimeNavigationBarProps) {
   // 🔥 关键修复：所有 hooks 必须在早期返回之前调用
   const router = useRouter();
+  const { t } = useLanguage();
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const activeSlotRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -247,7 +249,7 @@ export default function TimeNavigationBar({
           ref={scrollContainerRef}
           className="flex gap-2 flex-1 overflow-x-auto"
         >
-          {visibleSlots.map((slot) => {
+          {visibleSlots.map((slot, index) => {
             const slotStatus = calculateSlotStatus(slot.startTime, slot.endTime);
             const isActive = slot.marketId === currentMarketId;
             const isHighlighted = isActive || slotStatus === 'active';
@@ -257,7 +259,7 @@ export default function TimeNavigationBar({
             // 所以这里不需要检查hasMarket，直接显示即可
             return (
               <button
-                key={slot.slotKey}
+                key={`${slot.slotKey}-${index}`}
                 ref={isHighlighted ? activeSlotRef : null}
                 onClick={() => handleSlotClick(slot)}
                 className={`
@@ -303,7 +305,7 @@ export default function TimeNavigationBar({
             }}
             className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700 transition-all"
           >
-            <span>更多的</span>
+            <span>{t('market.chart.more')}</span>
             <ChevronUp className="w-4 h-4" />
           </button>
         </div>
@@ -331,7 +333,7 @@ export default function TimeNavigationBar({
             }}
           >
             <div className="max-h-[320px] overflow-y-auto">
-              {allMappedSlots.map((slot) => {
+              {allMappedSlots.map((slot, index) => {
                 const now = dayjs().local();
                 const startTimeLocal = slot.startTime.local();
                 const endTimeLocal = slot.endTime.local();
@@ -344,7 +346,7 @@ export default function TimeNavigationBar({
                 // 所以这里不需要检查hasMarket，直接显示即可
                 return (
                   <div
-                    key={slot.slotKey}
+                    key={`${slot.slotKey}-${index}`}
                     onClick={() => handleMenuSlotClick(slot)}
                     className={`px-4 py-3 text-sm transition-colors cursor-pointer ${
                       isHighlighted
@@ -352,7 +354,7 @@ export default function TimeNavigationBar({
                         : "text-[#94a3b8] hover:bg-[#2d3339]"
                     }`}
                   >
-                    当地时间 {timeStr}
+                    {t('market.time.local_time')} {timeStr}
                   </div>
                 );
               })}

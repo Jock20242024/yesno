@@ -11,16 +11,16 @@ async function main() {
   console.log('🌱 开始创建待审核市场测试数据...');
 
   // 获取现有分类
-  const cryptoCategory = await prisma.category.findFirst({
+  const cryptoCategory = await prisma.categories.findFirst({
     where: { slug: 'crypto' },
   });
-  const politicsCategory = await prisma.category.findFirst({
+  const politicsCategory = await prisma.categories.findFirst({
     where: { slug: 'politics' },
   });
-  const financeCategory = await prisma.category.findFirst({
+  const financeCategory = await prisma.categories.findFirst({
     where: { slug: 'finance' },
   });
-  const techCategory = await prisma.category.findFirst({
+  const techCategory = await prisma.categories.findFirst({
     where: { slug: 'technology' },
   });
 
@@ -117,7 +117,7 @@ async function main() {
       });
 
       // 创建分类关联
-      await prisma.marketCategory.create({
+      await prisma.market_categories.create({
         data: {
           marketId: market.id,
           categoryId: marketData.categoryId,

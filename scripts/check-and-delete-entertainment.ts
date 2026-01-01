@@ -12,7 +12,7 @@ async function main() {
 
   try {
     // 查找所有分类
-    const allCategories = await prisma.category.findMany({
+    const allCategories = await prisma.categories.findMany({
       select: {
         id: true,
         name: true,
@@ -30,7 +30,7 @@ async function main() {
     });
 
     // 查找 entertainment 相关的分类
-    const entertainmentCategories = await prisma.category.findMany({
+    const entertainmentCategories = await prisma.categories.findMany({
       where: {
         OR: [
           { slug: 'entertainment' },
@@ -65,7 +65,7 @@ async function main() {
     console.log('\n准备删除这些分类...');
     
     for (const cat of entertainmentCategories) {
-      await prisma.category.delete({
+      await prisma.categories.delete({
         where: {
           id: cat.id,
         },

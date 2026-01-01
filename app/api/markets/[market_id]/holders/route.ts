@@ -18,7 +18,7 @@ export async function GET(
     const { market_id } = await params;
 
     // 1. 验证市场是否存在
-    const market = await prisma.market.findUnique({
+    const market = await prisma.markets.findUnique({
       where: { id: market_id },
       select: {
         id: true,
@@ -39,13 +39,13 @@ export async function GET(
     }
 
     // 2. 获取所有持仓（按持仓量降序排序）
-    const positions = await prisma.position.findMany({
+    const positions = await prisma.positions.findMany({
       where: {
         marketId: market_id,
         status: 'OPEN', // 只统计活跃持仓
       },
       include: {
-        user: {
+        users: {
           select: {
             id: true,
             email: true,
@@ -78,11 +78,11 @@ export async function GET(
       return {
         rank: index + 1,
         userId: position.userId,
-        username: position.user.email.split('@')[0], // 使用邮箱前缀作为用户名
-        email: position.user.email,
+        username: position.users.email.split('@')[0], // 使用邮箱前缀作为用户名
+        email: position.users.email,
         shares: Number(position.shares || 0),
         profit,
-        outcome: position.outcome,
+        outcome: position.outcome as 'YES' | 'NO',
         avgPrice: Number(position.avgPrice || 0.5),
       };
     });

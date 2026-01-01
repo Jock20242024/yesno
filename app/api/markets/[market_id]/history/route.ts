@@ -29,7 +29,7 @@ export async function GET(
     }
 
     // 1. 验证市场是否存在
-    const market = await prisma.market.findUnique({
+    const market = await prisma.markets.findUnique({
       where: { id: market_id },
       select: {
         id: true,
@@ -53,7 +53,7 @@ export async function GET(
     // 2. 查询该市场的所有已成交订单（按时间排序）
     // 只查询 FILLED 或 PARTIALLY_FILLED 的订单，因为这些订单有实际的成交价格
     // 🔥 同时关联 Position 表，获取更准确的成交价格（avgPrice）
-    const orders = await prisma.order.findMany({
+    const orders = await prisma.orders.findMany({
       where: {
         marketId: market_id,
         status: {
@@ -78,7 +78,7 @@ export async function GET(
     // 🔥 批量查询对应的 Position 记录，获取成交价格（avgPrice）
     // 优化：使用批量查询避免 N+1 问题
     const userIds = [...new Set(orders.map(o => o.userId))];
-    const positions = await prisma.position.findMany({
+    const positions = await prisma.positions.findMany({
       where: {
         userId: { in: userIds },
         marketId: market_id,

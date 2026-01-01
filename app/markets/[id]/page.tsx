@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import dayjs from '@/lib/dayjs';
 import MarketHeader from '@/components/market-detail/MarketHeader';
 import PriceChart from '@/components/market-detail/PriceChart';
 import TimeNavigationBar from '@/components/market-detail/TimeNavigationBar';
 import OrderBook from '@/components/market-detail/OrderBook';
 import TradeSidebar, { TradeSidebarRef } from '@/components/market-detail/TradeSidebar';
+import UserPositionCard from '@/components/market-detail/UserPositionCard';
 import { Market } from '@/types/api';
+import { useAuth } from '@/components/providers/AuthProvider';
 
 const fetcher = async (url: string) => {
   const response = await fetch(url);
@@ -30,17 +32,33 @@ export default function MarketDetailPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
   const tradeSidebarRef = useRef<TradeSidebarRef>(null);
+  const { isLoggedIn, currentUser } = useAuth();
   
   // 1. 彻底消灭白屏报错（水合保护）
   const [isMounted, setIsMounted] = useState(false);
   const landingDone = useRef(false);
+  
+  // 交易金额状态管理
+  const [amount, setAmount] = useState("");
+  const handleAmountChange = (val: string) => {
+    setAmount(val);
+  };
+
+  // 🔥 修复：添加交易 Tab 状态管理
+  const [activeTab, setActiveTab] = useState<"buy" | "sell">("buy");
+  const handleTabChange = (tab: "buy" | "sell") => {
+    setActiveTab(tab);
+  };
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // 🔥 获取 SWR mutate 函数用于手动刷新数据
+  const { mutate: mutateSWR } = useSWRConfig();
+  
   // 🔥 实时同步：对于工厂市场，每5秒自动刷新赔率数据（确保与 Polymarket 实时同步）
-  const { data: marketData, isLoading, error } = useSWR<Market>(
+  const { data: marketData, isLoading, error, mutate: mutateMarket } = useSWR<Market>(
     id ? `/api/markets/${id}` : null,
     fetcher,
     {
@@ -62,6 +80,25 @@ export default function MarketDetailPage() {
       revalidateOnReconnect: true, // 网络重连时重新验证
     }
   );
+
+  // 🔥 核心修复：从独立的 positions API 获取用户持仓数据
+  const { data: positionsData, mutate: mutatePositions } = useSWR(
+    isLoggedIn && currentUser?.id && id ? `/api/positions?marketId=${id}&type=active` : null,
+    async (url: string) => {
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) {
+        throw new Error('Failed to fetch positions');
+      }
+      const result = await response.json();
+      return result.success ? result.data : [];
+    },
+    {
+      refreshInterval: 0, // 不需要自动轮询，依靠交易成功后手动刷新
+      revalidateOnFocus: true,
+    }
+  );
+
+  // 🔍 添加日志验证
 
   // 🔥 关键修复：所有 hooks 必须在早期返回之前调用
   // 计算显示价格和百分比（使用安全默认值）
@@ -151,6 +188,81 @@ export default function MarketDetailPage() {
     return 100 - displayYesPercent;
   }, [marketData, displayYesPercent]);
 
+  // 🔥 核心修复：计算用户持仓数据（从 positions API 获取）
+  const userPositionData = useMemo(() => {
+    // 🔍 添加原始数据调试日志
+
+    // 必须等待 positionsData 加载完成
+    if (!positionsData || !Array.isArray(positionsData) || positionsData.length === 0) {
+
+      return null;
+    }
+    
+    // 过滤出当前市场的持仓（API 已经过滤了，但为了安全再检查一次）
+    const marketPositions = positionsData.filter((pos: any) => pos.marketId === id);
+    
+    if (marketPositions.length === 0) {
+
+      return null;
+    }
+    
+    // 分离 YES 和 NO 持仓
+    const yesPosition = marketPositions.find((pos: any) => pos.outcome === 'YES');
+    const noPosition = marketPositions.find((pos: any) => pos.outcome === 'NO');
+    
+    // 判断用户是否有持仓
+    const hasYesPosition = yesPosition && yesPosition.shares > 0;
+    const hasNoPosition = noPosition && noPosition.shares > 0;
+
+    if (!hasYesPosition && !hasNoPosition) {
+
+      return null;
+    }
+    
+    // 优先显示份额较多的持仓，如果都有持仓
+    let mainPosition: {
+      shares: number;
+      avgPrice: number;
+      currentPrice: number;
+      outcome: "yes" | "no";
+    } | null = null;
+    
+    if (hasYesPosition && hasNoPosition) {
+      // 两个都有持仓，显示份额较多的
+      if (yesPosition.shares >= noPosition.shares) {
+        mainPosition = {
+          shares: yesPosition.shares,
+          avgPrice: yesPosition.avgPrice,
+          currentPrice: displayYesPercent / 100,
+          outcome: "yes",
+        };
+      } else {
+        mainPosition = {
+          shares: noPosition.shares,
+          avgPrice: noPosition.avgPrice,
+          currentPrice: displayNoPercent / 100,
+          outcome: "no",
+        };
+      }
+    } else if (hasYesPosition) {
+      mainPosition = {
+        shares: yesPosition.shares,
+        avgPrice: yesPosition.avgPrice,
+        currentPrice: displayYesPercent / 100,
+        outcome: "yes",
+      };
+    } else if (hasNoPosition) {
+      mainPosition = {
+        shares: noPosition.shares,
+        avgPrice: noPosition.avgPrice,
+        currentPrice: displayNoPercent / 100,
+        outcome: "no",
+      };
+    }
+
+    return mainPosition;
+  }, [positionsData, id, displayYesPercent, displayNoPercent]);
+
   // 生成图表数据（使用安全默认值）
   const priceData = useMemo(() => {
     const data = [];
@@ -207,7 +319,7 @@ export default function MarketDetailPage() {
       yesPercent: displayYesPercent,
       noPercent: displayNoPercent,
       deadline: new Date(marketData.endTime).toISOString().split("T")[0],
-      volume: formatVolume(marketData.totalVolume),
+      volume: formatVolume((marketData as any).totalVolume || 0),
     };
   }, [marketData, displayYesPercent, displayNoPercent]);
 
@@ -217,7 +329,7 @@ export default function MarketDetailPage() {
   // 一旦用户手动选择了场次，就不再自动跳转
   useEffect(() => {
     // 如果已经手动选择过场次，不再自动跳转
-    if (!isMounted || !marketData?.slots?.length || landingDone.current) return;
+    if (!isMounted || !(marketData as any)?.slots?.length || landingDone.current) return;
     
     // 检查是否是从外部链接直接进入的（URL 中的 id 不在 slots 列表中）
     const isExternalLink = !(marketData as any).slots.some((s: any) => s.id === id);
@@ -234,7 +346,6 @@ export default function MarketDetailPage() {
       }
     }
   }, [isMounted, marketData, id, router]);
-
 
   // 物理解决水合报错
   if (!isMounted) {
@@ -270,8 +381,6 @@ export default function MarketDetailPage() {
     ? (marketData.winningOutcome === "YES" ? "yes" : "no")
     : null;
 
-
-
   return (
     <main className="min-h-screen bg-black">
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -294,7 +403,7 @@ export default function MarketDetailPage() {
               <PriceChart
                 yesPercent={displayYesPercent}
                 marketStatus={marketStatus}
-                marketResult={marketResult}
+                marketResult={marketResult === "yes" ? "YES_WON" : marketResult === "no" ? "NO_WON" : null}
                 slots={(marketData as any)?.slots || []}
                 currentMarketId={marketData.id}
                 period={(marketData as any)?.period || null}
@@ -314,6 +423,26 @@ export default function MarketDetailPage() {
                   currentMarketId={marketData.id}
                   period={(marketData as any)?.period || null}
                   templateId={(marketData as any)?.templateId || (marketData as any)?.template?.id || null}
+                />
+              </div>
+            )}
+
+            {/* 我的持仓面板 */}
+            {userPositionData && (
+              <div className="mb-4">
+                <UserPositionCard
+                  position={userPositionData}
+                  onSell={() => {
+                    // 🔥 修复：点击卖出按钮时，切换到卖出标签、选择正确的 outcome、填充最大份额
+                    handleTabChange("sell");
+                    // 通过 ref 调用 switchToSell 并设置金额
+                    if (tradeSidebarRef.current) {
+                      tradeSidebarRef.current.switchToSell(userPositionData.outcome, userPositionData.shares);
+                    }
+                  }}
+                  marketTitle={marketData.title}
+                  marketStatus={marketData.status as "OPEN" | "RESOLVED"}
+                  winningOutcome={marketData.winningOutcome}
                 />
               </div>
             )}
@@ -338,13 +467,61 @@ export default function MarketDetailPage() {
               marketId={marketData.id}
               userPosition={(marketData as any)?.userPosition || null}
               marketTitle={marketData.title}
-              marketStatus={marketData.status}
+              marketStatus={marketData.status as "OPEN" | "RESOLVED"}
               winningOutcome={marketData.winningOutcome}
-              activeTab="buy"
-              onTabChange={() => {}}
-              amount=""
-              onAmountChange={() => {}}
-              feeRate={marketData.feeRate || 0.02}
+              activeTab={activeTab}
+              onTabChange={handleTabChange}
+              amount={amount}
+              onAmountChange={handleAmountChange}
+              feeRate={(marketData as any).feeRate || 0.02}
+              onTradeSuccess={async (data) => {
+                // 🔥 交易成功后立即刷新市场数据，确保持仓面板更新
+
+                if (id) {
+                  const marketKey = `/api/markets/${id}`;
+                  
+                  // 1. 刷新市场基础数据 (赔率、总交易量、userPosition等)
+                  // 匹配所有以 /api/markets/${id} 开头的 key（支持字符串和数组格式）
+
+                  await mutateSWR((key) => {
+                    const keyString = Array.isArray(key) ? key[0] : key;
+                    return typeof keyString === 'string' && keyString.startsWith(marketKey);
+                  }, undefined, { revalidate: true });
+                  // 同时使用本地 mutateMarket 确保刷新
+                  await mutateMarket(undefined, { revalidate: true });
+                  
+                  // 2. [关键修复] 刷新用户持仓数据（直接调用 positions hook 的 mutate）
+
+                  await mutatePositions();
+
+                  // 3. 刷新用户余额
+
+                  await mutateSWR('/api/user/assets', undefined, { revalidate: true });
+                  
+                  // 4. 刷新用户订单数据（兼容 String Key 和 Array Key）
+                  await mutateSWR((key) => {
+                    // 如果 key 是字符串：检查是否包含 orders/user
+                    if (typeof key === 'string') {
+                      return key.includes('/api/orders/user');
+                    }
+                    // 如果 key 是数组：检查第一个元素是否是 API 路径
+                    if (Array.isArray(key)) {
+                      return key[0] === '/api/orders/user' || (typeof key[0] === 'string' && key[0].includes('/api/orders/user'));
+                    }
+                    return false;
+                  }, undefined, { revalidate: true });
+                  
+                  // 5. 刷新用户详情数据（支持数组格式）
+                  await mutateSWR((key) => {
+                    const keyString = Array.isArray(key) ? key[0] : key;
+                    return typeof keyString === 'string' && keyString.startsWith('/api/users/');
+                  }, undefined, { revalidate: true });
+                  
+                  // 6. 同时使用 router.refresh() 作为备选刷新机制
+                  router.refresh();
+
+                }
+              }}
             />
           </div>
         </div>

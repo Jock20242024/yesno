@@ -95,17 +95,14 @@ export async function translateText(
 
   // 如果没有配置 API Key，返回空字符串（表示待翻译）
   if (!apiKey) {
-    console.log(`🌐 [Translate] 未配置 TRANSLATE_API_KEY，跳过翻译: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+
     return '';
   }
 
   try {
-    console.log(`🌐 [Translate] 开始翻译: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}" -> ${targetLang}`);
-    
+
     const translatedText = await translateWithGoogleAPI(text, targetLang);
-    
-    console.log(`✅ [Translate] 翻译成功: "${translatedText.substring(0, 50)}${translatedText.length > 50 ? '...' : ''}"`);
-    
+
     return translatedText;
   } catch (error) {
     console.error(`❌ [Translate] 翻译失败:`, error);

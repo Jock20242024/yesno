@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MessageCircle, Heart, Reply } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface CommentsTabProps {
   marketId?: string;
@@ -20,6 +21,7 @@ interface Comment {
 }
 
 export default function CommentsTab({ marketId }: CommentsTabProps) {
+  const { t } = useLanguage();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -63,7 +65,7 @@ export default function CommentsTab({ marketId }: CommentsTabProps) {
         <textarea
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
-          placeholder="写下你的评论..."
+          placeholder={t('market.comments.write_comment')}
           className="w-full px-4 py-3 bg-pm-card border border-pm-border rounded-xl text-white placeholder-pm-text-dim focus:outline-none focus:border-pm-green transition-colors resize-none"
           rows={3}
         />
@@ -73,7 +75,7 @@ export default function CommentsTab({ marketId }: CommentsTabProps) {
             disabled={!newComment.trim()}
             className="px-6 py-2 bg-pm-green hover:bg-green-500 disabled:bg-pm-text-dim disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors"
           >
-            Post
+            {t('market.comments.post')}
           </button>
         </div>
       </div>
@@ -81,8 +83,8 @@ export default function CommentsTab({ marketId }: CommentsTabProps) {
       {/* 评论列表 */}
       {comments.length === 0 ? (
         <div className="text-center py-12 text-pm-text-dim">
-          <p className="mb-2">暂无评论</p>
-          <p className="text-xs">评论功能即将上线</p>
+          <p className="mb-2">{t('market.comments.no_comments')}</p>
+          <p className="text-xs">{t('market.comments.coming_soon')}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-4">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface UserProfileHeaderProps {
   userId: string;
@@ -13,13 +14,6 @@ interface UserProfileHeaderProps {
   joinDate: string;
 }
 
-const timeTabs = [
-  { id: "1D", label: "1D" },
-  { id: "1W", label: "1W" },
-  { id: "1M", label: "1M" },
-  { id: "ALL", label: "ALL" },
-];
-
 export default function UserProfileHeader({
   userId,
   userName,
@@ -29,7 +23,16 @@ export default function UserProfileHeader({
   predictions,
   joinDate,
 }: UserProfileHeaderProps) {
+  const { t, language } = useLanguage();
   const [activeTimeTab, setActiveTimeTab] = useState("ALL");
+  
+  // 使用 useMemo 确保翻译一致性，避免 Hydration 错误
+  const timeTabs = useMemo(() => [
+    { id: "1D", label: "1D" },
+    { id: "1W", label: "1W" },
+    { id: "1M", label: t('common.time.1M') },
+    { id: "ALL", label: t('common.time.all') },
+  ], [t]);
 
   const formatProfit = (amount: number) => {
     const sign = amount >= 0 ? "+" : "";
@@ -59,14 +62,14 @@ export default function UserProfileHeader({
             <div className="flex flex-col gap-2">
               <h1 className="text-2xl font-black text-white">{userName}</h1>
               <button className="w-fit px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm font-medium text-white transition-colors">
-                连接 X
+                {language === 'en' ? 'Connect X' : '连接 X'}
               </button>
             </div>
           </div>
 
           {/* 注册日期 */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-400">加入时间</span>
+            <span className="text-xs text-zinc-400">{language === 'en' ? 'Joined' : '加入时间'}</span>
             <span className="text-sm text-zinc-300">{joinDate}</span>
           </div>
 
@@ -74,19 +77,19 @@ export default function UserProfileHeader({
           <div className="grid grid-cols-3 gap-4">
             <div className="flex flex-col gap-1">
               <span className="text-xs text-zinc-400 uppercase tracking-wider">
-                持仓价值
+                {t('profile.stats.portfolio_value')}
               </span>
               <span className="text-lg font-bold text-white">{positionsValue}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-zinc-400 uppercase tracking-wider">
-                最高收益
+                {t('profile.stats.max_win')}
               </span>
               <span className="text-lg font-bold text-pm-green">{biggestWin}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-zinc-400 uppercase tracking-wider">
-                预测次数
+                {t('profile.stats.predictions_count')}
               </span>
               <span className="text-lg font-bold text-white">{predictions}</span>
             </div>
@@ -99,7 +102,7 @@ export default function UserProfileHeader({
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-zinc-400 uppercase tracking-wider">
-                  盈利/亏损
+                  {t('profile.stats.pnl')}
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
@@ -126,7 +129,7 @@ export default function UserProfileHeader({
                     : "text-zinc-400 border-transparent hover:text-white"
                 }`}
               >
-                {tab.label}
+                <span suppressHydrationWarning>{tab.label}</span>
               </button>
             ))}
           </div>

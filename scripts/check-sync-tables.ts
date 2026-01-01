@@ -63,7 +63,7 @@ async function checkSyncTables() {
     // 检查 DataSource 表
     console.log('');
     console.log('📊 DataSource 表状态:');
-    const dataSources = await prisma.dataSource.findMany();
+    const dataSources = await prisma.data_sources.findMany();
     if (dataSources.length > 0) {
       dataSources.forEach(ds => {
         console.log(`  - ${ds.sourceName}: lastSyncTime=${ds.lastSyncTime?.toISOString() || 'null'}, itemsCount=${ds.itemsCount}, status=${ds.status}`);

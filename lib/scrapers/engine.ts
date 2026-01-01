@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 
 /**
  * 采集结果接口
@@ -29,10 +30,12 @@ export abstract class ScraperEngine {
    * 获取采集源记录（如果不存在则创建）
    */
   protected async getOrCreateDataSource() {
-    return await prisma.dataSource.upsert({
+    return await prisma.data_sources.upsert({
       where: { sourceName: this.sourceName },
       update: {},
       create: {
+        id: randomUUID(),
+        updatedAt: new Date(),
         sourceName: this.sourceName,
         status: 'ACTIVE',
         multiplier: 1.0,
@@ -64,7 +67,7 @@ export abstract class ScraperEngine {
       updateData.errorMessage = null;
     }
 
-    await prisma.dataSource.update({
+    await prisma.data_sources.update({
       where: { sourceName: this.sourceName },
       data: updateData,
     });
@@ -90,31 +93,24 @@ export abstract class ScraperEngine {
    */
   async execute(): Promise<ScrapeResult> {
     try {
-      console.log(`🚀 [Scraper] 开始采集: ${this.sourceName}`);
-      console.log(`📋 [Scraper] 采集源标识符: ${this.sourceName}`);
 
       // 验证采集源是否存在
       const dataSource = await this.getOrCreateDataSource();
-      console.log(`✅ [Scraper] 采集源记录验证: ID=${dataSource.id}, Status=${dataSource.status}`);
 
       // 1. 获取原始数据
-      console.log(`📡 [Scraper] ${this.sourceName} 开始获取原始数据...`);
+
       const rawData = await this.fetch();
-      console.log(`✅ [Scraper] ${this.sourceName} 获取数据成功，原始数据量: ${Array.isArray(rawData) ? rawData.length : 'N/A'}`);
 
       // 2. 标准化数据
-      console.log(`🔄 [Scraper] ${this.sourceName} 开始标准化数据...`);
+
       const normalizedData = this.normalize(rawData);
-      console.log(`✅ [Scraper] ${this.sourceName} 标准化完成，共 ${normalizedData.length} 条`);
 
       // 3. 保存到数据库
-      console.log(`💾 [Scraper] ${this.sourceName} 开始保存到数据库...`);
+
       const itemsCount = await this.save(normalizedData);
-      console.log(`✅ [Scraper] ${this.sourceName} 保存完成，共 ${itemsCount} 条`);
 
       // 4. 更新采集源状态
       await this.updateDataSourceStatus('ACTIVE', itemsCount);
-      console.log(`✅ [Scraper] ${this.sourceName} 采集流程完成，状态已更新`);
 
       return {
         success: true,
@@ -140,7 +136,7 @@ export abstract class ScraperEngine {
           undefined,
           errorMessage.substring(0, 500) // 限制错误消息长度
         );
-        console.log(`✅ [Scraper] ${this.sourceName} 错误状态已更新到数据库`);
+
       } catch (updateError) {
         console.error(`❌ [Scraper] 更新错误状态失败:`, updateError);
       }

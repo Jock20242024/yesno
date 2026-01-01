@@ -240,15 +240,13 @@ export default function AdminFeesPage() {
                   <XAxis
                     dataKey="date"
                     stroke="#637588"
-                    className="dark:stroke-[#9da8b9]"
+                    className="dark:stroke-[#9da8b9] dark:tick:text-[#9da8b9]"
                     tick={{ fill: '#637588' }}
-                    className="dark:tick:text-[#9da8b9]"
                   />
                   <YAxis
                     stroke="#637588"
-                    className="dark:stroke-[#9da8b9]"
+                    className="dark:stroke-[#9da8b9] dark:tick:text-[#9da8b9]"
                     tick={{ fill: '#637588' }}
-                    className="dark:tick:text-[#9da8b9]"
                     tickFormatter={(value) => `$${value.toFixed(0)}`}
                   />
                   <Tooltip

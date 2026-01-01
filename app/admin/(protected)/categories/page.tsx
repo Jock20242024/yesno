@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { X, Edit2, Trash2 } from "lucide-react";
 
 // 分类数据类型（支持父子级）
@@ -46,22 +47,18 @@ export default function CategoriesManagementPage() {
   const fetchCategories = async () => {
     try {
       setIsLoading(true);
-      console.log('🖥️ [Categories Page] 开始获取分类列表...');
-      
+
       const res = await fetch('/api/admin/categories', {
         credentials: 'include',
         cache: 'no-store' // 🔥 确保不读缓存
       });
-      
-      console.log('🖥️ [Categories Page] API 响应状态:', res.status, res.statusText);
 
       const result = await res.json();
-      console.log('🖥️ 后台页面接收到的分类数据:', result);
 
       if (result.success && Array.isArray(result.data)) {
         // ✅ 正确提取数组
         setCategories(result.data);
-        console.log("✅ 成功加载分类数量:", result.data.length);
+
       } else {
         console.error("❌ 接口返回错误结构:", result);
         setCategories([]); // 🔥 确保设置为空数组
@@ -124,7 +121,7 @@ export default function CategoriesManagementPage() {
   // 处理提交（新建或编辑）
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
-      alert("分类名称不能为空");
+      toast.info("分类名称不能为空");
       return;
     }
 
@@ -156,13 +153,13 @@ export default function CategoriesManagementPage() {
       if (data.success) {
         await fetchCategories();
         handleCloseDialog();
-        alert(editingCategory ? "分类更新成功！" : "分类创建成功！");
+        toast.success(editingCategory ? "分类更新成功！" : "分类创建成功！");
       } else {
-        alert(data.error || "操作失败，请稍后重试");
+        toast.error(data.error || "操作失败，请稍后重试");
       }
     } catch (error) {
       console.error("操作失败:", error);
-      alert("操作失败，请稍后重试");
+      toast.error("操作失败，请稍后重试");
     } finally {
       setIsSubmitting(false);
     }
@@ -184,13 +181,13 @@ export default function CategoriesManagementPage() {
 
       if (data.success) {
         await fetchCategories();
-        alert("分类删除成功！");
+        toast.success("分类删除成功！");
       } else {
-        alert(data.error || "删除失败，请稍后重试");
+        toast.error(data.error || "删除失败，请稍后重试");
       }
     } catch (error) {
       console.error("删除失败:", error);
-      alert("删除失败，请稍后重试");
+      toast.error("删除失败，请稍后重试");
     }
   };
 

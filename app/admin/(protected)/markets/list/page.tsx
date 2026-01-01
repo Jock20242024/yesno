@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { useAdminMarkets } from "@/hooks/useAdminData";
 import MarketTable from "@/app/admin/markets/components/MarketTable";
@@ -77,15 +78,15 @@ export default function MarketsListPage() {
       const result = await response.json();
 
       if (result.success) {
-        alert('市场已成功删除');
+        toast.success('市场已成功删除');
         // 刷新列表（通过重新获取数据）
         window.location.reload();
       } else {
-        alert(`删除失败: ${result.error || '未知错误'}`);
+        toast.error(`删除失败: ${result.error || '未知错误'}`);
       }
     } catch (error) {
       console.error('删除市场失败:', error);
-      alert('删除失败，请稍后重试');
+      toast.error('删除失败，请稍后重试');
     }
   };
 

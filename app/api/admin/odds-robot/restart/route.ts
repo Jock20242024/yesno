@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { auth } from '@/lib/authExport';
 import { prisma } from '@/lib/prisma';
 import { clearQueue } from '@/lib/queue/oddsQueue';
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
     // 🔥 核心修复：严格校验 adminId
     let adminUserId: string | null = null;
     if (userEmail) {
-      const adminUser = await prisma.user.findUnique({
+      const adminUser = await prisma.users.findUnique({
         where: { email: userEmail },
         select: { id: true },
       });
@@ -50,19 +51,20 @@ export async function POST(request: NextRequest) {
     }
 
     // 🔥 重置队列状态（清空队列）
-    console.log('🔄 [Odds Robot Restart API] 重置队列状态...');
+
     await clearQueue();
 
     // 🔥 直接调用 syncOdds() 执行一次同步（重启逻辑）
-    console.log('🔄 [Odds Robot Restart API] 开始执行赔率同步...');
-    
+
     const syncResult = await syncOdds();
 
     // 🔥 核心修复：只有在获取到有效的 adminId 时才记录日志
     if (adminUserId) {
       try {
-        await prisma.adminLog.create({
+        await prisma.admin_logs.create({
           data: {
+            id: randomUUID(),
+            updatedAt: new Date(),
             adminId: adminUserId, // 使用已验证的 adminId
             actionType: 'ODDS_ROBOT_RESTART',
             details: `手动重启赔率机器人: 检查 ${syncResult.itemsCount} 个市场，加入队列 ${syncResult.queuedCount} 个，过滤 ${syncResult.filteredCount} 个（命中率: ${syncResult.diffHitRate}%）`,

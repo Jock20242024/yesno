@@ -5,7 +5,7 @@
  * 运行方式：
  * 1. 开发环境：node -r ts-node/register scripts/market-factory-cron.ts
  * 2. 生产环境：使用 PM2 或其他进程管理器
- * 3. 或使用系统的 cron: */1 * * * * cd /path/to/project && npm run cron:market-factory
+ * 3. 或使用系统的 cron: 每分钟执行一次，格式为 * /1 * * * *（注意星号后有空格）
  */
 
 const cron = require('node-cron');

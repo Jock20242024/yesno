@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const email = session.user.email.toLowerCase().trim();
 
     // 查找用户
-    const dbUser = await prisma.user.findUnique({
+    const dbUser = await prisma.users.findUnique({
       where: { email },
     });
 

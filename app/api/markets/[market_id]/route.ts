@@ -20,16 +20,10 @@ export async function GET(
   { params }: { params: Promise<{ market_id: string }> }
 ) {
   try {
-    console.log('📊 [Market Detail API] ========== 开始处理获取市场详情请求 ==========');
-    
+
     const { market_id } = await params;
     
     // 打印 Slug：确保 API 能够正确获取并打印 URL 中的市场标识符
-    console.log('🔍 [Market Detail API] 接收到的市场ID:', {
-      market_id,
-      market_idType: typeof market_id,
-      market_idLength: market_id?.length,
-    });
 
     if (!market_id || market_id.trim() === '') {
       console.error('❌ [Market Detail API] 市场ID为空');
@@ -44,12 +38,12 @@ export async function GET(
 
     // 🔥 P0修复：先不使用include marketTemplate，直接查询Market表（字段在schema中已定义）
     // 如果关联有问题，后续可以手动查询template
-    const market = await prisma.market.findUnique({
+    const market = await prisma.markets.findUnique({
       where: { id: market_id },
       include: {
-        categories: {
+          market_categories: {
           include: {
-            category: {
+            categories: {
               select: {
                 id: true,
                 name: true,
@@ -73,13 +67,13 @@ export async function GET(
     }
     
     // 2. 组装返回数据
-    const categories = market.categories || [];
+    const categories = market.market_categories?.map((mc: any) => mc.categories) || [];
     
     // 🔥 P0修复：手动查询marketTemplate（如果templateId存在）
     let marketTemplate = null;
     if ((market as any).templateId) {
       try {
-        marketTemplate = await prisma.marketTemplate.findUnique({
+        marketTemplate = await prisma.market_templates.findUnique({
           where: { id: (market as any).templateId },
         });
       } catch (error) {
@@ -147,7 +141,7 @@ export async function GET(
           // 强制规则：UI的"我的持仓"100%只能来自Position表，不允许从Trade计算
           const { prisma } = await import('@/lib/prisma');
           
-          const yesPosition = await prisma.position.findFirst({
+          const yesPosition = await prisma.positions.findFirst({
             where: {
               userId,
               marketId: market_id,
@@ -156,7 +150,7 @@ export async function GET(
             },
           });
           
-          const noPosition = await prisma.position.findFirst({
+          const noPosition = await prisma.positions.findFirst({
             where: {
               userId,
               marketId: market_id,
@@ -178,13 +172,7 @@ export async function GET(
           // 获取用户订单（用于显示交易历史，不是用于计算持仓）
           const allUserOrders = await DBService.findOrdersByUserId(userId);
           userOrders = allUserOrders.filter(order => order.marketId === market_id);
-          
-          console.log('📊 [Market Detail API] 用户持仓（从Position表）:', {
-            userId,
-            marketId: market_id,
-            userPosition,
-            orderCount: userOrders.length,
-          });
+
         }
       } else {
         // 如果 Token 无效或缺失，记录警告但不返回错误（允许未登录用户查看市场）
@@ -204,15 +192,7 @@ export async function GET(
     const marketData = formattedMarket!;
     
     // 🔥 关键调试：检查 formattedMarket 中的关键字段
-    console.log(`🔍 [Market Detail API] formattedMarket 关键字段:`, {
-      id: formattedMarket.id,
-      isFactory: (formattedMarket as any).isFactory,
-      source: formattedMarket.source,
-      outcomePrices: (formattedMarket as any).outcomePrices,
-      outcomePricesType: typeof (formattedMarket as any).outcomePrices,
-      externalId: (formattedMarket as any).externalId,
-    });
-    
+
     // 🔥 核心分流逻辑：赔率不是算出来的，是同步过来的！
     // 
     // 1. 如果 externalId 匹配成功（POLYMARKET 市场或工厂市场有 externalId）：
@@ -233,18 +213,7 @@ export async function GET(
     const shouldUseSyncedOdds = isPolymarketMarket || isFactoryMarket;
     
     // 🔥 调试日志：检查工厂市场判断
-    console.log(`🔍 [Market Detail API] 市场类型检查:`, {
-      marketId: marketData.id,
-      source: marketData.source,
-      isPolymarketMarket,
-      isFactoryMarket,
-      hasExternalId,
-      shouldUseSyncedOdds,
-      outcomePrices: (marketData as any).outcomePrices ? '存在' : '不存在',
-      outcomePricesType: typeof (marketData as any).outcomePrices,
-      outcomePricesValue: (marketData as any).outcomePrices,
-    });
-    
+
     if (shouldUseSyncedOdds) {
       // 🚀 强制使用同步赔率：如果有数据，必须强制覆盖本地的 50/50
       let syncedOddsFound = false;
@@ -252,13 +221,7 @@ export async function GET(
       // 第一优先级：使用 outcomePrices（从赔率机器人同步的实时赔率）
       try {
         const outcomePrices = (marketData as any).outcomePrices;
-        console.log(`🔍 [Market Detail API] 尝试解析 outcomePrices:`, {
-          outcomePrices,
-          outcomePricesType: typeof outcomePrices,
-          isString: typeof outcomePrices === 'string',
-          isNull: outcomePrices === null,
-          isUndefined: outcomePrices === undefined,
-        });
+
         if (outcomePrices) {
           const parsed = typeof outcomePrices === 'string' ? JSON.parse(outcomePrices) : outcomePrices;
           
@@ -285,15 +248,7 @@ export async function GET(
           }
           
           // 🔥 调试日志：打印解析后的原始价格值
-          console.log(`🔍 [Market Detail API] 解析后的价格值:`, {
-            yesPrice,
-            noPrice,
-            yesPriceType: typeof yesPrice,
-            noPriceType: typeof noPrice,
-            yesPriceIsValid: yesPrice !== null && !isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1,
-            noPriceIsValid: noPrice !== null && !isNaN(noPrice) && noPrice >= 0 && noPrice <= 1,
-          });
-          
+
           // 🔥 移除结算状态检查：允许显示真实的Polymarket赔率，包括0/100（已结算市场）
           // 确保实时同步Polymarket的真实赔率数据
           if (yesPrice !== null && !isNaN(yesPrice) && yesPrice >= 0 && yesPrice <= 1) {
@@ -305,7 +260,7 @@ export async function GET(
               noPercent = (1 - yesPrice) * 100;
             }
             syncedOddsFound = true;
-            console.log(`✅ [Market Detail API] 强制使用同步赔率: YES=${yesPercent.toFixed(2)}%, NO=${noPercent.toFixed(2)}% (来源: outcomePrices, externalId: ${(marketData as any).externalId || '未设置'}, 原始值: yesPrice=${yesPrice}, noPrice=${noPrice})`);
+
           } else {
             console.warn(`⚠️ [Market Detail API] outcomePrices 存在但验证失败:`, {
               yesPrice,
@@ -327,7 +282,7 @@ export async function GET(
           yesPercent = initialPrice * 100;
           noPercent = (1 - initialPrice) * 100;
           syncedOddsFound = true;
-          console.log(`✅ [Market Detail API] 强制使用同步赔率: YES=${yesPercent.toFixed(2)}%, NO=${noPercent.toFixed(2)}% (来源: initialPrice, externalId: ${(marketData as any).externalId || '未设置'})`);
+
         }
       }
       
@@ -335,9 +290,9 @@ export async function GET(
       if (!syncedOddsFound) {
         if (isFactoryMarket) {
           if (hasExternalId) {
-            console.log(`ℹ️ [Market Detail API] 工厂市场 ${marketData.id} 有 externalId (${(marketData as any).externalId})，但尚未同步到赔率数据，暂时显示 50/50（等待赔率机器人同步）`);
+
           } else {
-            console.log(`ℹ️ [Market Detail API] 工厂市场 ${marketData.id} 暂未匹配 externalId，等待自动绑定和同步（暂时显示 50/50）`);
+
           }
         } else {
           console.warn(`⚠️ [Market Detail API] POLYMARKET市场 ${marketData.id} 未找到同步赔率，使用默认 50/50`);
@@ -349,9 +304,9 @@ export async function GET(
       if (totalAmount > 0) {
         yesPercent = (marketData.totalYes / totalAmount) * 100;
         noPercent = (marketData.totalNo / totalAmount) * 100;
-        console.log(`ℹ️ [Market Detail API] 使用本地成交计算赔率（自建市场）: YES=${yesPercent.toFixed(2)}%, NO=${noPercent.toFixed(2)}%`);
+
       } else {
-        console.log(`ℹ️ [Market Detail API] 自建市场 ${marketData.id} 无交易数据，使用默认 50/50 赔率`);
+
         // 🔥 确保使用默认值50/50，而不是0/100
         yesPercent = 50;
         noPercent = 50;
@@ -366,13 +321,6 @@ export async function GET(
     
     if (formattedMarket.templateId) {
       try {
-        console.log(`🔍 [Market Detail API] 开始查询slots，当前市场信息:`, {
-          marketId: market.id,
-          marketTitle: market.title,
-          templateId: formattedMarket.templateId,
-          marketSource: market.source,
-          marketIsFactory: (market as any).isFactory,
-        });
 
         // 计算今天的开始和结束时间（UTC+8，Asia/Shanghai）
         const now = new Date();
@@ -387,7 +335,7 @@ export async function GET(
         
         // 查询同一 templateId 且 closingDate 在今天的所有市场
         // 使用 closingDate 而不是 createdAt，因为 closingDate 是市场的实际结束时间
-        const sameTemplateMarkets = await prisma.market.findMany({
+        const sameTemplateMarkets = await prisma.markets.findMany({
           where: {
             templateId: formattedMarket.templateId,
             isFactory: true,
@@ -411,18 +359,7 @@ export async function GET(
             createdAt: 'asc', // 按创建时间（开始时间）排序
           },
         });
-        
-        console.log(`🔍 [Market Detail API] 查询到的同模板市场:`, {
-          count: sameTemplateMarkets.length,
-          queryTemplateId: formattedMarket.templateId,
-          markets: sameTemplateMarkets.map(m => ({
-            id: m.id,
-            title: (m as any).title,
-            closingDate: m.closingDate.toISOString(),
-            period: (m as any).period,
-          })),
-        });
-        
+
         // 🔥 关键修复：必须同时使用templateId和symbol过滤，确保不混入其他市场
         const currentMarketSymbol = (market as any).symbol;
         const currentMarketTitle = market.title;
@@ -448,15 +385,7 @@ export async function GET(
         });
         
         if (filteredMarkets.length !== sameTemplateMarkets.length) {
-          console.log(`🔧 [Market Detail API] 过滤市场:`, {
-            原始数量: sameTemplateMarkets.length,
-            过滤后数量: filteredMarkets.length,
-            当前市场: {
-              templateId: formattedMarket.templateId,
-              symbol: currentMarketSymbol,
-              title: currentMarketTitle,
-            },
-          });
+
         }
         
         // 使用过滤后的市场列表
@@ -490,8 +419,7 @@ export async function GET(
         
         // 🔥 按 startTime 物理升序排列（确保导航栏从早到晚整齐排列）
         slots.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-        
-        console.log(`📊 [Market Detail API] 查询到 ${slots.length} 个同模板市场（今天），slots:`, slots.map(s => ({ id: s.id, startTime: s.startTime, endTime: s.endTime })));
+
       } catch (error) {
         console.error('❌ [Market Detail API] 查询 slots 失败:', error);
         slots = [];
@@ -499,12 +427,6 @@ export async function GET(
     }
 
     // 🔥 调试日志：在构建 serializedMarket 之前，确认 yesPercent 和 noPercent 的值
-    console.log(`🔍 [Market Detail API] 构建 serializedMarket 前的赔率值:`, {
-      yesPercent,
-      noPercent,
-      yesPercentType: typeof yesPercent,
-      noPercentType: typeof noPercent,
-    });
 
     // 响应数据完整性：确保 API 返回的市场对象中，所有字段都是完整的
     // 将数据库格式转换为前端期望的格式（使用 formattedMarket）
@@ -702,39 +624,11 @@ export async function GET(
       if (!serializedMarket.status) serializedMarket.status = 'OPEN' as any;
     }
 
-    console.log('✅ [Market Detail API] ========== 市场详情获取成功 ==========');
-    console.log('✅ [Market Detail API] 市场ID:', market.id);
-    console.log('✅ [Market Detail API] 市场标题:', serializedMarket.title);
-    console.log('✅ [Market Detail API] 市场描述:', serializedMarket.description ? `${serializedMarket.description.substring(0, 50)}...` : '空');
-    console.log('✅ [Market Detail API] 市场状态:', serializedMarket.status);
-    console.log('✅ [Market Detail API] 交易量 (volume):', serializedMarket.volume);
-    console.log('✅ [Market Detail API] YES百分比:', serializedMarket.yesPercent);
-    console.log('✅ [Market Detail API] NO百分比:', serializedMarket.noPercent);
-    console.log('✅ [Market Detail API] 截止日期 (endTime):', serializedMarket.endTime);
-    console.log('✅ [Market Detail API] 总交易量 (totalVolume):', serializedMarket.totalVolume);
-    console.log('✅ [Market Detail API] YES总金额 (totalYes):', serializedMarket.totalYes);
-    console.log('✅ [Market Detail API] NO总金额 (totalNo):', serializedMarket.totalNo);
-    
     // 后端调试：在服务器终端打印 API 返回给前端的完整市场详情 JSON 字符串
     const finalResponse = {
       success: true,
       data: serializedMarket,
     };
-    
-    console.log('📤 [Market Detail API] ========== 最终返回的完整 JSON 字符串 ==========');
-    console.log(JSON.stringify(finalResponse, null, 2));
-    console.log('📤 [Market Detail API] 关键字段检查:');
-    console.log('📤 [Market Detail API]   - title:', serializedMarket.title ? '✅' : '❌');
-    console.log('📤 [Market Detail API]   - description:', serializedMarket.description ? '✅' : '❌');
-    console.log('📤 [Market Detail API]   - endTime:', serializedMarket.endTime ? '✅' : '❌');
-    console.log('📤 [Market Detail API]   - volume:', serializedMarket.volume !== undefined ? `✅ (${serializedMarket.volume})` : '❌');
-    console.log('📤 [Market Detail API]   - yesPercent:', serializedMarket.yesPercent !== undefined ? `✅ (${serializedMarket.yesPercent}%)` : '❌');
-    console.log('📤 [Market Detail API]   - noPercent:', serializedMarket.noPercent !== undefined ? `✅ (${serializedMarket.noPercent}%)` : '❌');
-    console.log('📤 [Market Detail API]   - status:', serializedMarket.status ? `✅ (${serializedMarket.status})` : '❌');
-    console.log('📤 [Market Detail API]   - totalVolume:', serializedMarket.totalVolume !== undefined ? `✅ (${serializedMarket.totalVolume})` : '❌');
-    console.log('📤 [Market Detail API]   - totalYes:', serializedMarket.totalYes !== undefined ? `✅ (${serializedMarket.totalYes})` : '❌');
-    console.log('📤 [Market Detail API]   - totalNo:', serializedMarket.totalNo !== undefined ? `✅ (${serializedMarket.totalNo})` : '❌');
-    console.log('📤 [Market Detail API] ============================================');
 
     // 🔥 关键修复：使用 createNoCacheResponse 防止浏览器缓存，确保赔率数据实时更新
     return createNoCacheResponse(finalResponse);

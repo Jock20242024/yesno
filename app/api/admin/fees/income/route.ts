@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     const nowUtc = dayjs.utc();
     
     // 🚀 1. 累计总收入：所有订单的手续费总和
-    const totalIncomeResult = await prisma.order.aggregate({
+    const totalIncomeResult = await prisma.orders.aggregate({
       _sum: {
         feeDeducted: true,
       },
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     const todayStart = nowUtc.startOf('day').toDate();
     const todayEnd = nowUtc.endOf('day').toDate();
     
-    const todayIncomeResult = await prisma.order.aggregate({
+    const todayIncomeResult = await prisma.orders.aggregate({
       where: {
         createdAt: {
           gte: todayStart,
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     const yesterdayStart = nowUtc.subtract(1, 'day').startOf('day').toDate();
     const yesterdayEnd = nowUtc.subtract(1, 'day').endOf('day').toDate();
     
-    const yesterdayIncomeResult = await prisma.order.aggregate({
+    const yesterdayIncomeResult = await prisma.orders.aggregate({
       where: {
         createdAt: {
           gte: yesterdayStart,
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
       const startDate = nowUtc.subtract(29, 'day').startOf('day').toDate();
       
       // 查询所有订单，按日期分组
-      const orders = await prisma.order.findMany({
+      const orders = await prisma.orders.findMany({
         where: {
           createdAt: {
             gte: startDate,
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
       // 按周统计：最近12周（ISO周，从周一开始）
       const startDate = nowUtc.subtract(11, 'week').startOf('isoWeek').toDate();
       
-      const orders = await prisma.order.findMany({
+      const orders = await prisma.orders.findMany({
         where: {
           createdAt: {
             gte: startDate,
@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
       // 按月统计：最近12个月
       const startDate = nowUtc.subtract(11, 'month').startOf('month').toDate();
       
-      const orders = await prisma.order.findMany({
+      const orders = await prisma.orders.findMany({
         where: {
           createdAt: {
             gte: startDate,

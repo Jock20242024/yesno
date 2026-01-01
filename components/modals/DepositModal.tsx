@@ -6,6 +6,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { CRYPTO_CONFIG, generateMockAddress } from "@/lib/constants/cryptoConfig";
 import { formatUSD } from "@/lib/utils";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface DepositModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ const PAYMENT_PROVIDERS: PaymentProvider[] = [
 ];
 
 export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<DepositTab>("crypto");
   const [selectedCrypto, setSelectedCrypto] = useState<CryptoType>("USDC");
   const [selectedNetwork, setSelectedNetwork] = useState<NetworkId>("POLYGON");
@@ -73,8 +75,8 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
       await navigator.clipboard.writeText(walletAddress);
       setCopied(true);
       try {
-        toast.success("地址已复制", {
-          description: "钱包地址已复制到剪贴板",
+        toast.success(t('wallet.deposit.copy_success'), {
+          description: t('wallet.deposit.copy_success_desc'),
           duration: 2000,
         });
       } catch (e) {
@@ -83,8 +85,8 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       try {
-        toast.error("复制失败", {
-          description: "请手动复制地址",
+        toast.error(t('wallet.deposit.copy_failed'), {
+          description: t('wallet.deposit.copy_failed_desc'),
         });
       } catch (e) {
         console.error("toast failed", e);
@@ -109,8 +111,8 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
     if (!provider) return;
     
     try {
-      toast.info("即将跳转至支付页面", {
-        description: `即将跳转至 ${provider.name} 支付页面...`,
+      toast.info(t('wallet.deposit.redirect_payment'), {
+        description: t('wallet.deposit.redirect_payment_desc', { provider: provider.name }),
         duration: 3000,
       });
     } catch (e) {
@@ -125,7 +127,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
       <div className="bg-pm-card rounded-xl border border-white/10 shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         {/* 模态框头部 */}
         <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-pm-card z-10">
-          <h2 className="text-xl font-bold text-white">充值</h2>
+          <h2 className="text-xl font-bold text-white">{t('wallet.deposit.title')}</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-white/10 text-zinc-500 hover:text-white transition-colors"
@@ -144,7 +146,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                 : "border-transparent text-zinc-500 hover:text-white"
             }`}
           >
-            存入数字货币
+            {t('wallet.deposit.tab_crypto')}
           </button>
           <button
             onClick={() => setActiveTab("fiat")}
@@ -155,7 +157,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
             }`}
           >
             <CreditCard className="w-4 h-4 inline-block mr-2" />
-            银行卡购买
+            {t('wallet.deposit.tab_fiat')}
           </button>
         </div>
 
@@ -167,7 +169,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
           {/* 步骤一：选择币种 */}
           <div>
             <label className="block text-sm font-medium text-zinc-500 mb-2">
-              选择币种
+              {t('wallet.deposit.select_crypto')}
             </label>
             <div className="flex gap-2">
               <button
@@ -208,7 +210,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
           {/* 步骤二：选择网络 */}
           <div>
             <label className="block text-sm font-medium text-zinc-500 mb-2">
-              选择网络
+              {t('wallet.deposit.select_network')}
             </label>
             <div className="relative">
               <button
@@ -218,7 +220,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                 <div className="text-left">
                   <div className="text-sm font-bold">{selectedNetworkConfig?.name}</div>
                   <div className="text-xs text-zinc-500 mt-0.5">
-                    手续费 {selectedNetworkConfig?.fee} · 预计 {selectedNetworkConfig?.arrival} 到账
+                    {t('wallet.deposit.network_fee')} {selectedNetworkConfig?.fee ?? ''} · {t('wallet.deposit.est_arrival', { time: selectedNetworkConfig?.arrival ?? '' })}
                   </div>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-zinc-500 transition-transform ${showNetworkDropdown ? "rotate-180" : ""}`} />
@@ -244,7 +246,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                       >
                         <div className="text-sm font-bold text-white">{network.name}</div>
                         <div className="text-xs text-zinc-500 mt-0.5">
-                          手续费 {network.fee} · 预计 {network.arrival} 到账
+                          {t('wallet.deposit.network_fee')} {network.fee} · {t('wallet.deposit.est_arrival', { time: network.arrival })}
                         </div>
                       </button>
                     ))}
@@ -265,14 +267,14 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
               />
             </div>
             <div className="text-center">
-              <p className="text-xs text-zinc-500 mb-2">扫描二维码或复制地址</p>
+              <p className="text-xs text-zinc-500 mb-2">{t('wallet.deposit.scan_qr')}</p>
             </div>
           </div>
 
           {/* 地址栏 */}
           <div>
             <label className="block text-sm font-medium text-zinc-500 mb-2">
-              钱包地址
+              {t('wallet.deposit.wallet_address')}
             </label>
             <div className="flex items-center gap-2">
               <div className="flex-1 bg-pm-bg border border-white/10 rounded-lg px-4 py-3 font-mono text-sm text-white break-all">
@@ -285,12 +287,12 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                 {copied ? (
                   <>
                     <Check className="w-4 h-4" />
-                    已复制
+                    {t('wallet.deposit.copied')}
                   </>
                 ) : (
                   <>
                     <Copy className="w-4 h-4" />
-                    复制
+                    {t('wallet.deposit.copy')}
                   </>
                 )}
               </button>
@@ -300,7 +302,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
               {/* 提示语 */}
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
                 <p className="text-xs text-amber-500 leading-relaxed">
-                  ⚠️ 仅支持充值 {selectedCrypto} ({selectedNetworkConfig?.name})，充值其他资产将无法找回
+                  ⚠️ {t('wallet.deposit.warning', { crypto: selectedCrypto, network: selectedNetworkConfig?.name || '' })}
                 </p>
               </div>
             </>
@@ -310,14 +312,14 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
               {/* 金额输入 */}
               <div>
                 <label className="block text-sm font-medium text-zinc-500 mb-2">
-                  购买金额
+                  {t('wallet.deposit.amount_label')}
                 </label>
                 <div className="relative">
                   <input
                     type="number"
                     value={fiatAmount}
                     onChange={(e) => setFiatAmount(e.target.value)}
-                    placeholder="0.00"
+                    placeholder={t('wallet.deposit.amount_placeholder')}
                     min="0"
                     step="0.01"
                     className="w-full bg-pm-bg border border-white/10 rounded-lg px-4 py-3 pr-16 text-white placeholder-zinc-500 focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all font-mono text-lg"
@@ -332,13 +334,13 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
               {fiatAmount && parseFloat(fiatAmount) > 0 && (
                 <div className="bg-pm-bg rounded-lg border border-white/10 p-4">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-zinc-500">预计收到 (Est. Receive)</span>
+                    <span className="text-sm text-zinc-500">{t('wallet.deposit.est_receive')}</span>
                     <span className="text-lg font-bold font-mono text-emerald-500">
                       {estimatedReceive.toFixed(2)} USDC
                     </span>
                   </div>
                   <p className="text-xs text-zinc-500 mt-1">
-                    包含第三方服务费 (Fees included)
+                    {t('wallet.deposit.fees_included')}
                   </p>
                 </div>
               )}
@@ -346,7 +348,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
               {/* 服务商选择 */}
               <div>
                 <label className="block text-sm font-medium text-zinc-500 mb-3">
-                  选择支付渠道
+                  {t('wallet.deposit.select_provider')}
                 </label>
                 <div className="space-y-2">
                   {PAYMENT_PROVIDERS.map((provider) => (
@@ -368,7 +370,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                             </span>
                             {provider.recommended && (
                               <span className="text-xs px-2 py-0.5 rounded bg-pm-green/20 text-pm-green font-medium">
-                                推荐
+                                {t('wallet.deposit.recommended')}
                               </span>
                             )}
                           </div>
@@ -378,7 +380,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                         </div>
                         <div className="text-right">
                           <span className="text-sm font-bold text-zinc-400">
-                            费率 ~{provider.fee}%
+                            {t('wallet.deposit.fee_rate', { fee: provider.fee })}
                           </span>
                         </div>
                       </div>
@@ -393,7 +395,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                 disabled={!fiatAmount || parseFloat(fiatAmount) <= 0}
                 className="w-full bg-pm-green hover:bg-green-400 text-pm-bg font-bold py-3.5 rounded-lg transition-all shadow-lg shadow-pm-green/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                前往支付 (Continue to Pay)
+                {t('wallet.deposit.continue_pay')}
               </button>
             </>
           )}

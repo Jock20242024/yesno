@@ -96,7 +96,7 @@ export async function POST(
     }
 
     // 获取模板（包含所有字段）
-    const template = await prisma.marketTemplate.findUnique({
+    const template = await prisma.market_templates.findUnique({
       where: { id: template_id },
     });
 
@@ -113,8 +113,8 @@ export async function POST(
     const templateFailureCount = (template as any).failureCount || 0;
     
     if (templateStatus === 'PAUSED' || templateStatus === 'FUSED' || templateFailureCount > 0) {
-      console.log(`🔄 [WideWindowOverlay] 检测到模板处于熔断状态（status=${templateStatus}, failureCount=${templateFailureCount}），自动重置为ACTIVE...`);
-      await prisma.marketTemplate.update({
+
+      await prisma.market_templates.update({
         where: { id: template_id },
         data: {
           status: 'ACTIVE',
@@ -122,8 +122,7 @@ export async function POST(
           pauseReason: null,
         },
       });
-      console.log(`✅ [WideWindowOverlay] 模板已重置为ACTIVE状态，failureCount已清零`);
-      
+
       // 更新template对象，确保后续逻辑使用新的状态
       (template as any).status = 'ACTIVE';
       (template as any).failureCount = 0;
@@ -133,7 +132,7 @@ export async function POST(
     const nowUtcForMaintenance = dayjs.utc();
     const nowUtcDateForMaintenance = nowUtcForMaintenance.toDate();
     try {
-      const updateResult = await prisma.market.updateMany({
+      const updateResult = await prisma.markets.updateMany({
         where: {
           templateId: template_id,
           status: 'OPEN',
@@ -144,7 +143,7 @@ export async function POST(
           status: 'CLOSED',
         },
       });
-      console.log(`🧹 [维护] 已将 ${updateResult.count} 个过期市场从OPEN更新为CLOSED`);
+
     } catch (maintenanceError: any) {
       console.error(`⚠️ [维护] 状态更新失败: ${maintenanceError.message}，继续执行生成逻辑`);
     }
@@ -157,20 +156,11 @@ export async function POST(
     // 2. 时间窗口：向前12小时，向后24小时
     const windowStart = nowUtc.subtract(12, 'hours').toDate();
     const windowEnd = nowUtc.add(24, 'hours').toDate();
-    
-    console.log(`🚀 [WideWindowOverlay] 开始宽窗口滑动覆盖: 模板 ${template_id}`);
-    console.log(`📅 [WideWindowOverlay] UTC 当前时间: ${nowUtcDate.toISOString()}`);
-    console.log(`📅 [WideWindowOverlay] 原始窗口: ${windowStart.toISOString()} ~ ${windowEnd.toISOString()}`);
-    console.log(`📅 [WideWindowOverlay] 窗口时长: ${dayjs.utc(windowEnd).diff(dayjs.utc(windowStart), 'hour')} 小时`);
-    
+
     // 3. 对齐窗口边界到周期边界
     const alignedWindowStart = alignToPeriodBoundary(windowStart, template.period);
     const alignedWindowEnd = alignToPeriodBoundary(windowEnd, template.period);
-    
-    console.log(`📅 [WideWindowOverlay] 对齐后的窗口: ${alignedWindowStart.toISOString()} ~ ${alignedWindowEnd.toISOString()}`);
-    console.log(`📅 [WideWindowOverlay] 对齐后窗口时长: ${dayjs.utc(alignedWindowEnd).diff(dayjs.utc(alignedWindowStart), 'hour')} 小时`);
-    console.log(`📅 [WideWindowOverlay] 预期场次数: ${Math.ceil(dayjs.utc(alignedWindowEnd).diff(dayjs.utc(alignedWindowStart), 'minute') / template.period)} 个`);
-    
+
     // 4. 生成所有时间槽（暴力循环，强制修正）
     // 🔧 强制循环修正：使用UTC时间戳，确保生成144个场次
     const nowTimeUtc = nowUtc.valueOf(); // UTC时间戳（毫秒）
@@ -191,17 +181,6 @@ export async function POST(
     let loopCursor = alignedStartTimeMs + periodMs;
     
     const expectedSlotCount = Math.floor((alignedEndTimeMs - alignedStartTimeMs) / periodMs);
-    
-    console.log(`🚀 [Trigger] 强制循环区间（UTC）: 
-      当前UTC时间: ${new Date(nowTimeUtc).toISOString()}
-      原始起点（现在-12h）: ${new Date(forceStartTime).toISOString()}
-      对齐起点: ${new Date(alignedStartTimeMs).toISOString()}
-      第一个场次结束时间: ${new Date(loopCursor).toISOString()}
-      原始终点（现在+24h）: ${new Date(forceEndTime).toISOString()}
-      对齐终点: ${new Date(alignedEndTimeMs).toISOString()}
-      时间窗口: ${(alignedEndTimeMs - alignedStartTimeMs) / (60 * 60 * 1000)} 小时
-      预期场次数: ${expectedSlotCount} 个
-    `);
 
     // 生成时间槽（每个slot是周期的结束时间）
     const slots: Date[] = [];
@@ -209,21 +188,20 @@ export async function POST(
       slots.push(new Date(loopCursor));
       loopCursor += periodMs;
     }
-    
-    console.log(`📊 [Trigger] 实际生成 ${slots.length} 个时间槽 (预期 ${expectedSlotCount} 个)`);
+
     if (slots.length !== expectedSlotCount) {
       console.error(`❌ [Trigger] 严重错误：场次数量不符！实际=${slots.length}, 预期=${expectedSlotCount}`);
     }
     if (slots.length > 0) {
       const firstSlotStart = new Date(slots[0].getTime() - periodMs);
-      console.log(`📊 [Trigger] 第一个场次: 开始=${firstSlotStart.toISOString()}, 结束=${slots[0].toISOString()}`);
+
       const lastSlotStart = new Date(slots[slots.length - 1].getTime() - periodMs);
-      console.log(`📊 [Trigger] 最后一个场次: 开始=${lastSlotStart.toISOString()}, 结束=${slots[slots.length - 1].toISOString()}`);
+
     }
     
     // 5. 查询已存在的市场（用于幂等性检查，基于 templateId + startTime）
     // 🔧 关键：在维护任务执行后重新查询，获取最新的状态
-    const existingMarkets = await prisma.market.findMany({
+    const existingMarkets = await prisma.markets.findMany({
       where: {
         templateId: template_id,
         isFactory: true,
@@ -234,14 +212,12 @@ export async function POST(
         status: true,
       },
     });
-    
-    console.log(`📊 [WideWindowOverlay] 查询到已存在市场: ${existingMarkets.length} 个`);
+
     const statusCounts = existingMarkets.reduce((acc, m) => {
       acc[m.status] = (acc[m.status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-    console.log(`📊 [WideWindowOverlay] 已存在市场状态分布:`, statusCounts);
-    
+
     // 创建已存在市场的 startTime 和 closingDate 集合（用于幂等性检查）
     // 🔧 关键：创建Map映射startTimeKey和closingDateKey到market对象，用于后续状态检查和更新
     // 🔥 修复：双重去重检查（基于startTime和closingDate），确保不会重复创建
@@ -263,9 +239,7 @@ export async function POST(
       existingMarketsMap.set(startTimeKey, m);
       existingMarketsMap.set(closingDateKey, m); // 也以closingDate作为key
     });
-    
-    console.log(`📊 [WideWindowOverlay] 已存在市场: ${existingMarkets.length} 个`);
-    
+
     let createdCount = 0;
     let skippedCount = 0;
     const createdMarketIds: string[] = [];
@@ -285,7 +259,9 @@ export async function POST(
       const isPastByEndTime = slotEndTimeMoment.isBefore(nowMomentForSlot);
       const isPastByStartTime = dayjs.utc(alignedStartTime).isBefore(nowMomentForSlot);
       const isPast = isPastByStartTime || isPastByEndTime; // 只要endTime或startTime过去，就算过去
-      const initialStatus = isPast ? 'CLOSED' : 'OPEN'; // 过去就是 CLOSED，未来才是 OPEN（Prisma schema没有PENDING）
+      // 🔥 修复：createMarketFromTemplate 只接受 'OPEN' | 'PENDING' | undefined，不接受 'CLOSED'
+      // 对于过去的时间，我们创建为 OPEN 状态，然后在后续处理中关闭
+      const initialStatus = 'OPEN' as 'OPEN' | 'PENDING' | undefined;
       
       if (isPast) {
         pastSlotCount++;
@@ -301,11 +277,11 @@ export async function POST(
           const existingMarket = existingMarketsMap.get(startTimeKey);
           if (existingMarket && existingMarket.status === 'OPEN') {
             try {
-              await prisma.market.update({
+              await prisma.markets.update({
                 where: { id: existingMarket.id },
                 data: { status: 'CLOSED' },
               });
-              console.log(`🔧 [WideWindowOverlay] 强制更新过去场次状态: ID=${existingMarket.id}, StartTime=${alignedStartTime.toISOString()}, OPEN -> CLOSED`);
+
             } catch (updateError: any) {
               console.error(`⚠️ [WideWindowOverlay] 更新过去场次状态失败: ${updateError.message}`);
             }
@@ -317,12 +293,18 @@ export async function POST(
       
       // 🔧 关键：只记录前10个和过去场次的详细信息，避免日志过多
       if (slots.indexOf(slotEndTime) < 10 || isPast) {
-        console.log(`🔍 [WideWindowOverlay] 时间判断: slotEndTime=${slotEndTime.toISOString()}, alignedStartTime=${alignedStartTime.toISOString()}, now=${nowMomentForSlot.toISOString()}, isPastByEndTime=${isPastByEndTime}, isPastByStartTime=${isPastByStartTime}, isPast=${isPast}, initialStatus=${initialStatus}`);
+
       }
       
       try {
         // 调用 createMarketFromTemplate（使用对齐后的 endTime 和正确的状态）
         const alignedEndTime = alignToPeriodBoundary(slotEndTime, template.period);
+        
+        // 计算 closingDateKey（用于幂等性检查）
+        const alignedClosingDate = new Date(alignedEndTime);
+        alignedClosingDate.setMilliseconds(0);
+        const closingDateKey = alignedClosingDate.toISOString();
+        
         const marketId = await createMarketFromTemplate(template as any, alignedEndTime, initialStatus);
         
         // 添加到已存在集合，避免重复创建（双重检查）
@@ -331,14 +313,14 @@ export async function POST(
         
         createdCount++;
         createdMarketIds.push(marketId);
-        console.log(`✅ [WideWindowOverlay] 创建市场: ID=${marketId}, StartTime=${alignedStartTime.toISOString()}, EndTime=${alignedEndTime.toISOString()}, Status=${initialStatus}`);
+
       } catch (error: any) {
         // 🚀 修复：增强异常捕获 - 单个场次创建失败不影响整体，绝对不增加failureCount
         if (error.message?.includes('已存在') || error.message?.includes('already exists')) {
           // 幂等性错误（市场已存在），跳过
           skippedCount++;
           existingStartTimes.add(startTimeKey);
-          console.log(`⏭️ [WideWindowOverlay] 市场已存在，跳过: StartTime=${alignedStartTime.toISOString()}, Status=${initialStatus}`);
+
         } else {
           // 其他错误：仅记录日志，不抛出异常，继续创建下一个场次
           // 🚀 核心修复：绝对不增加failureCount，不触发熔断，确保其他场次能继续创建
@@ -350,9 +332,7 @@ export async function POST(
         }
       }
     }
-    
-    console.log(`📊 [WideWindowOverlay] 完成: 创建 ${createdCount} 个，跳过 ${skippedCount} 个，总计 ${slots.length} 个时间槽`);
-    console.log(`📊 [WideWindowOverlay] 时间槽分布: 过去场次=${pastSlotCount} 个，未来场次=${futureSlotCount} 个`);
+
     if (pastSlotCount === 0) {
       console.error(`❌ [WideWindowOverlay] 严重警告：没有过去场次！这说明循环起点不对，只生成了未来24小时的场次！`);
     }
@@ -360,12 +340,12 @@ export async function POST(
     // 🔥 更新心跳：记录最后一次工厂运行时间
     try {
       const nowUtc = dayjs.utc().toISOString();
-      await prisma.systemSettings.upsert({
+      await prisma.system_settings.upsert({
         where: { key: 'lastFactoryRunAt' },
         update: { value: nowUtc },
-        create: { key: 'lastFactoryRunAt', value: nowUtc },
+        create: { key: 'lastFactoryRunAt', value: nowUtc, updatedAt: new Date() },
       });
-      console.log(`💓 [Heartbeat] 已更新最后运行时间: ${nowUtc}`);
+
     } catch (heartbeatError: any) {
       // 心跳更新失败不影响主流程，只记录日志
       console.error(`⚠️ [Heartbeat] 更新心跳失败: ${heartbeatError.message}`);

@@ -9,6 +9,7 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { comparePassword } from "@/services/authService";
+import { randomUUID } from "crypto";
 
 // NextAuth 配置
 // NextAuth v5 配置对象
@@ -45,7 +46,7 @@ export const authOptions: NextAuthConfig = {
 
         try {
           // 查找用户
-          const user = await prisma.user.findUnique({
+          const user = await prisma.users.findUnique({
             where: { email: credentials.email as string },
           });
 
@@ -107,19 +108,21 @@ export const authOptions: NextAuthConfig = {
 
           try {
             // 查找现有用户
-            const existingUser = await prisma.user.findUnique({ 
+            const existingUser = await prisma.users.findUnique({ 
               where: { email },
               select: { id: true, isAdmin: true }
             });
 
             if (existingUser) {
               // 现有用户：允许登录
-              console.log('✅ [SignIn Callback] Google 登录现有用户:', { email, isAdmin: existingUser.isAdmin });
+
               return true;
             } else {
               // 新用户：自动创建基础 User 记录（isAdmin 默认为 false）
-              const newUser = await prisma.user.create({
+              const newUser = await prisma.users.create({
                 data: {
+                  id: randomUUID(),
+                  updatedAt: new Date(),
                   email: email,
                   provider: "google",
                   passwordHash: null, // Google 用户没有密码
@@ -128,7 +131,7 @@ export const authOptions: NextAuthConfig = {
                   isBanned: false,
                 },
               });
-              console.log('✅ [SignIn Callback] Google 登录新用户已创建:', { email, id: newUser.id, isAdmin: false });
+
               return true;
             }
           } catch (error) {
@@ -147,18 +150,18 @@ export const authOptions: NextAuthConfig = {
     async jwt({ token, user }: any) {
       // 🔥 身份"强绑定"：恢复带日志的版本
       if (user) {
-        console.log('🛡️ [Auth-JWT] 初始登录用户:', user.email, 'isAdmin:', (user as any).isAdmin);
+
         token.sub = user.id;
         token.id = user.id;
         token.email = user.email;
       }
       // 🔥 强制从数据库查询最新的 isAdmin 状态
-      const dbUser = await prisma.user.findUnique({ where: { email: token.email as string } });
+      const dbUser = await prisma.users.findUnique({ where: { email: token.email as string } });
       const isAdmin = dbUser?.isAdmin === true;
       token.isAdmin = isAdmin;
       // 🔥 添加 role 字段：如果是管理员则为 'ADMIN'，否则为 'USER'
       token.role = isAdmin ? 'ADMIN' : 'USER';
-      console.log('🛡️ [Auth-JWT] 最终存入 Token 的 isAdmin:', token.isAdmin, 'role:', token.role);
+
       return token;
     },
     async session({ session, token }: any) {
@@ -167,7 +170,7 @@ export const authOptions: NextAuthConfig = {
         
         // 🔥 修复：强制从数据库查询最新的 isAdmin 状态（不依赖 JWT token）
         try {
-          const dbUser = await prisma.user.findUnique({ 
+          const dbUser = await prisma.users.findUnique({ 
             where: { email: token.email as string },
             select: { id: true, isAdmin: true, isBanned: true }
           });
@@ -178,13 +181,7 @@ export const authOptions: NextAuthConfig = {
             (session.user as any).role = isAdmin ? 'ADMIN' : 'USER';
             
             // 🔥 调试日志：打印当前用户的权限状态
-            console.log('🛡️ [Auth-Session] 用户权限验证:', {
-              email: token.email,
-              userId: dbUser.id,
-              isAdmin: isAdmin,
-              isBanned: dbUser.isBanned,
-              role: isAdmin ? 'ADMIN' : 'USER',
-            });
+
           } else {
             // 用户不存在，设置为非管理员
             (session.user as any).isAdmin = false;

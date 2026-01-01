@@ -18,16 +18,14 @@ export async function createSession(userId: string): Promise<string> {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_EXPIRY_MS);
   
-  const session = await prisma.authSession.create({
+  const session = await prisma.auth_sessions.create({
     data: {
       id: randomUUID(),
       userId,
       expiresAt,
     },
   });
-  
-  console.log("SESSION CREATED", session.id);
-  
+
   // 清理过期 session
   await cleanupExpiredSessions();
   
@@ -40,7 +38,7 @@ export async function createSession(userId: string): Promise<string> {
  * @returns userId 或 null（如果 session 不存在或已过期）
  */
 export async function getSession(sessionId: string): Promise<string | null> {
-  const session = await prisma.authSession.findUnique({
+  const session = await prisma.auth_sessions.findUnique({
     where: { id: sessionId },
   });
   
@@ -62,7 +60,7 @@ export async function getSession(sessionId: string): Promise<string | null> {
  * @param sessionId session ID
  */
 export async function deleteSession(sessionId: string): Promise<void> {
-  await prisma.authSession.delete({
+  await prisma.auth_sessions.delete({
     where: { id: sessionId },
   }).catch(() => {
     // 忽略删除不存在的 session 的错误
@@ -73,7 +71,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
  * 清理过期 session
  */
 async function cleanupExpiredSessions(): Promise<void> {
-  await prisma.authSession.deleteMany({
+  await prisma.auth_sessions.deleteMany({
     where: {
       expiresAt: {
         lt: new Date(),

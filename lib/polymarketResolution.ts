@@ -17,9 +17,7 @@ export async function getPolymarketResolution(conditionId: string): Promise<{
     // 使用 Polymarket CLOB API 获取市场信息
     // API: https://clob.polymarket.com/markets/{conditionId}
     const url = `https://clob.polymarket.com/markets/${conditionId}`;
-    
-    console.log(`📡 [Polymarket Resolution] 查询结算结果: conditionId=${conditionId}`);
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -73,7 +71,7 @@ export async function getPolymarketResolution(conditionId: string): Promise<{
     } else if (data.winner !== undefined && data.winner !== null) {
       // 如果提供了 winner 字段（0 = NO, 1 = YES）
       const winner = Number(data.winner);
-      outcome = (winner === 1 || winner === '1' || data.winner === '1') ? 'YES' : 'NO';
+      outcome = (winner === 1 || String(winner) === '1' || String(data.winner) === '1') ? 'YES' : 'NO';
     } else if (data.outcome) {
       // 如果提供了 outcome 字段
       const outcomeStr = String(data.outcome).toUpperCase().trim();
@@ -114,8 +112,6 @@ export async function getPolymarketResolution(conditionId: string): Promise<{
       };
     }
 
-    console.log(`✅ [Polymarket Resolution] 获取结算结果: conditionId=${conditionId}, outcome=${outcome}`);
-    
     return {
       resolved: true,
       outcome,

@@ -55,7 +55,7 @@ async function calculateGlobalStats() {
 
     // 3. 计算活跃人数
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const activeTraders = await prisma.order.groupBy({
+    const activeTraders = await prisma.orders.groupBy({
       by: ['userId'],
       where: {
         createdAt: {
@@ -183,7 +183,7 @@ async function calculateGlobalStats() {
     // 6. 更新 ScraperTask 状态
     const taskName = 'GlobalStats_Calc';
     try {
-      await prisma.scraperTask.upsert({
+      await prisma.scraper_tasks.upsert({
         where: { name: taskName },
         create: {
           name: taskName,
@@ -220,7 +220,7 @@ async function calculateGlobalStats() {
     // 更新 ScraperTask 状态为异常
     const taskName = 'GlobalStats_Calc';
     try {
-      await prisma.scraperTask.upsert({
+      await prisma.scraper_tasks.upsert({
         where: { name: taskName },
         create: {
           name: taskName,

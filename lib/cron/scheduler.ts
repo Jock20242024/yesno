@@ -32,12 +32,10 @@ export function startCronScheduler(): void {
     return;
   }
 
-  console.log('🚀 [Cron Scheduler] 启动内部定时任务调度器...');
-
   // 0. 启动赔率同步队列工作器（只需要启动一次）
   try {
     startOddsWorker();
-    console.log('✅ [Cron Scheduler] 赔率同步队列工作器已启动');
+
   } catch (error: any) {
     console.error('❌ [Cron Scheduler] 启动赔率同步队列工作器失败:', error.message);
   }
@@ -118,13 +116,9 @@ export function startCronScheduler(): void {
   
   // 读取初始状态
   getSchedulerActiveStatus().then(isActive => {
-    console.log('✅ [Cron Scheduler] 定时任务已启动:');
-    console.log('   - 赔率同步: 每30秒', isActive ? '(运行中)' : '(已暂停)');
-    console.log('   - 工厂市场自动接力与结算: 每30秒', isActive ? '(运行中)' : '(已暂停)');
+
   }).catch(() => {
-    console.log('✅ [Cron Scheduler] 定时任务已启动（默认运行中）');
-    console.log('   - 赔率同步: 每30秒');
-    console.log('   - 工厂市场自动接力与结算: 每30秒');
+
   });
 }
 

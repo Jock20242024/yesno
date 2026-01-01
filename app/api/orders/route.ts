@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/auth/utils';
 import { prisma } from '@/lib/prisma';
 import { TransactionType, TransactionStatus, PositionStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { distributeCommission } from '@/lib/services/commission';
 
 /**
  * 系统账户 Email 配置
@@ -20,7 +21,7 @@ const SYSTEM_ACCOUNT_EMAILS = {
  * @returns User 对象或 null
  */
 async function getSystemUser(email: string) {
-  return await prisma.user.findUnique({ 
+  return await prisma.users.findUnique({ 
     where: { email },
     select: {
       id: true,
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    // 🔥 使用统一的 NextAuth 认证
+    // 🔥 使用统一的 NextAuth 认证（支持 Session 和 API Key）
     const authResult = await requireAuth();
     
     if (!authResult.success) {
@@ -76,16 +77,6 @@ export async function POST(request: Request) {
     const { marketId, outcomeSelection, amount, orderType, limitPrice } = body;
     
     // 🔥 调试日志：打印接收到的原始数据
-    console.log('🔍 [Orders API] 接收到请求数据:', {
-      marketId,
-      outcomeSelection,
-      amount,
-      orderType,
-      limitPrice,
-      amountType: typeof amount,
-      orderTypeType: typeof orderType,
-      limitPriceType: typeof limitPrice,
-    });
 
     // 验证必需字段
     if (!marketId || !outcomeSelection || !amount) {
@@ -151,14 +142,7 @@ export async function POST(request: Request) {
 
     // 强制 ID 校验：再次确保 API 接收到的市场 ID 是正确的 UUID 格式
     // 查询隔离：检查下注 API 使用的 DBService.findMarketById(...) 确保它在查询市场时使用的是与详情页修复后相同的、正确的逻辑和参数
-    console.log('🔍 [Orders API] ========== 开始处理下注请求 ==========');
-    console.log('🔍 [Orders API] 接收到的市场ID:', { 
-      marketId, 
-      marketIdType: typeof marketId, 
-      marketIdLength: marketId?.length,
-      isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(marketId || '')
-    });
-    
+
     // 验证 marketId 格式（应该是 UUID）
     if (!marketId || typeof marketId !== 'string') {
       console.error('❌ [Orders API] 市场ID无效:', marketId);
@@ -173,15 +157,9 @@ export async function POST(request: Request) {
 
     // 业务校验：检查市场是否存在且状态为 OPEN
     // 修复：使用与详情页相同的 DBService.findMarketById 方法
-    console.log('💾 [Orders API] 准备调用 DBService.findMarketById:', marketId);
+
     const market = await DBService.findMarketById(marketId);
-    console.log('💾 [Orders API] DBService.findMarketById 返回结果:', {
-      found: !!market,
-      marketId: market?.id,
-      marketTitle: market?.title,
-      marketStatus: market?.status,
-    });
-    
+
     if (!market) {
       console.error('❌ [Orders API] 市场不存在:', marketId);
       return NextResponse.json(
@@ -246,9 +224,11 @@ export async function POST(request: Request) {
 
     // 🔥 如果系统账户不存在，自动创建
     if (!feeAccount) {
-      console.log('⚠️ [Orders API] 手续费账户不存在，自动创建...');
-      feeAccount = await prisma.user.create({
+
+      feeAccount = await prisma.users.create({
         data: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           email: SYSTEM_ACCOUNT_EMAILS.FEE,
           balance: 0,
           isAdmin: false,
@@ -260,13 +240,15 @@ export async function POST(request: Request) {
           balance: true,
         },
       });
-      console.log('✅ [Orders API] 手续费账户已创建:', feeAccount.id);
+
     }
 
     if (!ammAccount) {
-      console.log('⚠️ [Orders API] AMM 资金池账户不存在，自动创建...');
-      ammAccount = await prisma.user.create({
+
+      ammAccount = await prisma.users.create({
         data: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           email: SYSTEM_ACCOUNT_EMAILS.AMM,
           balance: 0,
           isAdmin: false,
@@ -278,7 +260,7 @@ export async function POST(request: Request) {
           balance: true,
         },
       });
-      console.log('✅ [Orders API] AMM 资金池账户已创建:', ammAccount.id);
+
     }
 
     // 使用 Prisma 事务确保原子性
@@ -295,7 +277,7 @@ export async function POST(request: Request) {
         const newBalance = newBalanceCents / PRECISION_MULTIPLIER;
         
         // 更新用户余额
-        const updatedUser = await tx.user.update({
+        const updatedUser = await tx.users.update({
           where: { id: userId },
           data: { balance: newBalance },
         });
@@ -305,7 +287,7 @@ export async function POST(request: Request) {
         const newFeeBalanceCents = feeAccountBalanceCents + feeDeductedCents;
         const newFeeBalance = newFeeBalanceCents / PRECISION_MULTIPLIER;
 
-        await tx.user.update({
+        await tx.users.update({
           where: { id: feeAccount.id },
           data: { balance: newFeeBalance },
         });
@@ -316,7 +298,7 @@ export async function POST(request: Request) {
         const newAmmBalanceCents = ammAccountBalanceCents + netAmountCents;
         const newAmmBalance = newAmmBalanceCents / PRECISION_MULTIPLIER;
 
-        await tx.user.update({
+        await tx.users.update({
           where: { id: ammAccount.id },
           data: { balance: newAmmBalance },
         });
@@ -337,7 +319,7 @@ export async function POST(request: Request) {
           // 🔥 修复：空池处理（参考 Polymarket 设计，允许在空池中交易）
           // 如果市场总交易量为 0，使用默认价格 0.5（50%）
           if (currentTotalVolume <= 0) {
-            console.log('⚠️ [Orders API] 市场总交易量为 0，使用默认价格 0.5');
+
             executionPrice = 0.5; // 默认价格 50%
           } else {
             // 🔥 实际成交价格（基于更新前的 Market 状态，这是用户实际买入的价格）
@@ -361,7 +343,7 @@ export async function POST(request: Request) {
           
           // 然后更新 Market 的交易量和价格
           // 🔥 修复：只更新 internalVolume（内部交易量），不覆盖 externalVolume
-          const marketInternalVolumeCents = Math.round((market.internalVolume || 0) * PRECISION_MULTIPLIER);
+          const marketInternalVolumeCents = Math.round(((market as any).internalVolume || 0) * PRECISION_MULTIPLIER);
           const marketTotalYesCents = Math.round(market.totalYes * PRECISION_MULTIPLIER);
           const marketTotalNoCents = Math.round(market.totalNo * PRECISION_MULTIPLIER);
           
@@ -382,13 +364,13 @@ export async function POST(request: Request) {
           // 🔥 同时更新 totalVolume 保持向后兼容（使用 calculateDisplayVolume 计算）
           const { calculateDisplayVolume } = await import('@/lib/marketUtils');
           const displayVolume = calculateDisplayVolume({
-            source: market.source || 'INTERNAL',
-            externalVolume: market.externalVolume || 0,
+            source: (market as any).source || 'INTERNAL',
+            externalVolume: (market as any).externalVolume || 0,
             internalVolume: newInternalVolume,
-            manualOffset: market.manualOffset || 0,
+            manualOffset: (market as any).manualOffset || 0,
           });
           
-          updatedMarket = await tx.market.update({
+          const prismaMarket = await tx.markets.update({
             where: { id: marketId },
             data: {
               internalVolume: newInternalVolume, // 🔥 只更新内部交易量
@@ -397,6 +379,8 @@ export async function POST(request: Request) {
               totalNo: newTotalNo,
             },
           });
+          // 🔥 类型转换：Prisma 返回的 Market 类型与自定义 Market 类型不完全匹配
+          updatedMarket = prismaMarket as any;
         } else {
           // LIMIT 订单：不更新 Market（因为还未成交）
           // Market 数据保持不变
@@ -459,27 +443,16 @@ export async function POST(request: Request) {
         }
 
         // 🔥 调试日志：打印即将写入的数据
-        console.log('🔍 [Orders API] 准备创建订单:', {
-          orderType: validOrderType,
-          status: safeOrderStatus,
-          limitPrice: orderData.limitPrice,
-          amount: safeAmount,
-          filledAmount: safeFilledAmount,
-          calculatedShares: validOrderType === 'MARKET' ? calculatedShares : 'N/A (LIMIT order)',
-          feeDeducted: safeFeeDeducted,
-          userId: userId,
-          marketId: marketId,
-          outcomeSelection: outcomeSelection,
-        });
 
-        const newOrder = await tx.order.create({
+        const newOrder = await tx.orders.create({
           data: orderData,
         });
 
         // 🔥 2. 记录 Transaction 流水（三条记录）
         // 2.1 用户交易记录：扣除总金额
-        await tx.transaction.create({
+        await tx.transactions.create({
           data: {
+            id: randomUUID(),
             userId: userId,
             amount: -amountNum, // 负数表示扣除
             type: TransactionType.BET,
@@ -489,8 +462,9 @@ export async function POST(request: Request) {
         });
 
         // 2.2 手续费账户收入记录
-        await tx.transaction.create({
+        await tx.transactions.create({
           data: {
+            id: randomUUID(),
             userId: feeAccount.id,
             amount: feeDeducted, // 正数表示收入
             type: TransactionType.ADMIN_ADJUSTMENT, // 使用 ADMIN_ADJUSTMENT 表示系统账户调整
@@ -500,8 +474,9 @@ export async function POST(request: Request) {
         });
 
         // 2.3 AMM 资金池存入记录
-        await tx.transaction.create({
+        await tx.transactions.create({
           data: {
+            id: randomUUID(),
             userId: ammAccount.id,
             amount: netAmount, // 正数表示存入
             type: TransactionType.ADMIN_ADJUSTMENT, // 使用 ADMIN_ADJUSTMENT 表示系统账户调整
@@ -519,7 +494,7 @@ export async function POST(request: Request) {
           // 🔥 注意：calculatedShares 和 executionPrice 已经在步骤 2 中计算完成
           // 🔥 executionPrice 是基于更新前的 Market 状态计算的，这是用户实际成交的价格
           // 查询是否已存在OPEN Position
-          const existingPosition = await tx.position.findFirst({
+          const existingPosition = await tx.positions.findFirst({
             where: {
               userId,
               marketId,
@@ -534,7 +509,7 @@ export async function POST(request: Request) {
             const newShares = existingPosition.shares + calculatedShares;
             const newAvgPrice = (existingPosition.shares * existingPosition.avgPrice + calculatedShares * executionPrice) / newShares;
             
-            updatedPosition = await tx.position.update({
+            updatedPosition = await tx.positions.update({
               where: { id: existingPosition.id },
               data: {
                 shares: newShares,
@@ -546,9 +521,10 @@ export async function POST(request: Request) {
             // 🔥 使用 executionPrice（实际成交价格）作为 avgPrice
             // 🔥 使用 UUID 格式（与 schema 定义一致：@id @default(uuid())）
             const positionId = randomUUID();
-            updatedPosition = await tx.position.create({
+            updatedPosition = await tx.positions.create({
               data: {
                 id: positionId,
+                updatedAt: new Date(),
                 userId,
                 marketId,
                 outcome: outcomeSelection as Outcome,
@@ -592,19 +568,15 @@ export async function POST(request: Request) {
       });
       
       const { updatedUser, updatedMarket, newOrder, updatedPosition } = result;
-      
-      console.log('✅ [Orders API] 事务执行成功:', {
-        orderId: newOrder.id,
-        userId: updatedUser.id,
-        updatedBalance: updatedUser.balance,
-        marketId: updatedMarket.id,
-        orderType: newOrder.orderType,
-        status: newOrder.status,
-        limitPrice: newOrder.limitPrice,
-        filledAmount: newOrder.filledAmount,
-        hasPosition: !!updatedPosition,
-        newTotalVolume: updatedMarket.totalVolume,
-      });
+
+      // 🔥 返佣分发：只有在 MARKET 订单成交后才分发返佣
+      if (validOrderType === 'MARKET' && newOrder.status === 'FILLED') {
+        // 异步执行返佣分发（不阻塞响应）
+        distributeCommission(newOrder.id, userId, amountNum).catch((error) => {
+          // 记录错误但不影响订单创建
+          console.error('❌ [Orders API] 返佣分发失败（不影响订单）:', error);
+        });
+      }
       
       // 返回创建成功的订单信息和更新后的用户余额
       return NextResponse.json({

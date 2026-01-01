@@ -1,20 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { toast } from "sonner";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 export default function RegisterPage() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
+  
+  // 从 URL 参数获取邀请码
+  const referralCode = searchParams?.get('ref') || undefined;
   
   // 强制开启文本选择（DOM 注入）
   useEffect(() => {
@@ -52,14 +58,21 @@ export default function RegisterPage() {
     // 验证邮箱格式
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      setError("请输入有效的邮箱地址");
+      setError(t('auth.errors.invalid_email'));
+      setIsLoading(false);
+      return;
+    }
+
+    // 验证密码长度
+    if (password.length < 6) {
+      setError(t('auth.errors.password_length'));
       setIsLoading(false);
       return;
     }
 
     // 验证密码确认
     if (password !== confirmPassword) {
-      setError("密码和确认密码不匹配");
+      setError(t('auth.errors.password_mismatch'));
       setIsLoading(false);
       return;
     }
@@ -74,6 +87,7 @@ export default function RegisterPage() {
         body: JSON.stringify({
           email,
           password,
+          referralCode: referralCode, // 传递邀请码
         }),
       });
 
@@ -85,7 +99,7 @@ export default function RegisterPage() {
         
         // 显示成功提示
         try {
-          toast.success("注册成功，正在登录...");
+          toast.success(t('auth.register.success'));
         } catch (e) {
           console.error("toast failed", e);
         }
@@ -114,7 +128,7 @@ export default function RegisterPage() {
         console.error("toast failed", e);
       }
     } catch (err) {
-      const errorMessage = "注册失败，请稍后重试";
+      const errorMessage = t('auth.register.error');
       setError(errorMessage);
       try {
         toast.error(errorMessage);
@@ -131,9 +145,9 @@ export default function RegisterPage() {
       <div className="flex-1 flex items-center justify-center p-4 md:p-6 lg:p-8">
         <div className="w-full max-w-md">
           <div className="bg-pm-card rounded-xl border border-pm-border p-8 shadow-2xl">
-            <h1 className="text-2xl font-bold text-white mb-2">注册</h1>
+            <h1 className="text-2xl font-bold text-white mb-2">{t('auth.register.title')}</h1>
             <p className="text-pm-text-dim text-sm mb-6">
-              创建新账户以开始交易
+              {t('auth.register.subtitle')}
             </p>
 
             <div className="space-y-3 mb-6">
@@ -144,10 +158,10 @@ export default function RegisterPage() {
                     const result = await signIn("google", {
                       callbackUrl: "/",
                       redirect: true,
-                    });
+                    }) as { error?: string } | undefined;
                     if (result?.error) {
                       try {
-                        toast.error("Google 登录失败");
+                        toast.error(t('auth.register.error_google'));
                       } catch (e) {
                         console.error("toast failed", e);
                       }
@@ -155,7 +169,7 @@ export default function RegisterPage() {
                   } catch (error) {
                     console.error("Google sign in error:", error);
                     try {
-                      toast.error("Google 登录失败，请稍后重试");
+                      toast.error(t('auth.register.error_google'));
                     } catch (e) {
                       console.error("toast failed", e);
                     }
@@ -163,7 +177,7 @@ export default function RegisterPage() {
                 }}
                 className="w-full bg-pm-bg border border-pm-border hover:bg-pm-card-hover text-white font-medium py-3 rounded-lg transition-all text-sm"
               >
-                使用 Google 邮箱注册
+                {t('auth.register.google_register')}
               </button>
             </div>
 
@@ -179,7 +193,7 @@ export default function RegisterPage() {
                   htmlFor="email"
                   className="block text-sm font-medium text-pm-text-dim mb-2 pointer-events-auto"
                 >
-                  邮箱
+                  {t('auth.register.email_label')}
                 </label>
                 <input
                   id="email"
@@ -198,7 +212,7 @@ export default function RegisterPage() {
                   }}
                   required
                   className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all select-text pointer-events-auto"
-                  placeholder="example@email.com"
+                  placeholder={t('auth.register.email_placeholder')}
                   style={{
                     userSelect: 'text',
                     WebkitUserSelect: 'text',
@@ -214,7 +228,7 @@ export default function RegisterPage() {
                   htmlFor="password"
                   className="block text-sm font-medium text-pm-text-dim mb-2 pointer-events-auto"
                 >
-                  密码
+                  {t('auth.register.password_label')}
                 </label>
                 <input
                   id="password"
@@ -234,7 +248,7 @@ export default function RegisterPage() {
                   required
                   minLength={6}
                   className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all select-text pointer-events-auto"
-                  placeholder="至少6个字符"
+                  placeholder={t('auth.register.password_placeholder')}
                   style={{
                     userSelect: 'text',
                     WebkitUserSelect: 'text',
@@ -250,7 +264,7 @@ export default function RegisterPage() {
                   htmlFor="confirmPassword"
                   className="block text-sm font-medium text-pm-text-dim mb-2 pointer-events-auto"
                 >
-                  确认密码
+                  {t('auth.register.confirm_password_label')}
                 </label>
                 <input
                   id="confirmPassword"
@@ -270,7 +284,7 @@ export default function RegisterPage() {
                   required
                   minLength={6}
                   className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all select-text pointer-events-auto"
-                  placeholder="再次输入密码"
+                  placeholder={t('auth.register.confirm_password_placeholder')}
                   style={{
                     userSelect: 'text',
                     WebkitUserSelect: 'text',
@@ -289,22 +303,22 @@ export default function RegisterPage() {
                 {isLoading ? (
                   <>
                     <div className="w-5 h-5 border-2 border-pm-bg border-t-transparent rounded-full animate-spin" />
-                    注册中...
+                    {t('auth.register.submitting')}
                   </>
                 ) : (
-                  "注册"
+                  t('auth.register.submit')
                 )}
               </button>
             </form>
 
             <div className="mt-6 text-center">
               <p className="text-pm-text-dim text-sm">
-                已有账户？{" "}
+                {t('auth.register.has_account')}{" "}
                 <Link
                   href="/login"
                   className="text-pm-green hover:text-green-400 font-medium"
                 >
-                  立即登录
+                  {t('auth.register.login_link')}
                 </Link>
               </p>
             </div>

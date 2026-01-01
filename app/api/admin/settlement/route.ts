@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from "@/lib/authExport";
 import { prisma } from '@/lib/prisma';
 import dayjs from '@/lib/dayjs';
-import { MarketStatus } from '@/types/data';
+import { MarketStatus, Outcome } from '@/types/data';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,15 +20,7 @@ export async function GET(request: NextRequest) {
     const session = await auth();
     
     // 🔥 调试日志：打印 session 信息
-    console.log('🔍 [Settlement GET API] Session 信息:', {
-      hasSession: !!session,
-      hasUser: !!(session?.user),
-      userId: session?.user?.id,
-      userEmail: session?.user?.email,
-      userRole: (session?.user as any)?.role,
-      isAdmin: (session?.user as any)?.isAdmin,
-    });
-    
+
     if (!session || !session.user) {
       console.error('❌ [Settlement GET API] Session 验证失败: session 或 user 为空');
       return NextResponse.json(
@@ -47,20 +39,13 @@ export async function GET(request: NextRequest) {
     }
     
     // 🔥 修复：直接从数据库查询 isAdmin，不依赖 session
-    const dbUser = await prisma.user.findUnique({
+    const dbUser = await prisma.users.findUnique({
       where: { email: userEmail },
       select: { id: true, isAdmin: true, isBanned: true },
     });
     
     // 🔥 调试日志：打印数据库查询结果
-    console.log('🔍 [Settlement GET API] 数据库用户查询结果:', {
-      found: !!dbUser,
-      userId: dbUser?.id,
-      isAdmin: dbUser?.isAdmin,
-      isBanned: dbUser?.isBanned,
-      email: userEmail,
-    });
-    
+
     if (!dbUser) {
       console.error('❌ [Settlement GET API] 用户不存在于数据库');
       return NextResponse.json(
@@ -84,14 +69,12 @@ export async function GET(request: NextRequest) {
         { status: 403 }
       );
     }
-    
-    console.log('✅ [Settlement GET API] 权限验证通过，用户ID:', dbUser.id);
 
     const now = dayjs.utc();
     const twentyFourHoursAgo = now.subtract(24, 'hour');
 
     // 1. 查询已结束但尚未结算的市场（需要处理）
-    const pendingSettlement = await prisma.market.findMany({
+    const pendingSettlement = await prisma.markets.findMany({
       where: {
         isActive: true,
         reviewStatus: 'PUBLISHED',
@@ -110,7 +93,7 @@ export async function GET(request: NextRequest) {
     });
 
     // 2. 查询最近 24 小时已结算的市场（监控）
-    const recentlySettled = await prisma.market.findMany({
+    const recentlySettled = await prisma.markets.findMany({
       where: {
         isActive: true,
         reviewStatus: 'PUBLISHED',
@@ -152,7 +135,10 @@ export async function GET(request: NextRequest) {
         settlementEvidence = {
           type: 'Price_Oracle',
           strikePrice: convertToNumber(market.strikePrice),
-          settlementPrice: market.resolvedOutcome ? convertToNumber(market.strikePrice) : null, // TODO: 添加 settlementPrice 字段存储实际结算价
+          // 🔥 当前实现：对于已结算的市场，使用 strikePrice 作为结算价（工厂市场的结算价通常等于行权价）
+          // 💡 未来改进：如果需要在 Market 模型中添加 settlementPrice 字段来存储实际结算价（从 Oracle 获取的最终价格），
+          //    可以创建 migration 添加该字段，然后在结算时存储实际结算价
+          settlementPrice: market.resolvedOutcome ? convertToNumber(market.strikePrice) : null,
           result: market.resolvedOutcome,
         };
       } else if (!isFactory && market.externalId) {
@@ -187,9 +173,13 @@ export async function GET(request: NextRequest) {
         settlementType,
         settlementEvidence,
         isPending, // 是否待结算
-        // 结算错误信息（如果有的话，可以从结算日志中获取）
-        settlementError: null, // TODO: 从结算日志表获取
-        settlementAttempts: 0, // TODO: 从结算日志表获取
+        // 💡 结算错误信息：当前实现返回 null/0，因为没有结算日志表
+        // 💡 未来改进：如果需要记录结算失败的历史，可以创建 SettlementLog 表来记录：
+        //    - settlementError: 最后一次结算失败的错误信息
+        //    - settlementAttempts: 结算尝试次数
+        //    然后在这里查询 SettlementLog 表获取这些信息
+        settlementError: null,
+        settlementAttempts: 0,
       };
     };
 
@@ -286,15 +276,7 @@ export async function POST(request: NextRequest) {
     const session = await auth();
     
     // 🔥 调试日志：打印 session 信息
-    console.log('🔍 [Settlement POST API] Session 信息:', {
-      hasSession: !!session,
-      hasUser: !!(session?.user),
-      userId: session?.user?.id,
-      userEmail: session?.user?.email,
-      userRole: (session?.user as any)?.role,
-      isAdmin: (session?.user as any)?.isAdmin,
-    });
-    
+
     if (!session || !session.user) {
       console.error('❌ [Settlement POST API] Session 验证失败: session 或 user 为空');
       return NextResponse.json(
@@ -313,20 +295,13 @@ export async function POST(request: NextRequest) {
     }
     
     // 🔥 修复：直接从数据库查询 isAdmin，不依赖 session
-    const dbUser = await prisma.user.findUnique({
+    const dbUser = await prisma.users.findUnique({
       where: { email: userEmail },
       select: { id: true, isAdmin: true, isBanned: true },
     });
     
     // 🔥 调试日志：打印数据库查询结果
-    console.log('🔍 [Settlement POST API] 数据库用户查询结果:', {
-      found: !!dbUser,
-      userId: dbUser?.id,
-      isAdmin: dbUser?.isAdmin,
-      isBanned: dbUser?.isBanned,
-      email: userEmail,
-    });
-    
+
     if (!dbUser) {
       console.error('❌ [Settlement POST API] 用户不存在于数据库');
       return NextResponse.json(
@@ -350,8 +325,6 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-    
-    console.log('✅ [Settlement POST API] 权限验证通过，用户ID:', dbUser.id);
 
     const body = await request.json();
     const { marketId, forceOutcome } = body;
@@ -364,8 +337,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 调用结算逻辑
-    const { settleMarket } = await import('@/lib/factory/settlement');
-    const market = await prisma.market.findUnique({
+    const { executeSettlement } = await import('@/lib/factory/settlement');
+    const market = await prisma.markets.findUnique({
       where: { id: marketId },
     });
 
@@ -378,168 +351,38 @@ export async function POST(request: NextRequest) {
 
     // 如果是强制手动结算，使用指定的 outcome
     if (forceOutcome) {
-      // 直接调用结算逻辑（不通过 HTTP）
-      const { DBService } = await import('@/lib/dbService'); // 🔥 修复：使用正确的 dbService 而不是 mockData
-      const { MarketStatus, Outcome } = await import('@/types/data');
+      // 直接调用结算逻辑
+      const result = await executeSettlement(marketId, forceOutcome as Outcome);
       
-      const orders = await prisma.order.findMany({
-        where: { marketId },
-      });
-
-      const result = await prisma.$transaction(async (tx) => {
-        // 计算结算逻辑
-        const totalFees = orders.reduce((sum, o) => sum + (o.feeDeducted || 0), 0);
-        const netTotalPool = (market.totalVolume || 0) - totalFees;
-        const winningOrders = orders.filter(o => o.outcomeSelection === (forceOutcome as Outcome));
-        const winningPoolFees = winningOrders.reduce((sum, o) => sum + (o.feeDeducted || 0), 0);
-        const winningPool = forceOutcome === 'YES' ? (market.totalYes || 0) : (market.totalNo || 0);
-        const netWinningPool = winningPool - winningPoolFees;
-        const userPayouts = new Map<string, number>();
-
-        for (const order of orders) {
-          if (order.outcomeSelection === (forceOutcome as Outcome)) {
-            if (netWinningPool > 0) {
-              const payoutRate = netTotalPool / netWinningPool;
-              const netInvestment = order.amount - (order.feeDeducted || 0);
-              const payout = netInvestment * payoutRate;
-              const currentPayout = userPayouts.get(order.userId) || 0;
-              userPayouts.set(order.userId, currentPayout + payout);
-              await tx.order.update({
-                where: { id: order.id },
-                data: { payout },
-              });
-            } else {
-              await tx.order.update({
-                where: { id: order.id },
-                data: { payout: 0 },
-              });
-            }
-          } else {
-            await tx.order.update({
-              where: { id: order.id },
-              data: { payout: 0 },
-            });
-          }
-        }
-
-        for (const [userId, payout] of userPayouts.entries()) {
-          if (payout > 0) {
-            await tx.user.update({
-              where: { id: userId },
-              data: { balance: { increment: payout } },
-            });
-          }
-        }
-
-        const updatedMarket = await tx.market.update({
-          where: { id: marketId },
-          data: {
-            status: MarketStatus.RESOLVED,
-            resolvedOutcome: forceOutcome as Outcome,
-          },
-        });
-
-        return updatedMarket;
-      });
-
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error || '结算失败' },
+          { status: 500 }
+        );
+      }
+      
       return NextResponse.json({
         success: true,
-        message: '强制结算成功',
-        data: result,
+        outcome: result.outcome,
+        statistics: result.statistics,
       });
-      } else {
-        // 自动重试结算：直接调用工厂结算逻辑
-        if (market.isFactory && market.symbol) {
-          try {
-            const { getPrice } = await import('@/lib/oracle');
-            const { MarketStatus, Outcome } = await import('@/types/data');
-            
-            // 获取 Oracle 价格
-            const priceResult = await getPrice(market.symbol);
-            const settlementPrice = priceResult.price;
-            
-            if (!market.strikePrice || market.strikePrice <= 0) {
-              throw new Error('市场缺少有效的 strikePrice');
-            }
-            
-            const strikePrice = Number(market.strikePrice);
-            const autoOutcome = settlementPrice > strikePrice ? Outcome.YES : Outcome.NO;
-            
-            // 执行结算逻辑
-            const orders = await prisma.order.findMany({ where: { marketId } });
-            const result = await prisma.$transaction(async (tx) => {
-              const totalFees = orders.reduce((sum, o) => sum + (o.feeDeducted || 0), 0);
-              const netTotalPool = (market.totalVolume || 0) - totalFees;
-              const winningOrders = orders.filter(o => o.outcomeSelection === autoOutcome);
-              const winningPoolFees = winningOrders.reduce((sum, o) => sum + (o.feeDeducted || 0), 0);
-              const winningPool = autoOutcome === Outcome.YES ? (market.totalYes || 0) : (market.totalNo || 0);
-              const netWinningPool = winningPool - winningPoolFees;
-              const userPayouts = new Map<string, number>();
-
-              for (const order of orders) {
-                if (order.outcomeSelection === autoOutcome) {
-                  if (netWinningPool > 0) {
-                    const payoutRate = netTotalPool / netWinningPool;
-                    const netInvestment = order.amount - (order.feeDeducted || 0);
-                    const payout = netInvestment * payoutRate;
-                    const currentPayout = userPayouts.get(order.userId) || 0;
-                    userPayouts.set(order.userId, currentPayout + payout);
-                    await tx.order.update({
-                      where: { id: order.id },
-                      data: { payout },
-                    });
-                  } else {
-                    await tx.order.update({
-                      where: { id: order.id },
-                      data: { payout: 0 },
-                    });
-                  }
-                } else {
-                  await tx.order.update({
-                    where: { id: order.id },
-                    data: { payout: 0 },
-                  });
-                }
-              }
-
-              for (const [userId, payout] of userPayouts.entries()) {
-                if (payout > 0) {
-                  await tx.user.update({
-                    where: { id: userId },
-                    data: { balance: { increment: payout } },
-                  });
-                }
-              }
-
-              return await tx.market.update({
-                where: { id: marketId },
-                data: {
-                  status: MarketStatus.RESOLVED,
-                  resolvedOutcome: autoOutcome,
-                },
-              });
-            });
-
-            return NextResponse.json({
-              success: true,
-              outcome: autoOutcome,
-              settlementPrice,
-              message: `结算成功：结算价 $${settlementPrice.toFixed(2)} > 行权价 $${strikePrice.toFixed(2)} -> 结果 ${autoOutcome}`,
-              data: result,
-            });
-          } catch (err: any) {
-            return NextResponse.json({
-              success: false,
-              error: `重试结算失败: ${err.message}`,
-            }, { status: 500 });
-          }
-        } else {
-          return NextResponse.json({
-            success: false,
-            error: '非工厂市场请使用强制结算功能指定结果',
-          }, { status: 400 });
-        }
+    } else {
+      // 自动结算
+      const result = await executeSettlement(marketId);
+      
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error || '结算失败' },
+          { status: 500 }
+        );
       }
+      
+      return NextResponse.json({
+        success: true,
+        outcome: result.outcome,
+        statistics: result.statistics,
+      });
+    }
   } catch (error: any) {
     console.error('❌ [Settlement Retry API] 重试结算失败:', error);
     return NextResponse.json(

@@ -2,6 +2,7 @@
 
 import { Activity } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface GlobalStat {
   id: string;
@@ -12,6 +13,7 @@ interface GlobalStat {
 }
 
 export default function MarketOverview() {
+  const { t } = useLanguage();
   const [stats, setStats] = useState<GlobalStat[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -57,15 +59,15 @@ export default function MarketOverview() {
       <div className="p-5">
         <h3 className="text-white text-sm font-bold mb-5 flex items-center gap-2 uppercase tracking-wider">
           <Activity className="w-4 h-4 text-primary animate-pulse" />
-          预测市场实时数据
+          {t('home.sidebar.title')}
         </h3>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="text-text-secondary text-sm">加载中...</div>
+            <div className="text-text-secondary text-sm">{t('home.sidebar.loading')}</div>
           </div>
         ) : stats.length === 0 ? (
           <div className="flex items-center justify-center py-8">
-            <div className="text-text-secondary text-sm">暂无数据</div>
+            <div className="text-text-secondary text-sm">{t('home.sidebar.no_data')}</div>
           </div>
         ) : (
           <div className="flex flex-col gap-0">

@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { auth } from '@/lib/authExport';
 import { prisma } from '@/lib/prisma';
 import { syncOdds } from '@/lib/scrapers/oddsRobot';
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     // 🔥 核心修复：严格校验 adminId
     let adminUserId: string | null = null;
     if (userEmail) {
-      const adminUser = await prisma.user.findUnique({
+      const adminUser = await prisma.users.findUnique({
         where: { email: userEmail },
         select: { id: true },
       });
@@ -49,15 +50,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 🔥 立即触发赔率同步
-    console.log('🔄 [Odds Robot Force Update API] 开始执行赔率同步...');
-    
+
     const syncResult = await syncOdds();
 
     // 🔥 核心修复：只有在获取到有效的 adminId 时才记录日志
     if (adminUserId) {
       try {
-        await prisma.adminLog.create({
+        await prisma.admin_logs.create({
           data: {
+            id: randomUUID(),
+            updatedAt: new Date(),
             adminId: adminUserId, // 使用已验证的 adminId
             actionType: 'ODDS_ROBOT_FORCE_UPDATE',
             details: `立即强制更新赔率: 检查 ${syncResult.itemsCount} 个，加入队列 ${syncResult.queuedCount} 个，过滤 ${syncResult.filteredCount} 个（命中率: ${syncResult.diffHitRate}%）`,

@@ -33,14 +33,14 @@ export async function GET(request: NextRequest) {
     }
 
     // 获取所有模板
-    const templates = await prisma.marketTemplate.findMany({
+    const templates = await prisma.market_templates.findMany({
       orderBy: { createdAt: 'desc' },
     });
 
     // 🔥 P0修复：统计所有运行中的模版（status = ACTIVE 或 isActive = true）
     // 只要在后台能看到模板正在运行，统计数字就必须正确
     // 简化逻辑：只要status是ACTIVE，或者isActive是true且status不是PAUSED，就统计
-    const activeTemplatesCount = await prisma.marketTemplate.count({
+    const activeTemplatesCount = await prisma.market_templates.count({
       where: {
         OR: [
           { status: 'ACTIVE' }, // status明确为ACTIVE
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const todayMarkets = await prisma.market.count({
+    const todayMarkets = await prisma.markets.count({
       where: {
         createdAt: {
           gte: today,
@@ -74,9 +74,9 @@ export async function GET(request: NextRequest) {
     // 🔥 获取心跳状态：最后工厂运行时间
     let lastFactoryRunAt: string | null = null;
     try {
-      // 🔥 修复：直接使用 prisma.systemSettings，与其他文件保持一致
+      // 🔥 修复：直接使用 prisma.system_settings，与其他文件保持一致
       // 如果模型不存在，Prisma 会在运行时抛出错误，由 catch 捕获
-      const heartbeatSetting = await prisma.systemSettings.findUnique({
+      const heartbeatSetting = await prisma.system_settings.findUnique({
         where: { key: 'lastFactoryRunAt' },
       });
       lastFactoryRunAt = heartbeatSetting?.value || null;

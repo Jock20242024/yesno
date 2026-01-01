@@ -9,6 +9,7 @@
 
 import { prisma } from '@/lib/prisma';
 import dayjs from '@/lib/dayjs';
+import { randomUUID } from 'crypto';
 
 interface MarketTemplate {
   id: string;
@@ -106,7 +107,7 @@ async function fetchMarkets(force: boolean = false): Promise<any[]> {
   globalCache._isFetching = true;
   // 🔥 性能优化：仅在强制刷新时输出日志
   if (force) {
-    console.log(`🔒 [GlobalCache] 启动抓取锁，开始全量抓取开放市场（强制刷新模式）...`);
+
   }
   
   try {
@@ -314,7 +315,7 @@ async function fetchMarkets(force: boolean = false): Promise<any[]> {
       globalCache._lastFetchTime = Date.now();
       // 🔥 性能优化：仅在强制刷新时输出日志
       if (force) {
-        console.log(`💾 [GlobalCache] ✅ 已更新全局缓存: ${allMarkets.length} 个市场，缓存有效期 5 分钟 (强制刷新完成)`);
+
       }
     } else {
       // 🔥 性能优化：仅在强制刷新且失败时输出警告
@@ -497,7 +498,6 @@ async function getStartingPrice(template: MarketTemplate): Promise<number> {
     }
 
     if (seriesId) {
-      console.log(`📋 [FactoryEngine] 尝试从Polymarket获取起始价格 (series_id: ${seriesId}, ${template.symbol} ${template.period}分钟)`);
 
       try {
         // 2. 直接请求对应的series API
@@ -542,7 +542,7 @@ async function getStartingPrice(template: MarketTemplate): Promise<number> {
                       : null;
                     
                     if (lineValue !== null && !isNaN(lineValue) && lineValue > 0) {
-                      console.log(`💰 [FactoryEngine] ✅ 从Polymarket line字段提取到起始价格: $${lineValue.toFixed(2)}`);
+
                       return lineValue; // 成功获取，直接返回
                     }
                   }
@@ -557,11 +557,11 @@ async function getStartingPrice(template: MarketTemplate): Promise<number> {
         console.warn(`⚠️ [FactoryEngine] Polymarket API请求失败: ${error.message}`);
       }
     } else {
-      console.log(`📋 [FactoryEngine] 模板没有seriesId，直接使用Oracle实时市价`);
+
     }
     
     // 5. 强制兜底：如果Polymarket未提供有效数据，使用Oracle实时市价
-    console.log(`🔄 [FactoryEngine] Polymarket未提供有效line值，切换到Oracle实时市价作为兜底...`);
+
     return await getPriceFromOracle(template.symbol);
     
   } catch (error: any) {
@@ -583,7 +583,7 @@ async function getPriceFromOracle(symbol: string): Promise<number> {
     const price = priceResult.price;
     
     if (price && price > 0) {
-      console.log(`💰 [FactoryEngine] ✅ 从Oracle获取到实时市价: $${price.toFixed(2)} (${symbol}, 来源: ${priceResult.source})`);
+
       return price;
     } else {
       throw new Error(`Oracle返回无效价格: ${price}`);
@@ -775,7 +775,7 @@ async function syncMarketOddsImmediately(marketId: string, externalId: string): 
     }
 
     // 🚀 查询市场当前状态，检查是否需要重置 AMM Pool
-    const currentMarket = await prisma.market.findUnique({
+    const currentMarket = await prisma.markets.findUnique({
       where: { id: marketId },
       select: {
         id: true,
@@ -811,15 +811,14 @@ async function syncMarketOddsImmediately(marketId: string, externalId: string): 
       updateData.totalYes = calculatedYes;
       updateData.totalNo = calculatedNo;
 
-      console.log(`🔄 [FactoryEngine] 市场 ${marketId} 重置 AMM Pool: YES=${calculatedYes.toFixed(2)}, NO=${calculatedNo.toFixed(2)} (概率: YES=${yesProbability}%, NO=${100 - yesProbability}%)`);
     } else if (currentMarket.totalVolume > 0) {
-      console.log(`ℹ️ [FactoryEngine] 市场 ${marketId} 已有交易（totalVolume=${currentMarket.totalVolume}），跳过 Pool 重置`);
+
     } else if (yesProbability === null) {
-      console.log(`ℹ️ [FactoryEngine] 市场 ${marketId} 无法解析概率，跳过 Pool 重置`);
+
     }
 
     // 🔥 立即更新数据库
-    await prisma.market.update({
+    await prisma.markets.update({
       where: { id: marketId },
       data: updateData,
     });
@@ -995,7 +994,7 @@ function findBestMatchWithScoring(
 async function recordFailureAndCheckCircuitBreaker(templateId: string): Promise<boolean> {
   try {
     // 获取当前模板
-    const template = await prisma.marketTemplate.findUnique({
+    const template = await prisma.market_templates.findUnique({
       where: { id: templateId },
     });
 
@@ -1019,7 +1018,7 @@ async function recordFailureAndCheckCircuitBreaker(templateId: string): Promise<
       console.warn(`🔴 [FactoryEngine] 模板 ${templateId} 触发熔断：连续失败 ${newFailureCount} 次`);
     }
 
-    await prisma.marketTemplate.update({
+    await prisma.market_templates.update({
       where: { id: templateId },
       data: updateData,
     });
@@ -1036,7 +1035,7 @@ async function recordFailureAndCheckCircuitBreaker(templateId: string): Promise<
  */
 async function resetFailureCount(templateId: string): Promise<void> {
   try {
-    await prisma.marketTemplate.update({
+    await prisma.market_templates.update({
       where: { id: templateId },
       data: {
         failureCount: 0,
@@ -1068,14 +1067,6 @@ export async function shouldCreateMarket(template: MarketTemplate): Promise<bool
   
   // 如果距离下一个周期的时间小于等于提前时间，则应该创建
   const shouldCreate = secondsUntilNextPeriod <= template.advanceTime && secondsUntilNextPeriod > 0;
-
-  console.log(`🔍 [FactoryEngine] 模板 ${template.name}:`, {
-    now: now.toISOString(),
-    nextPeriodTime: nextPeriodTime.toISOString(),
-    secondsUntilNextPeriod: secondsUntilNextPeriod.toFixed(2),
-    advanceTime: template.advanceTime,
-    shouldCreate,
-  });
 
   return shouldCreate;
 }
@@ -1158,9 +1149,7 @@ export async function createMarketFromTemplate(
     // 🔧 关键修复：使用finalIsPast（同时检查startTime和endTime）
     // 注意：Prisma schema中MarketStatus没有PENDING，使用CLOSED表示过去场次
     const finalStatus = finalIsPast ? 'CLOSED' : 'OPEN';
-    
-    console.log(`🔍 [FactoryEngine] 状态计算: alignedStartTime=${alignedStartTime.toISOString()}, endTime=${endTime.toISOString()}, now=${nowMoment.toISOString()}, isPast=${isPast}, isPastByEndTime=${isPastByEndTime}, finalIsPast=${finalIsPast}, finalStatus=${finalStatus}, initialStatus=${initialStatus}`);
-    
+
     // 🔧 修复1：历史场次快速路径 - 绝对禁止调用Oracle或复杂逻辑，防止崩溃
     // 🔧 关键修复：使用finalIsPast而不是isPast
     if (finalIsPast) {
@@ -1170,7 +1159,7 @@ export async function createMarketFromTemplate(
       // 🔧 幂等性检查：基于closingDate（endTime）查找已存在的市场
       // 🔥 修复：使用精确匹配而不是范围检查，防止重复生成
       // 工厂市场的 closingDate 应该严格对齐到周期边界，使用精确匹配
-      const existingMarket = await prisma.market.findFirst({
+      const existingMarket = await prisma.markets.findFirst({
         where: {
           templateId: template.id,
           isFactory: true,
@@ -1186,7 +1175,7 @@ export async function createMarketFromTemplate(
       });
 
       if (existingMarket) {
-        console.log(`⏭️ [FactoryEngine] 历史市场已存在（去重检查），返回: ${existingMarket.id}, closingDate=${existingMarket.closingDate.toISOString()}`);
+
         return existingMarket.id;
       }
       
@@ -1218,8 +1207,10 @@ export async function createMarketFromTemplate(
         iconUrl = 'https://cryptologos.cc/logos/ethereum-eth-logo.png';
       }
       
-      const newMarket = await prisma.market.create({
+      const newMarket = await prisma.markets.create({
         data: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           title: marketTitle,
           description: '历史场次，价格待同步',
           symbol: template.symbol,
@@ -1243,7 +1234,7 @@ export async function createMarketFromTemplate(
       // console.log(`✅ [FactoryEngine] 历史场次创建成功（快速路径）: ${newMarket.id}, status=CLOSED, strikePrice=0`);
       
       // 更新模板记录
-      await prisma.marketTemplate.update({
+      await prisma.market_templates.update({
         where: { id: template.id },
         data: {
           lastMarketId: newMarket.id,
@@ -1259,7 +1250,7 @@ export async function createMarketFromTemplate(
     // 🔥 幂等性物理加锁：在创建前检查 templateId + closingDate（仅用于未来场次）
     // 注意：历史场次的幂等性检查已经在快速路径中完成
     // 🔥 修复：使用精确匹配而不是范围检查，防止重复生成
-    const existingMarketFuture = await prisma.market.findFirst({
+    const existingMarketFuture = await prisma.markets.findFirst({
       where: {
         templateId: template.id,
         isFactory: true,
@@ -1275,7 +1266,7 @@ export async function createMarketFromTemplate(
     });
 
     if (existingMarketFuture) {
-      console.log(`⏭️ [FactoryEngine] 未来市场已存在（去重检查），物理跳过: templateId=${template.id}, startTime=${startTime.toISOString()}, closingDate=${endTime.toISOString()}, existingMarketId=${existingMarketFuture.id}, existingClosingDate=${existingMarketFuture.closingDate.toISOString()}`);
+
       return existingMarketFuture.id;
     }
 
@@ -1287,8 +1278,7 @@ export async function createMarketFromTemplate(
     // 未来的场次：正常获取价格
     // 双重取价兜底：优先从Polymarket获取line值，失败则从Oracle获取实时市价
     startingPrice = await getStartingPrice(template);
-    console.log(`💰 [FactoryEngine] 获取到起始价格（起跑线）: $${startingPrice.toFixed(2)} (${template.symbol})`);
-    
+
     // 5. 🔥 拉链式精准绑定：根据标的和结束时间严格匹配 Polymarket 市场
     // 支持预绑定：对未来的市场也有效
     try {
@@ -1354,11 +1344,10 @@ export async function createMarketFromTemplate(
     };
     const periodSlugPart = periodSlugForMarket[template.period] || `${template.period}m`;
     const marketSlug = `${assetSymbol}-${periodSlugPart}-${Date.now()}`;
-    console.log(`🔗 [FactoryEngine] 生成市场slug: ${marketSlug}`);
 
     // 6. 生成description（显示起始参考价和周期信息）
     // 🚀 修复：基于finalStatus使用特殊描述
-    const description = finalStatus === 'PENDING'
+    const description = (finalStatus as string) === 'PENDING'
       ? `历史场次，价格待同步`
       : finalPrice > 0 
       ? `${template.symbol} ${periodLabel}周期预测市场，起始参考价: $${finalPrice.toFixed(2)}，时间窗口: ${startTimeStr} - ${endTimeStr}`
@@ -1388,12 +1377,12 @@ export async function createMarketFromTemplate(
     // 步骤3：只读匹配：仅使用 findUnique 查找现有分类
     let categoryRecord = null;
     if (categorySlug) {
-      categoryRecord = await prisma.category.findUnique({
+      categoryRecord = await prisma.categories.findUnique({
         where: { slug: categorySlug },
       });
       
       if (categoryRecord) {
-        console.log(`✅ [FactoryEngine] 找到分类: ${categoryRecord.id} (slug: ${categorySlug}, name: ${categoryRecord.name})`);
+
       } else {
         console.warn(`⚠️ [FactoryEngine] 未找到分类 '${categorySlug}'，将跳过分类关联（市场将出现在"所有市场"中）`);
       }
@@ -1464,8 +1453,12 @@ export async function createMarketFromTemplate(
     // console.log('FINAL_CHECK_PAYLOAD:', JSON.stringify(data, null, 2));
 
     // 10. 使用 Prisma 创建市场
-    const newMarket = await prisma.market.create({
-      data: data,
+    const newMarket = await prisma.markets.create({
+      data: {
+        ...data,
+        id: randomUUID(),
+        updatedAt: new Date(),
+      },
     });
 
     const newMarketId = newMarket.id;
@@ -1487,7 +1480,7 @@ export async function createMarketFromTemplate(
     }
 
     // 8. 更新模板的最后创建时间（市场创建成功即更新，无论externalId是否获取成功）
-    await prisma.marketTemplate.update({
+    await prisma.market_templates.update({
       where: { id: template.id },
       data: {
         lastMarketId: newMarketId,
@@ -1515,21 +1508,18 @@ export async function createMarketFromTemplate(
  */
 export async function checkAndCreateMarkets(): Promise<void> {
   try {
-    console.log('🔄 [FactoryEngine] 开始检查模板...');
 
     // 获取所有激活的模板（排除已熔断的）
     // 🔥 查询条件：isActive = true 且 (status = ACTIVE 或 status 为 null，兼容旧数据)
-    const templates = await prisma.marketTemplate.findMany({
+    const templates = await prisma.market_templates.findMany({
       where: {
         isActive: true,
         OR: [
           { status: 'ACTIVE' },
-          { status: null }, // 兼容旧数据（没有 status 字段的模板）
+          { status: null as any }, // 兼容旧数据（没有 status 字段的模板）
         ],
       },
     });
-
-    console.log(`📋 [FactoryEngine] 找到 ${templates.length} 个激活的模板`);
 
     for (const template of templates) {
       try {
@@ -1542,13 +1532,13 @@ export async function checkAndCreateMarkets(): Promise<void> {
             const halfPeriod = (template.period * 60 * 1000) / 2;
             
             if (timeSinceLastCreate < halfPeriod) {
-              console.log(`⏭️ [FactoryEngine] 模板 ${template.name} 最近已创建，跳过`);
+
               continue;
             }
           }
 
           await createMarketFromTemplate(template as MarketTemplate);
-          console.log(`✅ [FactoryEngine] 模板 ${template.name} 市场创建完成`);
+
         }
       } catch (error: any) {
         console.error(`❌ [FactoryEngine] 处理模板 ${template.name} 失败:`, error.message);

@@ -82,7 +82,7 @@ export async function verifyAdminToken(request?: Request | NextRequest): Promise
     // console.log('✅ [AdminAuth] 成功解析 userId:', userId);
 
     // 从数据库验证用户是否存在且为管理员
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: userId },
     });
 

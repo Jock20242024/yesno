@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { useParams, useRouter } from "next/navigation";
 
 interface MarketTemplate {
@@ -67,7 +68,7 @@ export default function TemplateEditPage() {
       }
     } catch (error) {
       console.error("获取模板详情失败:", error);
-      alert("获取模板详情失败");
+      toast.error("获取模板详情失败");
     } finally {
       setIsLoading(false);
     }
@@ -107,14 +108,14 @@ export default function TemplateEditPage() {
 
       const data = await response.json();
       if (data.success) {
-        alert("模板更新成功");
+        toast.success("模板更新成功");
         router.push('/admin/factory');
       } else {
-        alert(data.error || "更新失败");
+        toast.error(data.error || "更新失败");
       }
     } catch (error) {
       console.error("更新模板失败:", error);
-      alert("更新模板失败");
+      toast.error("更新模板失败");
     } finally {
       setIsUpdating(false);
     }

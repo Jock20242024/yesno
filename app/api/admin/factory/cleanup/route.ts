@@ -49,13 +49,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    console.log('💣 [Cleanup] 开始执行核弹清理任务...');
-    
     const now = dayjs.utc().toDate();
     
     // 🔥 修改：删除所有 isFactory=true 且 externalId=null 的工厂市场（无论状态如何）
     // 这些是无法匹配 Polymarket 的无效数据，应该全部清理
-    const marketsToDelete = await prisma.market.findMany({
+    const marketsToDelete = await prisma.markets.findMany({
       where: {
         isFactory: true, // 工厂市场
         externalId: null, // 无法关联 Polymarket（这是关键条件）
@@ -72,7 +70,7 @@ export async function DELETE(request: NextRequest) {
     const count = marketsToDelete.length;
     
     if (count === 0) {
-      console.log('✅ [Cleanup] 没有需要清理的市场');
+
       return NextResponse.json({
         success: true,
         message: '没有需要清理的市场',
@@ -80,17 +78,9 @@ export async function DELETE(request: NextRequest) {
         timestamp: new Date().toISOString(),
       });
     }
-    
-    console.log(`💣 [Cleanup] 找到 ${count} 个需要清理的市场`);
-    console.log('📋 [Cleanup] 待删除市场列表（前10个）:', marketsToDelete.slice(0, 10).map(m => ({
-      id: m.id,
-      title: m.title,
-      closingDate: m.closingDate.toISOString(),
-      status: m.status,
-    })));
-    
+
     // 执行物理删除（与查询条件一致）
-    const deleteResult = await prisma.market.deleteMany({
+    const deleteResult = await prisma.markets.deleteMany({
       where: {
         isFactory: true,
         status: {
@@ -99,9 +89,7 @@ export async function DELETE(request: NextRequest) {
         externalId: null, // 🔥 只删除 externalId 为 null 的（无论是否过期）
       },
     });
-    
-    console.log(`✅ [Cleanup] 清理完成：删除了 ${deleteResult.count} 个市场`);
-    
+
     return NextResponse.json({
       success: true,
       message: `清理完成：删除了 ${deleteResult.count} 个无法匹配 Polymarket ID 的工厂市场`,

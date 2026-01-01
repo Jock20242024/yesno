@@ -36,13 +36,13 @@ export async function GET(request: NextRequest) {
     }
 
     const [dbDeposits, total] = await Promise.all([
-      prisma.deposit.findMany({
+      prisma.deposits.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.deposit.count({ where }),
+      prisma.deposits.count({ where }),
     ]);
 
     // 转换为 API 格式（需要关联 User 表获取 email 作为 username）
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const deposits = await Promise.all(
       dbDeposits.map(async (deposit) => {
         // 可选：关联 User 表获取 email
-        const user = await prisma.user.findUnique({
+        const user = await prisma.users.findUnique({
           where: { id: deposit.userId },
           select: { email: true },
         });

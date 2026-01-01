@@ -1,0 +1,458 @@
+{
+  "navbar": {
+    "home": "首页",
+    "rank": "排行榜",
+    "assets": "资产",
+    "login": "登录",
+    "register": "注册",
+    "logout": "退出",
+    "profile": "个人中心",
+    "search_placeholder": "搜索市场"
+  },
+  "layout": {
+    "header": {
+      "total_assets": "总资产",
+      "available": "可用",
+      "rankings": "排行榜"
+    }
+  },
+  "home": {
+    "hero": {
+      "title_prefix": "预测未来",
+      "title_suffix": "赢取丰厚奖励",
+      "subtitle": "加入全球预测市场，参与各类事件的预测和交易，实时查看价格变化和趋势",
+      "feature_global": "全球趋势",
+      "feature_odds": "实时赔率",
+      "feature_security": "安全透明"
+    },
+    "categories": {
+      "data": "数据",
+      "hot": "热门",
+      "trending": "热门",
+      "crypto": "加密货币",
+      "politics": "政治",
+      "sports": "体育",
+      "finance": "金融",
+      "tech": "科技",
+      "technology": "科技",
+      "loading": "加载分类中..."
+    },
+    "market_list": {
+      "title": "热门市场",
+      "rank": "排名",
+      "event": "事件",
+      "prediction_probability": "预测概率 (Yes/No)",
+      "deadline": "截止日期",
+      "volume": "交易量",
+      "loading": "加载中...",
+      "loading_markets": "正在加载市场...",
+      "load_more": "加载更多",
+      "error": "获取数据失败",
+      "no_data": "暂无数据"
+    },
+    "sidebar": {
+      "title": "预测市场实时数据",
+      "start_journey": "开启您的预测之旅",
+      "register_desc": "注册 YesNo 账户，即可参与全球数千个热门话题的预测交易。",
+      "create_account": "创建免费账户",
+      "have_account": "已有账号？登录",
+      "newcomer_badge": "新人限定",
+      "register_bonus": "注册即送 100 体验金",
+      "bonus_desc": "零风险体验预测市场，盈利归您，亏损免单。",
+      "claim_bonus": "领取福利",
+      "volume_24h": "24h 交易量",
+      "active_events": "活跃预测事件",
+      "total_rewards": "累计发放奖励",
+      "loading": "加载中...",
+      "no_data": "暂无数据"
+    },
+    "status": {
+      "ending_soon": "即将截止",
+      "ended": "已结束",
+      "active": "进行中",
+      "days_later": "{days} 天后",
+      "hours_later": "{hours} 小时后"
+    }
+  },
+  "category": {
+    "loading": "加载市场中...",
+    "error": "加载数据失败",
+    "empty": {
+      "title": "暂无相关预测事件",
+      "description": "{category} 分类下暂时没有市场事件，去看看别的吧",
+      "view_data": "查看数据中心",
+      "browse_hot": "浏览热门市场"
+    }
+  },
+  "market": {
+    "trade": {
+      "buy": "买入",
+      "sell": "卖出",
+      "market": "Market (市价)",
+      "limit": "Limit (限价)",
+      "limit_price": "限价 (Limit Price)",
+      "current_price": "当前",
+      "amount": "金额 (Amount)",
+      "shares": "份额 (Shares)",
+      "available": "可用",
+      "market_price": "市场价格",
+      "limit_price_label": "限价",
+      "estimated_shares": "预估份额",
+      "estimated_return": "预估收到",
+      "roi": "收益率 (ROI)",
+      "insufficient_balance": "余额不足",
+      "insufficient_shares": "份额不足",
+      "no_position": "您当前没有持仓，无法卖出",
+      "price_at_max": "价格已达上限，无法买入",
+      "login_to_trade": "登录以交易",
+      "processing": "处理中...",
+      "waiting_settlement": "等待清算",
+      "buy_yes": "买入 Yes",
+      "buy_no": "买入 No",
+      "sell_yes": "卖出 Yes",
+      "sell_no": "卖出 No",
+      "market_closed": "市场已结束",
+      "congratulations": "恭喜获胜!",
+      "you_bet_on": "您压中了",
+      "redeemable_amount": "可兑换金额",
+      "redeem": "兑换奖金 (Redeem)",
+      "market_closed_msg": "市场已结束 (Market Closed)",
+      "price_impact": "价格影响",
+      "average_cost": "平均成本",
+      "set_limit_price": "请设置有效的限价（$0.01 - $0.99）",
+      "limit_price_too_low": "限价不能低于 $0.01",
+      "limit_price_too_high": "限价不能高于 $0.99",
+      "limit_price_not_set": "(未设置)",
+      "fill_at_best_price": "按当前市场最优价格成交",
+      "enter_valid_limit": "请输入有效的限价",
+      "enter_amount_or_shares": "请输入大于 0 的{type}",
+      "shares_insufficient": "您持有的 {outcome} 份额不足，当前持有 {shares} 份额"
+    },
+    "orderbook": {
+      "title": "订单簿",
+      "comments": "评论",
+      "holders": "持仓者",
+      "rules": "规则",
+      "loading": "加载订单簿中...",
+      "price_usd": "价格 (USD)",
+      "quantity": "数量",
+      "total_usd": "总计 (USD)",
+      "spread": "价差",
+      "no_data": "暂无订单数据",
+      "loading_order_data": "加载订单数据中..."
+    },
+    "comments": {
+      "write_comment": "写下你的评论...",
+      "post": "Post",
+      "no_comments": "暂无评论",
+      "coming_soon": "评论功能即将上线"
+    },
+    "time": {
+      "local_time": "当地时间",
+      "days": "天"
+    },
+    "chart": {
+      "more": "更多"
+    },
+    "position": {
+      "title": "我的持仓",
+      "shares": "持有份额",
+      "avg_price": "平均买入价",
+      "total_cost": "总投入",
+      "current_value": "当前价值",
+      "pnl": "盈亏",
+      "sell": "卖出",
+      "won": "获胜",
+      "expired": "作废",
+      "redeemable": "可兑换",
+      "zeroed": "已归零"
+    }
+  },
+  "portfolio": {
+    "stats": {
+      "total_value": "总资产估值",
+      "available": "可用余额",
+      "position_value": "持仓价值",
+      "deposit": "充值",
+      "withdraw": "提现",
+      "loading": "加载中...",
+      "past": "过去"
+    },
+    "tabs": {
+      "positions": "我的持仓",
+      "history": "交易历史",
+      "funding": "资金记录"
+    },
+    "table": {
+      "event": "事件",
+      "type": "类型",
+      "shares": "持有份额",
+      "avg_price": "均价",
+      "current_value": "当前价值",
+      "pnl": "盈亏",
+      "time": "时间",
+      "market": "市场",
+      "action": "操作",
+      "price": "价格",
+      "quantity": "数量",
+      "total": "总额",
+      "status": "状态",
+      "network": "网络",
+      "amount": "金额"
+    },
+    "status": {
+      "active": "进行中",
+      "resolved": "已结束",
+      "success": "成功",
+      "pending": "处理中",
+      "failed": "失败",
+      "completed": "已结算"
+    },
+    "empty": {
+      "no_positions_active": "暂无进行中的持仓",
+      "no_positions_resolved": "暂无已结束的持仓",
+      "no_history": "暂无交易历史",
+      "no_funding": "暂无资金记录",
+      "loading": "加载中..."
+    },
+    "types": {
+      "deposit": "充值",
+      "withdraw": "提现"
+    }
+  },
+  "wallet": {
+    "deposit": {
+      "title": "充值",
+      "tab_crypto": "存入数字货币",
+      "tab_fiat": "银行卡购买",
+      "select_crypto": "选择币种",
+      "select_network": "选择网络",
+      "wallet_address": "钱包地址",
+      "copy": "复制",
+      "copied": "已复制",
+      "copy_success": "地址已复制",
+      "copy_success_desc": "钱包地址已复制到剪贴板",
+      "copy_failed": "复制失败",
+      "copy_failed_desc": "请手动复制地址",
+      "scan_qr": "扫描二维码或复制地址",
+      "warning": "仅支持充值 {crypto} ({network})，充值其他资产将无法找回",
+      "amount_label": "购买金额",
+      "amount_placeholder": "0.00",
+      "est_receive": "预计收到 (Est. Receive)",
+      "fees_included": "包含第三方服务费 (Fees included)",
+      "select_provider": "选择支付渠道",
+      "recommended": "推荐",
+      "fee_rate": "费率 ~{fee}%",
+      "continue_pay": "前往支付 (Continue to Pay)",
+      "redirect_payment": "即将跳转至支付页面",
+      "redirect_payment_desc": "即将跳转至 {provider} 支付页面...",
+      "network_fee": "手续费",
+      "est_arrival": "预计 {time} 到账"
+    },
+    "withdraw": {
+      "title": "提现",
+      "select_crypto": "选择币种",
+      "address_label": "提现地址",
+      "address_placeholder_trc20": "TX8...",
+      "address_placeholder_erc20": "0x...",
+      "network_label": "转账网络",
+      "amount_label": "提现金额",
+      "available": "可用",
+      "max": "Max",
+      "amount_placeholder": "0.00",
+      "network_fee": "网络手续费 (Network Fee)",
+      "receive_amount": "实际到账 (Receive Amount)",
+      "submit": "确认提现",
+      "processing": "处理中...",
+      "success": "提现成功",
+      "success_desc": "已提交提现申请，预计 {time} 到账",
+      "network_fee_label": "手续费",
+      "est_arrival": "预计 {time} 到账"
+    },
+    "status": {
+      "pending": "处理中",
+      "success": "成功",
+      "failed": "失败"
+    }
+  },
+  "rank": {
+    "title": "排行榜",
+    "tabs": {
+      "today": "24H",
+      "weekly": "7D",
+      "monthly": "30D",
+      "all": "全部"
+    },
+    "table": {
+      "rank": "排名",
+      "user": "用户",
+      "trader": "交易员",
+      "pnl": "总盈亏",
+      "total_pnl": "总盈亏",
+      "win_rate": "胜率",
+      "volume": "交易量",
+      "type": "类型",
+      "market": "市场",
+      "value": "价值"
+    },
+    "search": {
+      "placeholder": "搜索用户名"
+    },
+    "loading": "加载中...",
+    "error": "加载失败",
+    "empty": "暂无排名数据",
+    "back_to_leaderboard": "返回排行榜",
+    "public": {
+      "no_positions": "暂无公开持仓",
+      "hidden_positions": "该用户隐藏了持仓信息"
+    },
+    "max_wins": {
+      "title": "本月最大胜利",
+      "empty": "暂无数据"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "登录",
+      "subtitle": "登录您的账户以开始交易",
+      "email_label": "邮箱",
+      "email_placeholder": "your@email.com",
+      "password_label": "密码",
+      "password_placeholder": "••••••••",
+      "submit": "登录",
+      "google_login": "使用 Google 登录",
+      "no_account": "还没有账户？",
+      "sign_up_link": "立即注册",
+      "success": "登录成功",
+      "error": "登录失败",
+      "error_credentials": "邮箱或密码错误",
+      "error_network": "网络错误，请稍后重试"
+    },
+    "register": {
+      "title": "注册",
+      "subtitle": "创建新账户以开始交易",
+      "email_label": "邮箱",
+      "email_placeholder": "example@email.com",
+      "password_label": "密码",
+      "password_placeholder": "至少6个字符",
+      "confirm_password_label": "确认密码",
+      "confirm_password_placeholder": "再次输入密码",
+      "submit": "注册",
+      "submitting": "注册中...",
+      "google_register": "使用 Google 邮箱注册",
+      "has_account": "已有账户？",
+      "login_link": "立即登录",
+      "success": "注册成功，正在登录...",
+      "error": "注册失败，请稍后重试",
+      "error_google": "Google 登录失败，请稍后重试"
+    },
+    "errors": {
+      "invalid_email": "请输入有效的邮箱地址",
+      "password_length": "密码至少 6 位",
+      "password_mismatch": "密码和确认密码不匹配"
+    }
+  },
+  "common": {
+    "time": {
+      "all": "全部",
+      "15m": "15分钟",
+      "1h": "1小时",
+      "4h": "4小时",
+      "daily": "每天",
+      "1d": "每天",
+      "weekly": "每周",
+      "1w": "每周",
+      "monthly": "每月",
+      "1M": "每月",
+      "premarket": "盘前"
+    }
+  },
+  "profile": {
+    "sidebar": {
+      "user_center": "个人中心",
+      "overview": "个人概览",
+      "settings": "账户设置",
+      "referral": "邀请返佣",
+      "api": "API 管理"
+    },
+    "stats": {
+      "portfolio_value": "持仓价值",
+      "max_win": "最大胜利",
+      "predictions_count": "预测次数",
+      "pnl": "利润/亏损"
+    },
+    "tabs": {
+      "positions": "持仓",
+      "activity": "动态"
+    },
+    "search_placeholder": "搜索持仓",
+    "sort": {
+      "value": "价值"
+    },
+    "empty": {
+      "positions": "暂无持仓",
+      "activity": "暂无活动记录"
+    },
+    "logging_out": "退出中...",
+    "position": {
+      "avg": "平均值",
+      "current": "当前价",
+      "share_market": "分享市场链接"
+    },
+    "settings": {
+      "profile": {
+        "title": "个人资料",
+        "display_name": "昵称",
+        "display_name_placeholder": "请输入昵称",
+        "email": "邮箱"
+      },
+      "security": {
+        "title": "安全设置",
+        "current_password": "当前密码",
+        "current_password_placeholder": "请输入当前密码",
+        "new_password": "新密码",
+        "new_password_placeholder": "请输入新密码（留空则不修改）",
+        "password_hint": "留空则不修改密码"
+      },
+      "notifications": {
+        "title": "通知设置",
+        "email": "邮件通知",
+        "email_desc": "接收重要邮件通知",
+        "push": "推送通知",
+        "push_desc": "接收实时推送通知"
+      },
+      "save": "保存设置",
+      "saved": "已保存"
+    },
+    "referral": {
+      "my_code": "您的邀请码",
+      "link": "邀请链接",
+      "copy": "复制",
+      "copied": "已复制",
+      "invited_count": "已邀请人数",
+      "total_earnings": "总返佣收益",
+      "pending_earnings": "预计到账",
+      "referred_users": "受邀用户",
+      "user": "受邀用户",
+      "registered_at": "注册时间",
+      "contribution": "贡献收益"
+    },
+    "api": {
+      "title": "API Keys",
+      "security_warning": "安全提示",
+      "security_desc": "请勿泄露您的 API Key。API Key 具有完整账户访问权限，请妥善保管。",
+      "create": "创建新 API Key",
+      "new_key": "新 API Key",
+      "empty": "暂无 API Keys",
+      "empty_desc": "点击上方按钮创建您的第一个 API Key",
+      "key_name": "Key 名称",
+      "created_at": "创建时间",
+      "api_key": "API Key",
+      "actions": "操作",
+      "copy": "复制",
+      "delete": "删除",
+      "delete_confirm": "确定要删除这个 API Key 吗？此操作不可恢复。"
+    }
+  }
+}
+

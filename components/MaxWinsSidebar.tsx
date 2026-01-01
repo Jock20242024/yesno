@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface MaxWinUser {
   rank: number;
@@ -10,6 +11,7 @@ interface MaxWinUser {
 }
 
 export default function MaxWinsSidebar() {
+  const { t } = useLanguage();
   const [maxWins, setMaxWins] = useState<MaxWinUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export default function MaxWinsSidebar() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-white text-lg font-bold">本月最大胜利</h2>
+      <h2 className="text-white text-lg font-bold">{t('rank.max_wins.title')}</h2>
       
       {isLoading && (
         <div className="flex items-center justify-center py-8">
@@ -96,7 +98,7 @@ export default function MaxWinsSidebar() {
             ))
           ) : (
             <div className="text-center py-8 text-zinc-400 text-sm">
-              暂无数据
+              {t('rank.max_wins.empty')}
             </div>
           )}
         </div>

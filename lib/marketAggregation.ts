@@ -106,9 +106,7 @@ export function aggregateMarketsByTemplate(markets: any[]): any[] {
   // 🚀 彻底分离：工厂市场和独立市场
   const factoryMarkets = activeMarkets.filter(m => isFactoryMarket(m));
   const independentMarkets = activeMarkets.filter(m => isIndependentMarket(m));
-  
-  console.log(`📊 [Aggregation] 工厂市场: ${factoryMarkets.length} 个，独立市场: ${independentMarkets.length} 个`);
-  
+
   // 工厂市场：进行聚合和时间过滤
   const aggregatedFactory = aggregateFactoryMarkets(factoryMarkets);
   
@@ -117,8 +115,7 @@ export function aggregateMarketsByTemplate(markets: any[]): any[] {
   
   // 合并结果：工厂市场（聚合后）+ 独立市场（原始）
   const result = [...aggregatedFactory, ...independentMarkets];
-  console.log(`✅ [Aggregation] 最终返回: ${result.length} 个市场（工厂: ${aggregatedFactory.length}，独立: ${independentMarkets.length}）`);
-  
+
   return result;
 }
 

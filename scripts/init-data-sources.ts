@@ -11,7 +11,7 @@ async function main() {
   console.log('🌱 开始初始化数据采集源...');
 
   // 创建 Polymarket 采集源
-  const polymarketSource = await prisma.dataSource.upsert({
+  const polymarketSource = await prisma.data_sources.upsert({
     where: { sourceName: 'Polymarket' },
     update: {
       status: 'ACTIVE',

@@ -44,7 +44,7 @@ export async function GET(
     const userId = user_id;
 
     // 查找用户
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -70,18 +70,18 @@ export async function GET(
 
     // 获取用户的订单统计
     const [ordersCount, depositsCount, withdrawalsCount] = await Promise.all([
-      prisma.order.count({ where: { userId } }),
-      prisma.deposit.count({ where: { userId } }),
-      prisma.withdrawal.count({ where: { userId } }),
+      prisma.orders.count({ where: { userId } }),
+      prisma.deposits.count({ where: { userId } }),
+      prisma.withdrawals.count({ where: { userId } }),
     ]);
 
     // 获取最近10条订单
-    const recentOrders = await prisma.order.findMany({
+    const recentOrders = await prisma.orders.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 10,
       include: {
-        market: {
+        markets: {
           select: {
             id: true,
             title: true,
@@ -105,7 +105,7 @@ export async function GET(
         recentOrders: recentOrders.map(order => ({
           id: order.id,
           marketId: order.marketId,
-          marketTitle: order.market?.title || '未知市场',
+          marketTitle: order.markets?.title || '未知市场',
           outcomeSelection: order.outcomeSelection,
           amount: order.amount,
           payout: order.payout,

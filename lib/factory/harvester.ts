@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 
 interface PolymarketMarket {
   id: string;
@@ -30,9 +31,7 @@ async function fetchPolymarketMarkets(query?: string, limit: number = 100, offse
     }
     
     const apiUrl = `https://gamma-api.polymarket.com/markets?${params.toString()}`;
-    
-    console.log(`📡 [Harvester] 请求 Polymarket API: ${apiUrl}`);
-    
+
     const response = await fetch(apiUrl, {
       headers: {
         'Accept': 'application/json',
@@ -46,9 +45,7 @@ async function fetchPolymarketMarkets(query?: string, limit: number = 100, offse
 
     const data = await response.json();
     const markets = Array.isArray(data) ? data : (data.markets || []);
-    
-    console.log(`📥 [Harvester] API 返回原始数据量: ${markets.length} 个市场`);
-    
+
     return markets;
   } catch (error) {
     console.error('❌ [Harvester] 获取 Polymarket 市场失败:', error);
@@ -186,8 +183,7 @@ function extractSymbol(text: string): string | null {
  */
 export async function diagnoseMarketTags(): Promise<void> {
   try {
-    console.log('🔍 [Harvester Diagnostic] ========== 开始探测模式 ==========');
-    
+
     // 获取最热的100个市场（按交易量排序）
     const params = new URLSearchParams();
     params.append('closed', 'false');
@@ -197,8 +193,7 @@ export async function diagnoseMarketTags(): Promise<void> {
     params.append('ascending', 'false');
     
     const apiUrl = `https://gamma-api.polymarket.com/markets?${params.toString()}`;
-    console.log(`📡 [Harvester Diagnostic] 请求 API: ${apiUrl}`);
-    
+
     const response = await fetch(apiUrl, {
       headers: {
         'Accept': 'application/json',
@@ -212,19 +207,15 @@ export async function diagnoseMarketTags(): Promise<void> {
 
     const markets = await response.json();
     const marketList = Array.isArray(markets) ? markets : (markets.markets || []);
-    
-    console.log(`📥 [Harvester Diagnostic] 获取到 ${marketList.length} 个市场`);
-    console.log('\n📋 [Harvester Diagnostic] ========== 市场数据结构详情 ==========');
-    
+
     // 打印前3个市场的完整结构（用于调试）
-    console.log('\n🔍 [Harvester Diagnostic] ========== 前3个市场的完整数据结构 ==========');
+
     marketList.slice(0, 3).forEach((market: any, index: number) => {
-      console.log(`\n[示例 ${index + 1}] Market ID: ${market.id}`);
-      console.log(JSON.stringify(market, null, 2));
+
     });
     
     // 打印每个市场的 title、tags 和可能的标签字段
-    console.log('\n📋 [Harvester Diagnostic] ========== 市场关键字段详情 ==========');
+
     marketList.forEach((market: any, index: number) => {
       const title = market.title || market.question || 'N/A';
       const tags = market.tags || [];
@@ -239,23 +230,17 @@ export async function diagnoseMarketTags(): Promise<void> {
       
       // 只打印周期性市场或前20个市场
       if (isPeriodic || index < 20) {
-        console.log(`\n[${index + 1}] ${isPeriodic ? '🎯' : '  '} Market ID: ${market.id}`);
-        console.log(`     Title: ${title.substring(0, 80)}`);
-        console.log(`     Tags:`, tags.length > 0 ? JSON.stringify(tags) : '[] (空)');
-        console.log(`     Group ID: ${groupId}`);
-        
+
         // 打印所有可能包含标签信息的字段
         const tagFields = ['tag_id', 'tag_ids', 'tagId', 'tagIds', 'category', 'categories', 'category_id', 'categoryId', 'group', 'group_id', 'groupId'];
         tagFields.forEach(field => {
           if (market[field] !== undefined && market[field] !== null) {
-            console.log(`     ${field}:`, JSON.stringify(market[field]));
+
           }
         });
       }
     });
-    
-    console.log('\n📊 [Harvester Diagnostic] ========== 标签统计 ==========');
-    
+
     // 统计所有标签
     const tagCounts = new Map<string, number>();
     const tagIds = new Map<string, Set<string>>();
@@ -285,23 +270,21 @@ export async function diagnoseMarketTags(): Promise<void> {
         });
       }
     });
-    
-    console.log('\n标签出现次数统计:');
+
     Array.from(tagCounts.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 30)
       .forEach(([tag, count]) => {
-        console.log(`  ${tag}: ${count} 次`);
+
       });
     
     if (tagIds.size > 0) {
-      console.log('\n🎯 15分钟市场相关的 Tag IDs:');
+
       tagIds.forEach((marketIds, tagId) => {
-        console.log(`  Tag ID: ${tagId} - 出现在 ${marketIds.size} 个15分钟市场中`);
+
       });
     }
-    
-    console.log('\n✅ [Harvester Diagnostic] ========== 探测完成 ==========');
+
   } catch (error) {
     console.error('❌ [Harvester Diagnostic] 探测失败:', error);
     throw error;
@@ -325,8 +308,7 @@ async function fetchMarketsByTagIds(tagIds: string[]): Promise<PolymarketMarket[
       params.append('tag_id', tagId);
       
       const apiUrl = `https://gamma-api.polymarket.com/markets?${params.toString()}`;
-      console.log(`📡 [Harvester] 按 Tag ID ${tagId} 请求 API: ${apiUrl}`);
-      
+
       const response = await fetch(apiUrl, {
         headers: {
           'Accept': 'application/json',
@@ -341,8 +323,7 @@ async function fetchMarketsByTagIds(tagIds: string[]): Promise<PolymarketMarket[
 
       const data = await response.json();
       const markets = Array.isArray(data) ? data : (data.markets || []);
-      
-      console.log(`✅ [Harvester] Tag ID ${tagId} 找到 ${markets.length} 个市场`);
+
       allMarkets.push(...markets);
     } catch (error) {
       console.error(`❌ [Harvester] Tag ID ${tagId} 请求失败:`, error);
@@ -474,7 +455,7 @@ function hasMultiplePricePoints(events: any[]): boolean {
     const title = (event.title || event.question || '').toLowerCase();
     const matches = title.match(pricePattern);
     if (matches && matches.length > 0) {
-      matches.forEach(m => prices.add(m));
+      matches.forEach((m: string) => prices.add(m));
     }
   }
   
@@ -568,15 +549,12 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
   };
 
   try {
-    console.log('🌾 [Harvester] 开始基于Series逻辑抓取标准模板（6个分类）...');
-    
+
     // 1. 获取所有系列
     const params = new URLSearchParams();
     params.append('limit', '1000');
     const seriesUrl = `https://gamma-api.polymarket.com/series?${params.toString()}`;
-    
-    console.log(`📡 [Harvester] 请求 Series API: ${seriesUrl}`);
-    
+
     const seriesResponse = await fetch(seriesUrl, {
       headers: {
         'Accept': 'application/json',
@@ -590,9 +568,7 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
 
     const allSeries = await seriesResponse.json();
     const seriesList = Array.isArray(allSeries) ? allSeries : (allSeries.series || []);
-    
-    console.log(`📥 [Harvester] 获取到 ${seriesList.length} 个系列`);
-    
+
     // 2. 查找目标系列（所有加密资产的6个周期）
     const targetSeries: { period: number; series: any }[] = [];
     // 扩大资产识别范围：支持所有常见加密资产（使用单词边界匹配）
@@ -632,9 +608,7 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
         }
       }
     }
-    
-    console.log(`📊 [Harvester] 找到 ${targetSeries.length} 个目标系列`);
-    
+
     // 3. 按周期分组，每个周期只取第一个系列（避免重复）
     const seriesByPeriod: { [period: number]: any } = {};
     const processedTemplates = new Set<string>(); // 用于去重: "symbol-period"
@@ -649,12 +623,10 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
     // 4. 遍历每个周期的系列
     for (const [periodStr, seriesList] of Object.entries(seriesByPeriod)) {
       const period = parseInt(periodStr);
-      console.log(`\n🔄 [Harvester] 处理 ${period} 分钟周期 (${seriesList.length} 个系列)...`);
-      
+
       for (const series of seriesList) {
         try {
-          console.log(`  📋 [Harvester] 处理系列: "${series.title}" (ID: ${series.id})`);
-          
+
           // 获取系列详情（包含events/markets）
           const seriesDetails = await fetchSeriesDetails(series.id);
           if (!seriesDetails || !seriesDetails.events || seriesDetails.events.length === 0) {
@@ -670,9 +642,7 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
           // 对于15m和1h周期，处理更多样本（50个）以确保找到所有资产
           const sampleSize = (period === 15 || period === 60) ? 50 : 10;
           const eventsToProcess = activeEvents.length > 0 ? activeEvents : events.slice(0, sampleSize);
-          
-          console.log(`    ✅ 发现 ${period} 分钟系列 ID: ${series.id}，内含 ${events.length} 个市场（活跃：${activeEvents.length}，将处理：${eventsToProcess.length}）`);
-          
+
           if (eventsToProcess.length === 0) {
             console.warn(`    ⚠️ 系列没有可处理的市场，跳过`);
             stats.skipped++;
@@ -691,7 +661,7 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
                                     (series.title || '').toLowerCase().includes('up/down');
           
           if (isStandardPeriod && isUpOrDownSeries) {
-            console.log(`    ⏭️  跳过标准周期涨跌盘口（由工厂生成）: ${series.title} (${period}分钟)`);
+
             stats.skipped++;
             continue;
           }
@@ -749,12 +719,9 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
           // 处理这个系列中提取到的所有唯一模板
           for (const [templateKey, { symbol, type: templateType, titleTemplate }] of templatesInSeries.entries()) {
             processedTemplates.add(templateKey);
-            
-            console.log(`    📝 提取模板: ${symbol} ${period}分钟 ${templateType}`);
-            console.log(`       标题模板: ${titleTemplate.substring(0, 80)}`);
-            
+
             // 检查数据库是否已存在（使用 symbol + period + type）
-            const existingTemplate = await prisma.marketTemplate.findFirst({
+            const existingTemplate = await prisma.market_templates.findFirst({
               where: { symbol, period, type: templateType },
             });
 
@@ -768,7 +735,7 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
             if (existingTemplate) {
               // 更新现有模板
               try {
-                await prisma.marketTemplate.update({
+                await prisma.market_templates.update({
                   where: { id: existingTemplate.id },
                   data: {
                     name: titleTemplate,
@@ -778,7 +745,7 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
                     seriesId: seriesIdStr, // 🔥 存储series_id用于后续价格获取
                   },
                 });
-                console.log(`    🔄 更新模板: ${symbol} ${period}分钟 ${templateType} (seriesId: ${seriesIdStr})`);
+
                 stats.created++;
               } catch (dbError: any) {
                 console.error(`    ❌ 更新模板失败 (${symbol} ${period}分钟 ${templateType}):`, dbError.message);
@@ -791,8 +758,10 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
             } else {
               // 创建新模板
               try {
-                await prisma.marketTemplate.create({
+                await prisma.market_templates.create({
                   data: {
+                    id: randomUUID(),
+                    updatedAt: new Date(),
                     name: titleTemplate,
                     titleTemplate: titleTemplate,
                     symbol,
@@ -806,7 +775,7 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
                     seriesId: seriesIdStr, // 🔥 存储series_id用于后续价格获取
                   },
                 });
-                console.log(`    ✅ 创建模板: ${symbol} ${period}分钟 ${templateType} - 成功转化为模板 (seriesId: ${seriesIdStr})`);
+
                 stats.created++;
               } catch (dbError: any) {
                 console.error(`    ❌ 创建模板失败 (${symbol} ${period}分钟 ${templateType}):`, dbError.message);
@@ -853,8 +822,6 @@ export async function harvestStandardTemplates(tagIdMap?: { [period: number]: st
     }
 
     stats.success = true;
-    console.log(`\n✅ [Harvester] 抓取完成: 创建/更新 ${stats.created}, 跳过 ${stats.skipped}, 错误 ${stats.errors}`);
-    console.log(`📊 [Harvester] 总共处理了 ${processedTemplates.size} 个唯一模板`);
 
     return stats;
   } catch (error) {

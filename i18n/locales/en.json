@@ -1,0 +1,458 @@
+{
+  "navbar": {
+    "home": "Home",
+    "rank": "Rankings",
+    "assets": "Assets",
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "profile": "Profile",
+    "search_placeholder": "Search Market"
+  },
+  "layout": {
+    "header": {
+      "total_assets": "Total Assets",
+      "available": "Available",
+      "rankings": "Rankings"
+    }
+  },
+  "home": {
+    "hero": {
+      "title_prefix": "Predict the Future",
+      "title_suffix": "Earn Rewards",
+      "subtitle": "Join the global prediction market, participate in predictions and trading for various events, view real-time price changes and trends",
+      "feature_global": "Global Trends",
+      "feature_odds": "Live Odds",
+      "feature_security": "Secure & Transparent"
+    },
+    "categories": {
+      "data": "Data",
+      "hot": "Trending",
+      "trending": "Trending",
+      "crypto": "Crypto",
+      "politics": "Politics",
+      "sports": "Sports",
+      "finance": "Finance",
+      "tech": "Tech",
+      "technology": "Technology",
+      "loading": "Loading categories..."
+    },
+    "market_list": {
+      "title": "Top 10 Trending Markets",
+      "rank": "Rank",
+      "event": "Event",
+      "prediction_probability": "Prediction Probability (Yes/No)",
+      "deadline": "Deadline",
+      "volume": "Volume",
+      "loading": "Loading...",
+      "loading_markets": "Loading markets...",
+      "load_more": "Load More",
+      "error": "Error fetching data",
+      "no_data": "No data available"
+    },
+    "sidebar": {
+      "title": "Live Market Data",
+      "start_journey": "Start Your Prediction Journey",
+      "register_desc": "Register a YesNo account to participate in predictions and trading for thousands of trending topics worldwide.",
+      "create_account": "Create Free Account",
+      "have_account": "Already have an account? Login",
+      "newcomer_badge": "Newcomer Exclusive",
+      "register_bonus": "100 Bonus on Registration",
+      "bonus_desc": "Zero-risk experience in prediction markets. Keep your profits, losses covered.",
+      "claim_bonus": "Claim Bonus",
+      "volume_24h": "24h Volume",
+      "active_events": "Active Events",
+      "total_rewards": "Total Rewards Distributed",
+      "loading": "Loading...",
+      "no_data": "No Data"
+    },
+    "status": {
+      "ending_soon": "Ending Soon",
+      "ended": "Ended",
+      "active": "Active",
+      "days_later": "{days} days later",
+      "hours_later": "{hours} hours later"
+    }
+  },
+  "category": {
+    "loading": "Loading markets...",
+    "error": "Error fetching data",
+    "empty": {
+      "title": "No relevant prediction events",
+      "description": "There are no market events under the {category} category for now, go check out others",
+      "view_data": "View Data Center",
+      "browse_hot": "Browse Popular Markets"
+    }
+  },
+  "market": {
+    "trade": {
+      "buy": "Buy",
+      "sell": "Sell",
+      "market": "Market",
+      "limit": "Limit",
+      "limit_price": "Limit Price",
+      "current_price": "Current",
+      "amount": "Amount",
+      "shares": "Shares",
+      "available": "Available",
+      "market_price": "Market Price",
+      "limit_price_label": "Limit Price",
+      "estimated_shares": "Est. Shares",
+      "estimated_return": "Est. Return",
+      "roi": "ROI",
+      "insufficient_balance": "Insufficient Balance",
+      "insufficient_shares": "Insufficient Shares",
+      "no_position": "You have no position to sell",
+      "price_at_max": "Price at max, cannot buy",
+      "login_to_trade": "Login to Trade",
+      "processing": "Processing...",
+      "waiting_settlement": "Waiting for Settlement",
+      "buy_yes": "Buy Yes",
+      "buy_no": "Buy No",
+      "sell_yes": "Sell Yes",
+      "sell_no": "Sell No",
+      "market_closed": "Market Closed",
+      "congratulations": "Congratulations!",
+      "you_bet_on": "You bet on",
+      "redeemable_amount": "Redeemable Amount",
+      "redeem": "Redeem",
+      "market_closed_msg": "Market Closed",
+      "price_impact": "Price Impact",
+      "average_cost": "Avg. Cost",
+      "set_limit_price": "Please set a valid limit price ($0.01 - $0.99)",
+      "limit_price_too_low": "Limit price cannot be below $0.01",
+      "limit_price_too_high": "Limit price cannot exceed $0.99",
+      "limit_price_not_set": "(Not Set)",
+      "fill_at_best_price": "Fill at best market price",
+      "enter_valid_limit": "Please enter a valid limit price",
+      "enter_amount_or_shares": "Please enter a {type} greater than 0",
+      "shares_insufficient": "Insufficient {outcome} shares. You hold {shares} shares"
+    },
+    "orderbook": {
+      "title": "Order Book",
+      "comments": "Comments",
+      "holders": "Holders",
+      "rules": "Rules",
+      "loading": "Loading order book...",
+      "price_usd": "Price (USD)",
+      "quantity": "Quantity",
+      "total_usd": "Total (USD)",
+      "spread": "Spread",
+      "no_data": "No order data available",
+      "loading_order_data": "Loading order data..."
+    },
+    "comments": {
+      "write_comment": "Write your comment...",
+      "post": "Post",
+      "no_comments": "No comments yet",
+      "coming_soon": "Comments feature coming soon"
+    },
+    "time": {
+      "local_time": "Local Time",
+      "days": "d"
+    },
+    "chart": {
+      "more": "More"
+    },
+    "position": {
+      "title": "Your Position",
+      "shares": "Shares",
+      "avg_price": "Avg Price",
+      "total_cost": "Total Cost",
+      "current_value": "Current Value",
+      "pnl": "P&L",
+      "sell": "Sell",
+      "won": "Won",
+      "expired": "Expired",
+      "redeemable": "Redeemable",
+      "zeroed": "Expired"
+    }
+  },
+  "portfolio": {
+    "stats": {
+      "total_value": "Total Assets",
+      "available": "Available Balance",
+      "position_value": "Position Value",
+      "deposit": "Deposit",
+      "withdraw": "Withdraw",
+      "loading": "Loading...",
+      "past": "Past"
+    },
+    "tabs": {
+      "positions": "My Positions",
+      "history": "Trade History",
+      "funding": "Transactions"
+    },
+    "table": {
+      "event": "Event",
+      "type": "Type",
+      "shares": "Shares",
+      "avg_price": "Avg Price",
+      "current_value": "Current Value",
+      "pnl": "P&L",
+      "time": "Time",
+      "market": "Market",
+      "action": "Action",
+      "price": "Price",
+      "quantity": "Quantity",
+      "total": "Total",
+      "status": "Status",
+      "network": "Network",
+      "amount": "Amount"
+    },
+    "status": {
+      "active": "Active",
+      "resolved": "Resolved",
+      "success": "Success",
+      "pending": "Pending",
+      "failed": "Failed",
+      "completed": "Completed"
+    },
+    "empty": {
+      "no_positions_active": "No active positions",
+      "no_positions_resolved": "No resolved positions",
+      "no_history": "No trade history",
+      "no_funding": "No transactions",
+      "loading": "Loading..."
+    },
+    "types": {
+      "deposit": "Deposit",
+      "withdraw": "Withdraw"
+    }
+  },
+  "wallet": {
+    "deposit": {
+      "title": "Deposit",
+      "tab_crypto": "Deposit Crypto",
+      "tab_fiat": "Buy with Card",
+      "select_crypto": "Select Currency",
+      "select_network": "Select Network",
+      "wallet_address": "Wallet Address",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copy_success": "Address Copied",
+      "copy_success_desc": "Wallet address copied to clipboard",
+      "copy_failed": "Copy Failed",
+      "copy_failed_desc": "Please copy the address manually",
+      "scan_qr": "Scan QR code or copy address",
+      "warning": "Only {crypto} ({network}) deposits are supported. Other assets cannot be recovered",
+      "amount_label": "Purchase Amount",
+      "amount_placeholder": "0.00",
+      "est_receive": "Est. Receive",
+      "fees_included": "Fees included",
+      "select_provider": "Select Payment Provider",
+      "recommended": "Recommended",
+      "fee_rate": "Fee ~{fee}%",
+      "continue_pay": "Continue to Pay",
+      "redirect_payment": "Redirecting to Payment",
+      "redirect_payment_desc": "Redirecting to {provider} payment page...",
+      "network_fee": "Network Fee",
+      "est_arrival": "Est. arrival {time}"
+    },
+    "withdraw": {
+      "title": "Withdraw",
+      "select_crypto": "Select Currency",
+      "address_label": "Withdraw Address",
+      "address_placeholder_trc20": "TX8...",
+      "address_placeholder_erc20": "0x...",
+      "network_label": "Transfer Network",
+      "amount_label": "Withdraw Amount",
+      "available": "Available",
+      "max": "Max",
+      "amount_placeholder": "0.00",
+      "network_fee": "Network Fee",
+      "receive_amount": "Receive Amount",
+      "submit": "Confirm Withdraw",
+      "processing": "Processing...",
+      "success": "Withdraw Submitted",
+      "success_desc": "Withdraw request submitted. Est. arrival {time}",
+      "network_fee_label": "Network Fee",
+      "est_arrival": "Est. arrival {time}"
+    },
+    "status": {
+      "pending": "Pending",
+      "success": "Success",
+      "failed": "Failed"
+    }
+  },
+  "rank": {
+    "title": "Leaderboard",
+    "tabs": {
+      "today": "24H",
+      "weekly": "7D",
+      "monthly": "30D",
+      "all": "All Time"
+    },
+    "table": {
+      "rank": "Rank",
+      "user": "User",
+      "trader": "Trader",
+      "pnl": "Total P&L",
+      "total_pnl": "Total P&L",
+      "win_rate": "Win Rate",
+      "volume": "Volume",
+      "type": "Type",
+      "market": "Market",
+      "value": "Value"
+    },
+    "search": {
+      "placeholder": "Search by name"
+    },
+    "loading": "Loading...",
+    "error": "Error fetching data",
+    "empty": "No ranking data",
+    "back_to_leaderboard": "Back to Leaderboard",
+    "public": {
+      "no_positions": "No open positions",
+      "hidden_positions": "This user has hidden their positions"
+    },
+    "max_wins": {
+      "title": "Biggest Win of the Month",
+      "empty": "No data"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Login",
+      "subtitle": "Sign in to your account to start trading",
+      "email_label": "Email",
+      "email_placeholder": "your@email.com",
+      "password_label": "Password",
+      "password_placeholder": "••••••••",
+      "submit": "Login",
+      "google_login": "Sign in with Google",
+      "no_account": "No account?",
+      "sign_up_link": "Sign up",
+      "success": "Login successful",
+      "error": "Login failed",
+      "error_credentials": "Invalid email or password",
+      "error_network": "Network error, please try again later"
+    },
+    "register": {
+      "title": "Sign Up",
+      "subtitle": "Create a new account to start trading",
+      "email_label": "Email",
+      "email_placeholder": "example@email.com",
+      "password_label": "Password",
+      "password_placeholder": "At least 6 characters",
+      "confirm_password_label": "Confirm Password",
+      "confirm_password_placeholder": "Re-enter password",
+      "submit": "Sign Up",
+      "submitting": "Signing up...",
+      "google_register": "Sign up with Google",
+      "has_account": "Already have an account?",
+      "login_link": "Login",
+      "success": "Registration successful, logging in...",
+      "error": "Registration failed, please try again later",
+      "error_google": "Google sign in failed, please try again later"
+    },
+    "errors": {
+      "invalid_email": "Please enter a valid email address",
+      "password_length": "Password must be at least 6 characters",
+      "password_mismatch": "Passwords do not match"
+    }
+  },
+  "common": {
+    "time": {
+      "all": "All",
+      "15m": "15 Mins",
+      "1h": "1 Hour",
+      "4h": "4 Hours",
+      "daily": "Daily",
+      "1d": "Daily",
+      "weekly": "Weekly",
+      "1w": "Weekly",
+      "monthly": "Monthly",
+      "1M": "Monthly",
+      "premarket": "Premarket"
+    }
+  },
+  "profile": {
+    "sidebar": {
+      "user_center": "User Center",
+      "overview": "Overview",
+      "settings": "Settings",
+      "referral": "Referrals",
+      "api": "API Keys"
+    },
+    "stats": {
+      "portfolio_value": "Portfolio Value",
+      "max_win": "Max Win",
+      "predictions_count": "Predictions",
+      "pnl": "Profit / Loss"
+    },
+    "tabs": {
+      "positions": "Positions",
+      "activity": "Activity"
+    },
+    "search_placeholder": "Search positions",
+    "sort": {
+      "value": "Value"
+    },
+    "empty": {
+      "positions": "No positions",
+      "activity": "No activity records"
+    },
+    "logging_out": "Logging out...",
+    "position": {
+      "avg": "Avg",
+      "current": "Curr",
+      "share_market": "Share market link"
+    },
+    "settings": {
+      "profile": {
+        "title": "Profile",
+        "display_name": "Display Name",
+        "display_name_placeholder": "Enter display name",
+        "email": "Email"
+      },
+      "security": {
+        "title": "Security Settings",
+        "current_password": "Current Password",
+        "current_password_placeholder": "Enter current password",
+        "new_password": "New Password",
+        "new_password_placeholder": "Enter new password (leave empty to keep current)",
+        "password_hint": "Leave empty to keep current password"
+      },
+      "notifications": {
+        "title": "Notifications",
+        "email": "Email Notifications",
+        "email_desc": "Receive important email notifications",
+        "push": "Push Notifications",
+        "push_desc": "Receive real-time push notifications"
+      },
+      "save": "Save Settings",
+      "saved": "Saved"
+    },
+    "referral": {
+      "my_code": "Your Referral Code",
+      "link": "Referral Link",
+      "copy": "Copy",
+      "copied": "Copied",
+      "invited_count": "Invited Users",
+      "total_earnings": "Total Earnings",
+      "pending_earnings": "Pending Earnings",
+      "referred_users": "Referred Users",
+      "user": "User",
+      "registered_at": "Registered At",
+      "contribution": "Contribution"
+    },
+    "api": {
+      "title": "API Keys",
+      "security_warning": "Security Warning",
+      "security_desc": "Do not share your API Key. API Keys have full account access. Please keep them secure.",
+      "create": "Create New API Key",
+      "new_key": "New API Key",
+      "empty": "No API Keys",
+      "empty_desc": "Click the button above to create your first API Key",
+      "key_name": "Key Name",
+      "created_at": "Created At",
+      "api_key": "API Key",
+      "actions": "Actions",
+      "copy": "Copy",
+      "delete": "Delete",
+      "delete_confirm": "Are you sure you want to delete this API Key? This action cannot be undone."
+    }
+  }
+}
+

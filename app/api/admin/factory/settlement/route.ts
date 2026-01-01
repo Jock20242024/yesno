@@ -40,8 +40,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('⚖️ [Admin Settlement] 管理员手动触发结算扫描...');
-    
     const stats = await runSettlementScanner();
     
     return NextResponse.json({

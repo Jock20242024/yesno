@@ -30,7 +30,7 @@ export async function GET() {
     const userId = authResult.userId;
 
     // 查询所有已成交的订单（FILLED 或 PARTIALLY_FILLED）
-    const orders = await prisma.order.findMany({
+    const orders = await prisma.orders.findMany({
       where: {
         userId,
         status: {
@@ -38,7 +38,7 @@ export async function GET() {
         },
       },
       include: {
-        market: {
+        markets: {
           select: {
             id: true,
             title: true,
@@ -53,7 +53,7 @@ export async function GET() {
     });
 
     // 批量查询相关的 Position 以获取真实的成交价格
-    const positions = await prisma.position.findMany({
+    const positions = await prisma.positions.findMany({
       where: {
         userId,
         marketId: {
@@ -107,7 +107,7 @@ export async function GET() {
         id: order.id,
         createdAt: order.createdAt.toISOString(),
         marketId: order.marketId,
-        marketTitle: order.market.title,
+        marketTitle: order.markets.title,
         action: action,
         outcome: order.outcomeSelection,
         price: price,

@@ -6,7 +6,7 @@ async function main() {
 
   // 1. 检查热门分类的定义
   console.log('=== 1. 热门分类定义 ===');
-  const hotCategory = await prisma.category.findFirst({
+  const hotCategory = await prisma.categories.findFirst({
     where: {
       OR: [
         { slug: '-1' },
@@ -27,7 +27,7 @@ async function main() {
 
   // 2. 检查所有关联到热门分类的市场
   console.log('=== 2. 关联到热门分类的市场统计 ===');
-  const marketsInHotCategory = await prisma.marketCategory.findMany({
+  const marketsInHotCategory = await prisma.market_categories.findMany({
     where: {
       categoryId: hotCategory.id,
     },
@@ -106,7 +106,7 @@ async function main() {
   console.log('第 176-182 行:');
   console.log('  // 如果推断失败，使用热门分类作为默认');
   console.log('  if (!finalCategoryId) {');
-  console.log('    const hotCategory = await prisma.category.findFirst({');
+  console.log('    const hotCategory = await prisma.categories.findFirst({');
   console.log('      where: { OR: [{ slug: "hot" }, { name: { contains: "热门" } }] },');
   console.log('    });');
   console.log('    finalCategoryId = hotCategory?.id;');

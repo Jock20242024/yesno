@@ -5,6 +5,7 @@ import { formatUSD } from "@/lib/utils";
 import CommentsTab from "./tabs/CommentsTab";
 import HoldersTab from "./tabs/HoldersTab";
 import RulesTab from "./tabs/RulesTab";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 type DetailTab = "orderbook" | "comments" | "holders" | "rules";
 
@@ -34,6 +35,7 @@ export default function OrderBook({
   marketId,
   onPriceSelect, // 🔥 新增：点击价格回调
 }: OrderBookProps) {
+  const { t } = useLanguage();
   const [orderBookData, setOrderBookData] = useState<OrderBookData | null>(null);
   const [isLoadingOrderBook, setIsLoadingOrderBook] = useState(true);
   const [orderBookError, setOrderBookError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export default function OrderBook({
   if (!marketId) {
     return (
       <div className="flex-1 bg-pm-card rounded-xl border border-pm-border p-4">
-        <div className="text-pm-text-dim text-center py-8">加载订单数据中...</div>
+        <div className="text-pm-text-dim text-center py-8">{t('market.orderbook.loading_order_data')}</div>
       </div>
     );
   }
@@ -101,10 +103,10 @@ export default function OrderBook({
     : [];
 
   const tabs: { id: DetailTab; label: string }[] = [
-    { id: "orderbook", label: "Order Book" },
-    { id: "comments", label: "Comments" },
-    { id: "holders", label: "Holders" },
-    { id: "rules", label: "Rules" },
+    { id: "orderbook", label: t('market.orderbook.title') },
+    { id: "comments", label: t('market.orderbook.comments') },
+    { id: "holders", label: t('market.orderbook.holders') },
+    { id: "rules", label: t('market.orderbook.rules') },
   ];
 
   const handleTabClick = (tab: DetailTab) => {
@@ -141,7 +143,7 @@ export default function OrderBook({
               <div className="text-pm-text-dim text-center py-12">
                 <div className="flex flex-col items-center gap-3">
                   <div className="w-8 h-8 border-2 border-pm-text-dim border-t-primary rounded-full animate-spin"></div>
-                  <span className="text-sm">Loading order book...</span>
+                  <span className="text-sm">{t('market.orderbook.loading')}</span>
                 </div>
               </div>
             ) : orderBookError ? (
@@ -153,9 +155,9 @@ export default function OrderBook({
               <table className="w-full text-sm">
                 <thead className="bg-pm-card-hover text-xs font-semibold text-pm-text-dim uppercase tracking-wider">
                   <tr>
-                    <th className="py-3 px-6 text-left">Price (USD)</th>
-                    <th className="py-3 px-6 text-right">Quantity</th>
-                    <th className="py-3 px-6 text-right">Total (USD)</th>
+                    <th className="py-3 px-6 text-left">{t('market.orderbook.price_usd')}</th>
+                    <th className="py-3 px-6 text-right">{t('market.orderbook.quantity')}</th>
+                    <th className="py-3 px-6 text-right">{t('market.orderbook.total_usd')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-pm-border">
@@ -192,8 +194,8 @@ export default function OrderBook({
                       colSpan={3}
                     >
                       {orderBookData.spread > 0 
-                        ? `--- Spread: ${formatUSD(orderBookData.spread)} ---`
-                        : '--- Spread: N/A ---'}
+                        ? `--- ${t('market.orderbook.spread')}: ${formatUSD(orderBookData.spread)} ---`
+                        : `--- ${t('market.orderbook.spread')}: N/A ---`}
                     </td>
                   </tr>
                   {/* 买单（从高到低显示） */}
@@ -224,7 +226,7 @@ export default function OrderBook({
               </div>
             ) : (
               <div className="text-pm-text-dim text-center py-12">
-                No order data available
+                {t('market.orderbook.no_data')}
               </div>
             )}
           </div>

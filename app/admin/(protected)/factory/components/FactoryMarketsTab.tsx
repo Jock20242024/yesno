@@ -4,6 +4,7 @@
 // 复用 MarketsListPage 的逻辑，但传入 source='factory'
 
 import { useState, useMemo, useEffect } from "react";
+import { toast } from "sonner";
 import { useAdminMarkets } from "@/hooks/useAdminData";
 import MarketTable from "@/app/admin/markets/components/MarketTable";
 
@@ -118,14 +119,14 @@ export default function FactoryMarketsTab() {
       const result = await response.json();
 
       if (result.success) {
-        alert('市场已成功删除');
+        toast.success('市场已成功删除');
         window.location.reload();
       } else {
-        alert(`删除失败: ${result.error || '未知错误'}`);
+        toast.error(`删除失败: ${result.error || '未知错误'}`);
       }
     } catch (error) {
       console.error('删除市场失败:', error);
-      alert('删除失败，请稍后重试');
+      toast.error('删除失败，请稍后重试');
     }
   };
 

@@ -5,7 +5,7 @@ async function main() {
   console.log('🔍 开始检查"热门"分类是否存在...\n');
 
   // 1. 检查是否存在 ID 为 "-1" 的分类
-  const categoryById = await prisma.category.findUnique({
+  const categoryById = await prisma.categories.findUnique({
     where: { id: "-1" },
   });
 
@@ -18,7 +18,7 @@ async function main() {
   }
 
   // 2. 检查是否存在 slug 为 "hot" 的分类
-  const categoryBySlug = await prisma.category.findUnique({
+  const categoryBySlug = await prisma.categories.findUnique({
     where: { slug: "hot" },
   });
 
@@ -30,7 +30,7 @@ async function main() {
   }
 
   // 3. 检查是否存在 name 包含"热门"的分类
-  const hotCategories = await prisma.category.findMany({
+  const hotCategories = await prisma.categories.findMany({
     where: {
       name: { contains: "热门" },
     },
@@ -46,7 +46,7 @@ async function main() {
   }
 
   // 4. 检查外键约束：尝试查找关联到不存在的 categoryId 的市场
-  const marketCategories = await prisma.marketCategory.findMany({
+  const marketCategories = await prisma.market_categories.findMany({
     include: {
       category: true,
     },

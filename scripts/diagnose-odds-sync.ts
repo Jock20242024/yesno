@@ -26,7 +26,7 @@ async function diagnoseOddsSync() {
     // 1. 检查赔率机器人运行状态
     console.log('📊 [1] 检查赔率机器人运行状态...\n');
     try {
-      const scraperTask = await prisma.scraperTask.findUnique({
+      const scraperTask = await prisma.scraper_tasks.findUnique({
         where: { name: 'OddsRobot' },
       });
 
@@ -203,7 +203,7 @@ async function diagnoseOddsSync() {
     console.log('📋 [诊断总结与建议]\n');
 
     // 获取最新状态用于建议
-    const scraperTask = await prisma.scraperTask.findUnique({
+    const scraperTask = await prisma.scraper_tasks.findUnique({
       where: { name: 'OddsRobot' },
     });
     

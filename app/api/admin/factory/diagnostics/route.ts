@@ -39,12 +39,12 @@ export async function GET(request: NextRequest) {
     const now = dayjs.utc();
     
     // 1. 统计所有工厂市场
-    const totalFactory = await prisma.market.count({
+    const totalFactory = await prisma.markets.count({
       where: { isFactory: true, isActive: true },
     });
     
     // 2. 统计 OPEN 状态的工厂市场（当前需要同步的）
-    const openFactory = await prisma.market.count({
+    const openFactory = await prisma.markets.count({
       where: { 
         isFactory: true, 
         isActive: true, 
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     });
     
     // 3. 统计 CLOSED 状态的工厂市场（已结束的）
-    const closedFactory = await prisma.market.count({
+    const closedFactory = await prisma.markets.count({
       where: { 
         isFactory: true, 
         isActive: true, 
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     });
     
     // 4. 统计有 externalId 的 OPEN 工厂市场（可以同步赔率的未来场次）
-    const openWithExternalId = await prisma.market.count({
+    const openWithExternalId = await prisma.markets.count({
       where: { 
         isFactory: true, 
         isActive: true, 
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     });
     
     // 5. 统计没有 externalId 的 OPEN 工厂市场（无法同步赔率的未来场次）
-    const openWithoutExternalId = await prisma.market.count({
+    const openWithoutExternalId = await prisma.markets.count({
       where: { 
         isFactory: true, 
         isActive: true, 
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
     });
   
     // 6. 统计未来场次（closingDate > now）但状态为 CLOSED 的（可能的错误）
-    const futureButClosed = await prisma.market.count({
+    const futureButClosed = await prisma.markets.count({
       where: {
         isFactory: true,
         isActive: true,
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     });
     
     // 7. 统计过去场次（closingDate < now）但状态为 OPEN 的（可能的错误）
-    const pastButOpen = await prisma.market.count({
+    const pastButOpen = await prisma.markets.count({
       where: {
         isFactory: true,
         isActive: true,
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     });
     
     // 8. 查看最近的几个 OPEN 工厂市场
-    const recentOpen = await prisma.market.findMany({
+    const recentOpen = await prisma.markets.findMany({
       where: { 
         isFactory: true, 
         isActive: true, 
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
     });
     
     // 9. 按模板统计
-    const byTemplate = await prisma.market.groupBy({
+    const byTemplate = await prisma.markets.groupBy({
       by: ['templateId'],
       where: { isFactory: true, isActive: true, status: MarketStatus.OPEN },
       _count: true,

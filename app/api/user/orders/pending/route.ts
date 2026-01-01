@@ -32,14 +32,14 @@ export async function GET() {
     const userId = authResult.userId;
 
     // 🔥 核心架构升级：现在数据库已支持 status 字段，可以查询 PENDING 订单
-    const openOrders = await prisma.order.findMany({
+    const openOrders = await prisma.orders.findMany({
       where: {
         userId,
         status: 'PENDING', // 🔥 核心：只查询未成交的订单
         orderType: 'LIMIT', // 🔥 只查询限价单（市价单立即成交，不会有挂单）
       },
       include: {
-        market: {
+        markets: {
           select: {
             id: true,
             title: true,
@@ -59,10 +59,10 @@ export async function GET() {
     const formattedOrders = openOrders.map((order) => ({
       id: order.id,
       marketId: order.marketId,
-      marketTitle: order.market?.title || `市场 ${order.marketId}`,
-      marketImage: order.market?.image || order.market?.iconUrl || null,
-      marketStatus: order.market?.status,
-      marketClosingDate: order.market?.closingDate?.toISOString(),
+      marketTitle: order.markets?.title || `市场 ${order.marketId}`,
+      marketImage: order.markets?.image || order.markets?.iconUrl || null,
+      marketStatus: order.markets?.status,
+      marketClosingDate: order.markets?.closingDate?.toISOString(),
       outcome: order.outcomeSelection,
       type: order.type || 'BUY',
       orderType: order.orderType || 'LIMIT',

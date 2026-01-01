@@ -65,13 +65,13 @@ export async function GET(
 
     // 🔥 核心修复：持仓必须只基于 Position 表，绝对排除未成交订单
     // 强制规则：只有真正成交的份额（Position表中有记录）才能算作持仓
-    const positionsData = await prisma.position.findMany({
+    const positionsData = await prisma.positions.findMany({
       where: {
         userId: targetUserId,
         status: 'OPEN', // 🔥 只返回持仓中的仓位，排除已关闭的
       },
       include: {
-        market: {
+        markets: {
           select: {
             id: true,
             title: true,
@@ -105,17 +105,17 @@ export async function GET(
             outcome: validOutcome,
           },
           {
-            status: position.market?.status || 'OPEN',
-            resolvedOutcome: position.market?.resolvedOutcome || null,
-            totalYes: position.market?.totalYes || 0,
-            totalNo: position.market?.totalNo || 0,
+            status: position.markets?.status || 'OPEN',
+            resolvedOutcome: position.markets?.resolvedOutcome || null,
+            totalYes: position.markets?.totalYes || 0,
+            totalNo: position.markets?.totalNo || 0,
           }
         );
 
         return {
           id: position.id,
           marketId: position.marketId,
-          outcome: position.outcome,
+          outcome: position.outcome as 'YES' | 'NO',
           shares: position.shares || 0,
           avgPrice: position.avgPrice || 0,
           currentPrice: valuation.currentPrice || 0,
@@ -143,7 +143,7 @@ export async function GET(
     // 🔥 获取用户的订单（用于交易历史，不是持仓）
     // 注意：交易历史包含所有订单，包括已成交的
     // 使用 Prisma 直接查询，避免 DBService 的 UUID 验证问题（如果将来需要）
-    const orders = await prisma.order.findMany({
+    const orders = await prisma.orders.findMany({
       where: { userId: targetUserId },
       orderBy: { createdAt: 'desc' },
     });

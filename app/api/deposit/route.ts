@@ -17,7 +17,7 @@ import { requireAuth } from '@/lib/auth/utils';
  */
 export async function POST(request: Request) {
   try {
-    // 🔥 使用统一的 NextAuth 认证
+    // 🔥 使用统一的 NextAuth 认证（支持 Session 和 API Key）
     const authResult = await requireAuth();
     
     if (!authResult.success) {
@@ -33,12 +33,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { amount, txHash } = body;
 
-    console.log(`💰 [Deposit API] 充值请求参数:`, {
-      amount: amount,
-      amountType: typeof amount,
-      txHash: txHash,
-    });
-
     // 验证必需字段
     if (!amount || !txHash) {
       console.error('❌ [Deposit API] 缺少必需字段:', { amount: !!amount, txHash: !!txHash });
@@ -53,13 +47,6 @@ export async function POST(request: Request) {
 
     // 金额调试：打印解析出的充值金额 amount，确保它是 $1000
     const amountNum = parseFloat(amount);
-    console.log(`💰 [Deposit API] 金额解析:`, {
-      original: amount,
-      originalType: typeof amount,
-      parsed: amountNum,
-      isValid: !isNaN(amountNum) && amountNum > 0,
-      isExpected1000: amountNum === 1000,
-    });
 
     if (isNaN(amountNum) || amountNum <= 0) {
       console.error('❌ [Deposit API] 金额无效:', {
@@ -79,21 +66,14 @@ export async function POST(request: Request) {
 
     // 金额验证：确保金额是 $1000（用于 E2E 测试）
     if (amountNum === 1000) {
-      console.log(`✅ [Deposit API] 充值金额验证通过: $${amountNum}`);
+
     } else {
-      console.log(`ℹ️ [Deposit API] 充值金额: $${amountNum} (非标准测试金额)`);
+
     }
 
     // 获取当前用户
-    console.log(`🔍 [Deposit API] 查找用户: ${userId}`);
+
     const user = await DBService.findUserById(userId);
-    
-    console.log(`🔍 [Deposit API] 用户查找结果:`, {
-      userExists: !!user,
-      userId: user?.id,
-      email: user?.email,
-      currentBalance: user?.balance,
-    });
 
     if (!user) {
       console.error('❌ [Deposit API] 用户不存在:', userId);
@@ -114,7 +94,7 @@ export async function POST(request: Request) {
     
     const result = await prisma.$transaction(async (tx) => {
       // 1. 获取当前用户（带锁，防止并发）
-      const lockedUser = await tx.user.findUnique({
+      const lockedUser = await tx.users.findUnique({
         where: { id: userId },
       });
 
@@ -126,16 +106,17 @@ export async function POST(request: Request) {
       const newBalance = lockedUser.balance + amountNum;
 
       // 3. 更新用户余额
-      const updatedUser = await tx.user.update({
+      const updatedUser = await tx.users.update({
         where: { id: userId },
         data: { balance: newBalance },
       });
 
       // 4. 创建充值记录（FundRecord）
       const depositId = `D-${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
-      const deposit = await tx.deposit.create({
+      const deposit = await tx.deposits.create({
         data: {
           id: depositId,
+          updatedAt: new Date(),
           userId: userId,
           amount: amountNum,
           txHash: txHash,
@@ -153,14 +134,6 @@ export async function POST(request: Request) {
     const deposit = result.deposit;
 
     // ========== 审计记录 ==========
-    console.log(`✅ [Deposit API] ========== 充值成功 ==========`);
-    console.log(`✅ [Deposit API] 用户ID: ${userId}`);
-    console.log(`✅ [Deposit API] 充值金额: $${amountNum}`);
-    console.log(`✅ [Deposit API] 旧余额: $${oldBalance}`);
-    console.log(`✅ [Deposit API] 新余额: $${updatedUser.balance}`);
-    console.log(`✅ [Deposit API] 充值记录ID: ${deposit.id}`);
-    console.log(`✅ [Deposit API] 时间戳: ${new Date().toISOString()}`);
-    console.log(`✅ [Deposit API] ===============================`);
 
     // 返回充值成功的记录和更新后的用户余额
     return NextResponse.json({

@@ -21,8 +21,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 [Admin Markets GET] ========== 开始处理获取市场列表请求 ==========');
-    
+
     // 权限校验：使用 NextAuth session 验证管理员身份
     const session = await auth();
     
@@ -54,8 +53,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('✅ [Admin Markets GET] 权限验证通过，用户:', userEmail);
-
     // 获取查询参数
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search') || '';
@@ -64,8 +61,6 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10', 10);
     // 🚀 修复：使用 source 参数过滤（基于 isFactory 布尔值，而非 templateId 字符串）
     const source = searchParams.get('source') || '';
-
-    console.log('📊 [Admin Markets GET] 查询参数:', { search, statusFilter, page, limit, source });
 
     // 🔥 市场管理：按 templateId 聚合，显示市场系列而非单个场次
     // 1. 查询所有已发布的市场（排除 PENDING_REVIEW）
@@ -106,7 +101,7 @@ export async function GET(request: NextRequest) {
       const nowUtcForMaintenance = dayjs.utc();
       const nowUtcDateForMaintenance = nowUtcForMaintenance.toDate();
       try {
-        const updateResult = await prisma.market.updateMany({
+        const updateResult = await prisma.markets.updateMany({
           where: {
             status: 'OPEN',
             closingDate: { lt: nowUtcDateForMaintenance },
@@ -117,14 +112,13 @@ export async function GET(request: NextRequest) {
           },
         });
         if (updateResult.count > 0) {
-          console.log(`🧹 [Admin Markets GET] 维护任务：已将 ${updateResult.count} 个过期工厂市场从OPEN更新为CLOSED`);
-          console.log(`🧹 [Admin Markets GET] 当前UTC时间: ${nowUtcForMaintenance.format('YYYY-MM-DD HH:mm:ss')} UTC`);
+
         }
       } catch (maintenanceError: any) {
         console.error(`⚠️ [Admin Markets GET] 维护任务失败: ${maintenanceError.message}，继续执行查询`);
       }
       
-      const dbMarketsAll = await prisma.market.findMany({
+      const dbMarketsAll = await prisma.markets.findMany({
         where: whereCondition,
         orderBy: {
           createdAt: 'desc',
@@ -194,7 +188,7 @@ export async function GET(request: NextRequest) {
         // 手动市场：不添加时间限制，统计所有订单
         
         // 1. 查询每个市场的订单数
-        const orderCounts = await prisma.order.groupBy({
+        const orderCounts = await prisma.orders.groupBy({
           by: ['marketId'],
           where: orderWhereCondition,
           _count: {
@@ -203,7 +197,7 @@ export async function GET(request: NextRequest) {
         });
         
         // 2. 查询所有订单的用户ID（手动去重）
-        const allOrders = await prisma.order.findMany({
+        const allOrders = await prisma.orders.findMany({
           where: orderWhereCondition,
           select: {
             marketId: true,
@@ -243,10 +237,10 @@ export async function GET(request: NextRequest) {
         );
         
         // 🚀 调试日志：打印前几个市场的统计结果
-        console.log('📊 [Admin Markets GET] 交易统计查询结果（前5个市场）:');
+
         const sampleStats = Array.from(orderStatsMap.entries()).slice(0, 5);
         sampleStats.forEach(([marketId, stats]) => {
-          console.log(`  Market ${marketId.substring(0, 8)}...: 用户数=${stats.userCount}, 订单数=${stats.orderCount}`);
+
         });
       }
       
@@ -304,9 +298,7 @@ export async function GET(request: NextRequest) {
           marketDetailMap.set(dbMarket.id, buildMarketDetail(dbMarket));
         }
       });
-      
-      console.log('✅ [Admin Markets GET] 查询返回', allMarkets.length, '个市场（已排除 PENDING_REVIEW 和48小时前的已结算）');
-      
+
       if (showDetails) {
         // 如果请求详细场次，直接返回所有市场（不聚合）
         filteredMarkets = allMarkets;
@@ -338,9 +330,7 @@ export async function GET(request: NextRequest) {
             templateId: (dbMarket as any).templateId || null,
             isFactory: (dbMarket as any).isFactory || false, // 🚀 修复：必须包含 isFactory 字段，否则统计逻辑无法判断
           }));
-        
-        console.log(`📊 [Admin Markets GET] 工厂市场36小时窗口过滤: 原始=${dbMarketsAll.filter(m => (m as any).isFactory === true).length}个, 过滤后=${allMarketsForStats.filter(m => m.isFactory === true).length}个`);
-        
+
         const aggregatedMap = new Map<string, any>();
         
         // 🚀 修复：先遍历 allMarkets 创建聚合记录（初始化工厂市场的基本信息，但不统计状态）
@@ -523,7 +513,7 @@ export async function GET(request: NextRequest) {
           
           // 🔧 只记录前10个的详细信息，避免日志过多
           if (factoryOpenCount + factoryClosedCount + factoryOtherCount <= 10) {
-            console.log(`🔍 [ForceStats] 工厂市场统计: marketId=${market.id.substring(0, 8)}..., status=${market.status}, templateId=${market.templateId?.substring(0, 8) || 'N/A'}`);
+
           }
           
           const groupKey = market.templateId ? market.templateId : `independent-${market.id}`;
@@ -548,7 +538,7 @@ export async function GET(request: NextRequest) {
             aggregated.stats.totalActive++;
             if (marketDetail) aggregated.activeMarketIds.push(marketDetail);
             if (factoryOpenCount <= 5) {
-              console.log(`  ✅ [ForceStats] OPEN: open=${aggregated.stats.open}, ended=${aggregated.stats.ended}, total=${aggregated.stats.total}`);
+
             }
           } else {
             // PENDING, RESOLVED, CLOSED, CANCELED, SETTLING 全部归为 Ended
@@ -563,13 +553,11 @@ export async function GET(request: NextRequest) {
             
             if (marketDetail) aggregated.activeMarketIds.push(marketDetail);
             if (factoryClosedCount + factoryOtherCount <= 5) {
-              console.log(`  ✅ [ForceStats] ${market.status} -> Ended: open=${aggregated.stats.open}, ended=${aggregated.stats.ended}, total=${aggregated.stats.total}`);
+
             }
           }
         });
-        
-        console.log(`📊 [ForceStats] 工厂市场状态分布: OPEN=${factoryOpenCount}, CLOSED=${factoryClosedCount}, 其他=${factoryOtherCount}, 总计=${factoryOpenCount + factoryClosedCount + factoryOtherCount}`);
-        
+
         // 🚀 计算聚合后的交易统计数据（批量查询所有聚合系列的订单）
         // 🚀 修复：marketIds 现在是对象数组，需要提取 id
         const allAggregatedMarketIds = Array.from(aggregatedMap.values())
@@ -583,7 +571,7 @@ export async function GET(request: NextRequest) {
           
           // 🔥 修复：使用兼容的方式查询订单统计
           // 1. 一次性查询所有聚合市场的订单数（只统计最近24小时内的订单）
-          const allSeriesOrderStats = await prisma.order.groupBy({
+          const allSeriesOrderStats = await prisma.orders.groupBy({
             by: ['marketId'],
             where: {
               marketId: { in: allAggregatedMarketIds },
@@ -597,7 +585,7 @@ export async function GET(request: NextRequest) {
           });
           
           // 2. 一次性查询所有聚合市场的用户ID（用于去重，只统计最近24小时内的订单）
-          const allSeriesUserIds = await prisma.order.findMany({
+          const allSeriesUserIds = await prisma.orders.findMany({
             where: {
               marketId: { in: allAggregatedMarketIds },
               createdAt: {
@@ -651,7 +639,7 @@ export async function GET(request: NextRequest) {
               
               // 🚀 调试日志：打印聚合统计结果
               if (aggregated.templateId) {
-                console.log(`📊 [Admin Markets GET] 聚合市场 ${aggregated.templateId.substring(0, 8)}...: 用户数=${allUserIdsSet.size}, 订单数=${totalOrderCount}, 场次数=${aggregated.marketIds.length}`);
+
               }
             } else {
               // 如果没有场次，使用单个市场的统计数据
@@ -662,7 +650,7 @@ export async function GET(request: NextRequest) {
               };
               
               // 🚀 调试日志：打印单个市场统计结果
-              console.log(`📊 [Admin Markets GET] 单个市场 ${aggregated.id.substring(0, 8)}...: 用户数=${singleMarketStats.userCount}, 订单数=${singleMarketStats.orderCount}`);
+
             }
             
             // 删除临时字段
@@ -678,8 +666,7 @@ export async function GET(request: NextRequest) {
             };
             
             // 🚀 调试日志：打印单个市场统计结果（无聚合情况）
-            console.log(`📊 [Admin Markets GET] 单个市场（无聚合）${aggregated.id.substring(0, 8)}...: 用户数=${singleMarketStats.userCount}, 订单数=${singleMarketStats.orderCount}`);
-            
+
             delete (aggregated as any)._userIds;
           }
         }
@@ -720,7 +707,7 @@ export async function GET(request: NextRequest) {
         });
         
         filteredMarkets = Array.from(aggregatedMap.values());
-        console.log('✅ [Admin Markets GET] 聚合后返回', filteredMarkets.length, '个市场系列');
+
       }
     } catch (dbError) {
       console.error('❌ [Admin Markets GET] 数据库查询失败:');
@@ -749,7 +736,7 @@ export async function GET(request: NextRequest) {
         closed: MarketStatus.CLOSED,
         resolved: MarketStatus.RESOLVED,
         canceled: MarketStatus.CANCELED,
-        pending: MarketStatus.PENDING,
+        'pending_review': 'PENDING_REVIEW' as MarketStatus,
       };
       const targetStatus = statusMap[statusFilter.toLowerCase()];
       if (targetStatus) {
@@ -757,7 +744,7 @@ export async function GET(request: NextRequest) {
           // 如果是聚合数据（有 stats 字段），检查统计
           if (market.stats) {
             if (targetStatus === MarketStatus.OPEN) return market.stats.open > 0;
-            if (targetStatus === MarketStatus.PENDING) return market.stats.pending > 0;
+            if (targetStatus === ('PENDING_REVIEW' as MarketStatus)) return market.stats.pending_review > 0;
             if (targetStatus === MarketStatus.RESOLVED) return market.stats.resolved > 0;
             if (targetStatus === MarketStatus.CLOSED) return market.stats.closed > 0;
           }
@@ -774,15 +761,6 @@ export async function GET(request: NextRequest) {
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
     const paginatedMarkets = filteredMarkets.slice(startIndex, endIndex);
-
-    console.log('✅ [Admin Markets GET] 分页结果:', {
-      total,
-      page,
-      limit,
-      totalPages,
-      returned: paginatedMarkets.length,
-      showDetails,
-    });
 
     // 🔥 修复 JSON 序列化问题：确保所有数值字段都是有效的数字（不是 BigInt、NaN 或 Infinity）
     const convertToNumberSafe = (value: any): number => {
@@ -844,8 +822,6 @@ export async function GET(request: NextRequest) {
 
       return safeMarket;
     });
-
-    console.log('✅ [Admin Markets GET] 数据序列化完成，准备返回响应');
 
     return NextResponse.json({
       success: true,
@@ -917,10 +893,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: Request) {
   try {
-    console.log('🏗️ [Market API] ========== 开始处理创建市场请求 ==========');
-    
+
     // 权限校验：使用 NextAuth session 验证管理员身份
-    console.log('🔍 [Market API] 开始验证管理员身份...');
+
     const session = await auth();
     
     // 🔥 修复 500 错误：确保 session 和 user 不为 null
@@ -951,15 +926,12 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log('✅ [Market API] 管理员身份验证成功，用户邮箱:', userEmail);
-
     // 解析请求体
-    console.log('📥 [Market API] 开始解析请求体...');
+
     const body = await request.json();
     
     // 🔥 强制要求：在创建市场之前打印完整的接收数据
-    console.log('📥 [Market API] 接收到的创建数据:', JSON.stringify(body, null, 2));
-    
+
     const {
       title,
       description,
@@ -974,25 +946,6 @@ export async function POST(request: Request) {
     } = body;
 
     // 数据验证调试：打印接收到的市场数据
-    console.log('📊 [Market API] 接收到的市场数据（类型检查）:', {
-      title: title,
-      titleType: typeof title,
-      description: description,
-      descriptionType: typeof description,
-      category: category,
-      categoryType: typeof category,
-      categories: categories,
-      categoriesType: typeof categories,
-      endTime: endTime,
-      endTimeType: typeof endTime,
-      feeRate: feeRate,
-      feeRateType: typeof feeRate,
-      isHot: isHot,
-      isHotType: typeof isHot,
-      imageUrl: imageUrl,
-      sourceUrl: sourceUrl,
-      resolutionCriteria: resolutionCriteria,
-    });
 
     // 验证必需字段
     if (!title || !category || !endTime) {
@@ -1013,7 +966,7 @@ export async function POST(request: Request) {
     // 🔥 完全移除旧的 categoryNameToQuery 逻辑，不再使用 name 或 slug 查询
 
     // 验证日期格式
-    console.log('🔍 [Market API] 验证日期格式:', { endTime });
+
     const endDate = new Date(endTime);
     if (isNaN(endDate.getTime())) {
       console.error('❌ [Market API] 无效的日期格式:', endTime);
@@ -1029,12 +982,7 @@ export async function POST(request: Request) {
     // 验证日期不能是过去
     const nowTimestamp = Date.now();
     const endTimestamp = endDate.getTime();
-    console.log('🔍 [Market API] 验证日期范围:', {
-      endTime: endTime,
-      endTimestamp,
-      nowTimestamp,
-      isPast: endTimestamp < nowTimestamp,
-    });
+
     if (endTimestamp < nowTimestamp) {
       console.error('❌ [Market API] 截止日期不能是过去:', { endTime, endTimestamp, nowTimestamp });
       return NextResponse.json(
@@ -1045,7 +993,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    console.log('✅ [Market API] 日期验证通过');
 
     // 解析费率
     const parsedFeeRate = feeRate !== undefined ? parseFloat(feeRate) : 0.05;
@@ -1053,7 +1000,6 @@ export async function POST(request: Request) {
     // 🚀 核心修复：支持通过 ID 或 slug 查找分类
     // 1. 提取前端传来的分类标识（可能是 ID 或 slug）
     const categoryIds = Array.isArray(body.categories) ? body.categories : [];
-    console.log('🔍 [Market API] 前端传来的分类标识:', categoryIds);
 
     // 2. 只有在标识数组不为空时才进行验证和关联
     let validCategoryConnect: Array<{ id: string }> = [];
@@ -1062,14 +1008,14 @@ export async function POST(request: Request) {
       // 如果标识是 "-1"（热门分类的 slug），通过 slug 查找，再获取其真实 ID
       const categoryPromises = categoryIds.map(async (identifier: string) => {
         // 先尝试按 ID 查找（最常见情况）
-        let category = await prisma.category.findUnique({
+        let category = await prisma.categories.findUnique({
           where: { id: identifier },
           select: { id: true },
         });
         
         // 如果按 ID 找不到，尝试按 slug 查找（支持 "-1" 或 "hot" 这种特殊情况）
         if (!category && (identifier === "-1" || identifier === "hot")) {
-          category = await prisma.category.findFirst({
+          category = await prisma.categories.findFirst({
             where: {
               OR: [
                 { slug: identifier },
@@ -1083,7 +1029,7 @@ export async function POST(request: Request) {
         
         // 🚀 如果仍然找不到，尝试所有可能的查找方式（兜底逻辑）
         if (!category) {
-          category = await prisma.category.findFirst({
+          category = await prisma.categories.findFirst({
         where: {
               OR: [
                 { id: identifier },
@@ -1100,12 +1046,10 @@ export async function POST(request: Request) {
       
       const foundCategories = (await Promise.all(categoryPromises)).filter(Boolean) as Array<{ id: string }>;
       validCategoryConnect = foundCategories;
-      
-      console.log('✅ [Market API] 在数据库中找到的有效分类:');
-      validCategoryConnect.forEach(c => console.log(`   - ID: ${c.id}`));
+
       
       // 🚀 诊断日志：如果前端传来 "-1" 但找不到，给出详细提示
-      const notFoundIds = categoryIds.filter(id => !validCategoryConnect.some(c => c.id === id));
+      const notFoundIds = categoryIds.filter((id: string) => !validCategoryConnect.some(c => c.id === id));
       if (notFoundIds.length > 0) {
         console.warn('⚠️ [Market API] 以下分类标识未找到:', notFoundIds);
         console.warn('   提示：如果是 "-1" 或 "hot"，请检查数据库中是否存在 slug 为 "-1" 或 "hot" 的分类');
@@ -1115,7 +1059,7 @@ export async function POST(request: Request) {
     }
 
     // 🔥 修复热门标签逻辑：检查是否包含热门分类（ID=-1 或 slug="-1"），如果包含，自动设置 isHot = true
-    const hotCategory = await prisma.category.findFirst({
+    const hotCategory = await prisma.categories.findFirst({
       where: {
         OR: [
           { slug: '-1' },
@@ -1129,14 +1073,6 @@ export async function POST(request: Request) {
     // 如果分类列表中包含热门分类，自动设置 isHot = true（覆盖前端传入的值）
     const hasHotCategory = hotCategory && validCategoryConnect.some(c => c.id === hotCategory.id);
     const finalIsHot = hasHotCategory ? true : (isHot === true ? true : false);
-    
-    console.log('🔥 [Market API] 热门标签逻辑:', {
-      hotCategoryId: hotCategory?.id,
-      validCategoryIds: validCategoryConnect.map(c => c.id),
-      hasHotCategory,
-      isHotFromBody: isHot,
-      finalIsHot,
-    });
 
     const marketData: any = {
       title: body.title,
@@ -1159,7 +1095,7 @@ export async function POST(request: Request) {
     const templateId = `manual-${crypto.randomUUID()}`;
     marketData.templateId = templateId;
 
-    // 🔥 修正 prisma.market.create 调用：根据 MarketCategory 中间表结构，使用 create 语法
+    // 🔥 修正 prisma.markets.create 调用：根据 MarketCategory 中间表结构，使用 create 语法
     // 参考 scripts/seed-pending-markets.ts 的实现方式
     // MarketCategory 表的字段是 categoryId，不是嵌套的 category 对象
     if (validCategoryConnect.length > 0) {
@@ -1168,21 +1104,13 @@ export async function POST(request: Request) {
           categoryId: c.id, // 🔥 直接使用 categoryId 字段，不需要嵌套 connect
         })),
       };
-      console.log('✅ [Market API] 准备关联的分类:', validCategoryConnect.map(c => c.id));
+
     } else {
       console.warn('⚠️ [Market API] 没有有效的分类，创建市场但不关联分类');
     }
 
-    const newMarket = await prisma.market.create({
+    const newMarket = await prisma.markets.create({
       data: marketData,
-    });
-
-    console.log('✅ [Market API] 市场记录创建成功:', {
-      id: newMarket.id,
-      title: newMarket.title,
-      source: newMarket.source,
-      isActive: newMarket.isActive,
-      templateId: templateId,
     });
 
     // 处理 BigInt 序列化并返回

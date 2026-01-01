@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { formatUSD } from "@/lib/utils";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface ActivityItem {
   id: string;
@@ -18,16 +19,17 @@ interface UserActivityTableProps {
   userId?: string;
 }
 
-const tabs = [
-  { id: "positions", label: "Positions" },
-  { id: "activity", label: "Activity" },
-];
-
 export default function UserActivityTable({ userId }: UserActivityTableProps) {
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState("activity");
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  const tabs = [
+    { id: "positions", label: t('profile.tabs.positions') },
+    { id: "activity", label: t('profile.tabs.activity') },
+  ];
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -73,13 +75,13 @@ export default function UserActivityTable({ userId }: UserActivityTableProps) {
               
               let timeAgo = '';
               if (diffHours < 1) {
-                timeAgo = '刚刚';
+                timeAgo = language === 'en' ? 'Just now' : '刚刚';
               } else if (diffHours < 24) {
-                timeAgo = `${diffHours} 小时前`;
+                timeAgo = language === 'en' ? `${diffHours} hours ago` : `${diffHours} 小时前`;
               } else if (diffDays < 7) {
-                timeAgo = `${diffDays} 天前`;
+                timeAgo = language === 'en' ? `${diffDays} days ago` : `${diffDays} 天前`;
               } else {
-                timeAgo = timestamp.toLocaleDateString('zh-CN');
+                timeAgo = timestamp.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN');
               }
 
               return {
@@ -135,13 +137,13 @@ export default function UserActivityTable({ userId }: UserActivityTableProps) {
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                    Type
+                    {t('rank.table.type')}
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                    Market
+                    {t('rank.table.market')}
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                    Value
+                    {t('rank.table.value')}
                 </th>
               </tr>
             </thead>
@@ -151,7 +153,7 @@ export default function UserActivityTable({ userId }: UserActivityTableProps) {
                   <td colSpan={3} className="px-6 py-8 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin text-pm-green" />
-                      <span className="text-zinc-400">加载中...</span>
+                      <span className="text-zinc-400">{t('rank.loading')}</span>
                     </div>
                   </td>
                 </tr>
@@ -166,7 +168,7 @@ export default function UserActivityTable({ userId }: UserActivityTableProps) {
               {!isLoading && !error && activities.length === 0 && (
                 <tr>
                   <td colSpan={3} className="px-6 py-8 text-center text-zinc-400">
-                    暂无活动记录
+                    {t('profile.empty.activity')}
                   </td>
                 </tr>
               )}
@@ -183,7 +185,7 @@ export default function UserActivityTable({ userId }: UserActivityTableProps) {
                           : "text-pm-red"
                       }`}
                     >
-                      {activity.type === "Buy" ? "Buy" : "Sell"}
+                      {activity.type === "Buy" ? t('market.trade.buy') : t('market.trade.sell')}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -213,7 +215,7 @@ export default function UserActivityTable({ userId }: UserActivityTableProps) {
       {/* Positions Tab 内容（占位） */}
       {activeTab === "positions" && (
         <div className="p-8 text-center text-zinc-400">
-          <p>No positions</p>
+          <p>{t('rank.public.no_positions')}</p>
         </div>
       )}
     </div>

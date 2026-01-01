@@ -14,22 +14,21 @@ import { aggregateMarketsByTemplate } from '@/lib/marketAggregation'; // 🔥 �
  */
 export async function GET(request: NextRequest) {
   try {
-    console.log('📋 [Categories API] 开始获取分类列表...');
-    
+
     // 获取所有启用的分类，包含父子关系，按 level 和 displayOrder 排序
-    const categories = await prisma.category.findMany({
+    const categories = await prisma.categories.findMany({
       where: {
         status: 'active',
       },
       include: {
-        parent: {
+        categories: {
           select: {
             id: true,
             name: true,
             slug: true,
           },
         },
-        children: {
+        other_categories: {
           where: {
             status: 'active',
           },
@@ -41,7 +40,7 @@ export async function GET(request: NextRequest) {
             level: true,
             displayOrder: true,
             sortOrder: true,
-            children: {
+            other_categories: {
               where: {
                 status: 'active',
               },
@@ -73,13 +72,11 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    console.log(`✅ [Categories API] 成功获取 ${categories.length} 个分类:`, categories.map(c => c.name));
-
     // 🔥 递归函数：获取分类及其所有子分类的 ID
     const getAllCategoryIds = (category: any): string[] => {
       const ids = [category.id];
-      if (category.children && category.children.length > 0) {
-        category.children.forEach((child: any) => {
+      if (category.other_categories && category.other_categories.length > 0) {
+        category.other_categories.forEach((child: any) => {
           ids.push(...getAllCategoryIds(child));
         });
       }
@@ -92,8 +89,8 @@ export async function GET(request: NextRequest) {
     // 物理重写：严禁直接使用 count()，必须基于聚合后的唯一市场数量
     const addCountToCategory = async (category: any): Promise<any> => {
       // 先递归处理子分类，获取子分类的 count
-      const childrenWithCount = category.children && category.children.length > 0
-        ? await Promise.all(category.children.map((child: any) => addCountToCategory(child)))
+      const childrenWithCount = category.other_categories && category.other_categories.length > 0
+        ? await Promise.all(category.other_categories.map((child: any) => addCountToCategory(child)))
         : undefined;
 
       // 获取当前分类及其所有子分类的 ID
@@ -121,7 +118,7 @@ export async function GET(request: NextRequest) {
       // 2. 执行 aggregateMarketsByTemplate 聚合
       // 3. 返回聚合后的 Array.length
       // 🚀 关键修复：必须查询与前端相同的字段，以便进行相同的时间过滤
-      const marketsForAggregation = await prisma.market.findMany({
+      const marketsForAggregation = await prisma.markets.findMany({
         where: whereCondition,
         select: {
           id: true,
@@ -141,25 +138,11 @@ export async function GET(request: NextRequest) {
       const { aggregateMarketsByTemplate } = await import('@/lib/marketAggregation');
       const aggregatedMarkets = aggregateMarketsByTemplate(marketsForAggregation);
       const uniqueMarketCount = aggregatedMarkets.length;
-      
-      console.log(`📊 [Categories API] 分类 "${category.name}" 聚合统计:`, {
-        rawMarketsCount: marketsForAggregation.length,
-        aggregatedCount: uniqueMarketCount,
-        categoryIds: categoryIds,
-      });
-      
+
       // 🔥 验证：打印统计详情（用于调试，使用聚合后的数据进行验证）
       const aggregatedMarketsWithTemplate = aggregatedMarkets.filter((m: any) => m.templateId);
       const aggregatedIndependentMarkets = aggregatedMarkets.filter((m: any) => !m.templateId);
       const uniqueTemplateIds = new Set(aggregatedMarketsWithTemplate.map((m: any) => m.templateId));
-      
-      console.log(`📊 [Categories API] 分类 "${category.name}" 最终统计:`, {
-        rawMarketsFromDB: marketsForAggregation.length,
-        aggregatedUniqueCount: uniqueMarketCount,
-        uniqueTemplateSeries: uniqueTemplateIds.size,
-        independentMarkets: aggregatedIndependentMarkets.length,
-        formula: `${uniqueTemplateIds.size} (聚合系列) + ${aggregatedIndependentMarkets.length} (独立市场) = ${uniqueMarketCount}`,
-      });
 
       // 🚀 修复：直接使用 uniqueMarketCount，它已经通过 getAllCategoryIds 正确计算了父分类及其所有子分类聚合后的唯一系列总数
       // 不需要再用子分类count之和去覆盖，因为 uniqueMarketCount 已经包含了所有数据
@@ -184,7 +167,7 @@ export async function GET(request: NextRequest) {
       return {
         ...category,
         count, // 确保 count 字段始终是 number 类型
-        children: category.children ? category.children.map(ensureCountField) : undefined,
+        children: category.other_categories ? category.other_categories.map(ensureCountField) : undefined,
       };
     };
 
@@ -192,19 +175,10 @@ export async function GET(request: NextRequest) {
 
     // 🔥 数据源头查证：物理验证 API 返回的数据结构
     if (finalCategories.length > 0) {
-      console.log('📡 [Categories API] API 发送给前端的数据样例:', JSON.stringify(finalCategories[0], null, 2));
-      console.log('📡 [Categories API] 第一个分类的 count 字段:', finalCategories[0].count, '类型:', typeof finalCategories[0].count);
+
     }
 
     // 🔥 调试日志：验证 count 字段是否正确返回
-    console.log('📊 [Categories API] 返回的分类数据（前3个）:', 
-      finalCategories.slice(0, 3).map(cat => ({
-        name: cat.name,
-        count: cat.count,
-        hasChildren: !!cat.children,
-        childrenCount: cat.children?.length || 0,
-      }))
-    );
 
     // 如果数据库为空，返回空数组（前端应该显示默认分类或提示）
     return NextResponse.json({

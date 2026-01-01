@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const now = dayjs.utc().toDate();
     
     // 1. 修复未来场次但状态为 CLOSED 的 -> 更新为 OPEN
-    const fixFutureClosed = await prisma.market.updateMany({
+    const fixFutureClosed = await prisma.markets.updateMany({
       where: {
         isFactory: true,
         isActive: true,
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     });
     
     // 2. 修复过去场次但状态为 OPEN 的 -> 更新为 CLOSED
-    const fixPastOpen = await prisma.market.updateMany({
+    const fixPastOpen = await prisma.markets.updateMany({
       where: {
         isFactory: true,
         isActive: true,

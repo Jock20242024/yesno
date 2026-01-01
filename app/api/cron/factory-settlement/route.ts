@@ -29,8 +29,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('⚖️ [Cron] 开始执行工厂自动结算任务...');
-    
     const stats = await runSettlementScanner();
     
     return NextResponse.json({

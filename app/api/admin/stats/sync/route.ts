@@ -110,8 +110,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('🔄 [Stats Sync API] 开始同步全局统计数据...');
-
     // 抓取统计数据
     const stats = await fetchGlobalStats();
 
@@ -119,7 +117,7 @@ export async function POST(request: NextRequest) {
     const updateResults: any = {};
 
     // 更新 24H 交易量
-    const volumeStat = await prisma.globalStat.findFirst({
+    const volumeStat = await prisma.global_stats.findFirst({
       where: {
         OR: [
           { label: { contains: '24H 交易量' } },
@@ -130,7 +128,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (volumeStat && volumeStat.overrideValue === null) {
-      await prisma.globalStat.update({
+      await prisma.global_stats.update({
         where: { id: volumeStat.id },
         data: { value: stats.totalVolume24h },
       });
@@ -138,7 +136,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 更新 TVL
-    const tvlStat = await prisma.globalStat.findFirst({
+    const tvlStat = await prisma.global_stats.findFirst({
       where: {
         OR: [
           { label: { contains: 'TVL' } },
@@ -150,7 +148,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (tvlStat && tvlStat.overrideValue === null) {
-      await prisma.globalStat.update({
+      await prisma.global_stats.update({
         where: { id: tvlStat.id },
         data: { value: stats.totalLiquidity },
       });
@@ -158,7 +156,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 🔥 修复指标自动重建问题：只在指标存在且启用时才更新
-    const externalMarketsStat = await prisma.globalStat.findFirst({
+    const externalMarketsStat = await prisma.global_stats.findFirst({
       where: {
         label: 'external_active_markets_count',
       },
@@ -166,21 +164,19 @@ export async function POST(request: NextRequest) {
 
     if (externalMarketsStat && externalMarketsStat.isActive) {
       // ✅ 只有在指标存在且处于"启用"状态时，才更新数值
-      await prisma.globalStat.update({
+      await prisma.global_stats.update({
         where: { id: externalMarketsStat.id },
         data: { value: stats.activeMarketsCount },
       });
       updateResults.externalActiveMarkets = stats.activeMarketsCount;
-      console.log(`✅ [Stats Sync API] 已更新 external_active_markets_count: ${stats.activeMarketsCount}`);
+
     } else if (!externalMarketsStat) {
       // 🔥 如果数据库里没有这个指标（用户删除了），脚本就不再管它，不再自动创建
-      console.log(`⚠️ [Stats Sync API] external_active_markets_count 指标不存在，跳过更新（不自动创建）`);
+
     } else {
       // 指标存在但被禁用
-      console.log(`⚠️ [Stats Sync API] external_active_markets_count 指标已禁用，跳过更新`);
-    }
 
-    console.log('✅ [Stats Sync API] 同步完成:', updateResults);
+    }
 
     return NextResponse.json({
       success: true,

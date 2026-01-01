@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useNotification } from "@/components/providers/NotificationProvider";
+import { useLanguage } from "@/i18n/LanguageContext";
 import { Settings, Users, Key, LogOut, Loader2, BarChart3, HelpCircle, Search, TrendingUp, Calendar, Share2, X } from "lucide-react";
 import SettingsTab from "@/components/profile/SettingsTab";
 import ReferralTab from "@/components/profile/ReferralTab";
@@ -35,6 +36,7 @@ function OverviewTab({
   ordersLoading: boolean;
   addNotification: (notification: { type: "success" | "error" | "info"; title: string; message: string }) => void;
 }) {
+  const { t, language } = useLanguage();
   const [timeFilter, setTimeFilter] = useState<"1D" | "1W" | "全部">("全部");
   const [listTab, setListTab] = useState<"positions" | "activity">("positions");
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,7 +71,28 @@ function OverviewTab({
   const predictionsCount = rawPositions.length;
 
   const userName = user?.name || user?.email?.split("@")[0] || "用户";
-  const joinDate = "2025年10月加入"; // Mock 数据
+  
+  // 格式化加入日期
+  const formatJoinDate = (dateString?: string): string => {
+    if (!dateString) {
+      // Mock 数据：假设是 2025年10月
+      const mockDate = new Date(2025, 9, 1); // 月份从0开始，所以9代表10月
+      if (language === 'en') {
+        return `Joined ${mockDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+      } else {
+        return `${mockDate.getFullYear()}年${mockDate.getMonth() + 1}月加入`;
+      }
+    }
+    
+    const date = new Date(dateString);
+    if (language === 'en') {
+      return `Joined ${date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+    } else {
+      return `${date.getFullYear()}年${date.getMonth() + 1}月加入`;
+    }
+  };
+  
+  const joinDate = formatJoinDate();
 
   // 🔥 修复：使用真实持仓数据，并获取市场标题
   const [positionsWithMarketNames, setPositionsWithMarketNames] = useState<Array<{
@@ -217,15 +240,15 @@ function OverviewTab({
               {/* 三个小指标 */}
               <div className="grid grid-cols-3 gap-4 pt-6 border-t border-pm-border">
                 <div className="flex flex-col">
-                  <span className="text-xs text-pm-text-dim uppercase tracking-wider mb-1">职位价值</span>
+                  <span className="text-xs text-pm-text-dim uppercase tracking-wider mb-1">{t('profile.stats.portfolio_value')}</span>
                   <span className="text-lg font-bold text-white">{formatUSD(positionsValue)}</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-xs text-pm-text-dim uppercase tracking-wider mb-1">最大胜利</span>
+                  <span className="text-xs text-pm-text-dim uppercase tracking-wider mb-1">{t('profile.stats.max_win')}</span>
                   <span className="text-lg font-bold text-pm-green">{formatUSD(biggestWin)}</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-xs text-pm-text-dim uppercase tracking-wider mb-1">预测次数</span>
+                  <span className="text-xs text-pm-text-dim uppercase tracking-wider mb-1">{t('profile.stats.predictions_count')}</span>
                   <span className="text-lg font-bold text-white">{predictionsCount}</span>
                 </div>
               </div>
@@ -243,20 +266,24 @@ function OverviewTab({
           ) : (
             <>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-white">利润/亏损</h3>
+                <h3 className="text-lg font-bold text-white">{t('profile.stats.pnl')}</h3>
                 {/* 时间筛选 */}
                 <div className="flex items-center gap-2">
-                  {(["1D", "1W", "全部"] as const).map((filter) => (
+                  {([
+                    { id: "1D" as const, label: "1D" },
+                    { id: "1W" as const, label: "1W" },
+                    { id: "全部" as const, label: t('common.time.all') }
+                  ]).map((filter) => (
                     <button
-                      key={filter}
-                      onClick={() => setTimeFilter(filter)}
+                      key={filter.id}
+                      onClick={() => setTimeFilter(filter.id)}
                       className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
-                        timeFilter === filter
+                        timeFilter === filter.id
                           ? "bg-pm-green text-white"
                           : "text-pm-text-dim hover:text-white"
                       }`}
                     >
-                      {filter}
+                      {filter.label}
                     </button>
                   ))}
                 </div>
@@ -282,8 +309,8 @@ function OverviewTab({
         <div className="border-b border-pm-border px-6">
           <div className="flex items-center gap-2">
             {[
-              { id: "positions" as const, label: "职位" },
-              { id: "activity" as const, label: "活动" },
+              { id: "positions" as const, labelKey: "positions" },
+              { id: "activity" as const, labelKey: "activity" },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -294,7 +321,7 @@ function OverviewTab({
                     : "text-pm-text-dim hover:text-white"
                 }`}
               >
-                {tab.label}
+                {t(`profile.tabs.${tab.labelKey}`)}
                 {/* 激活线 */}
                 {listTab === tab.id && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-pm-green"></div>
@@ -310,7 +337,7 @@ function OverviewTab({
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-pm-text-dim" />
             <input
               type="text"
-              placeholder="搜索职位"
+              placeholder={t('profile.search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-pm-card border border-pm-border rounded-lg pl-10 pr-4 py-2 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all"
@@ -325,7 +352,7 @@ function OverviewTab({
             }`}
           >
             <TrendingUp className="w-4 h-4" />
-            <span className="text-sm font-medium">价值</span>
+            <span className="text-sm font-medium">{t('profile.sort.value')}</span>
           </button>
         </div>
 
@@ -364,7 +391,7 @@ function OverviewTab({
                       <div className="flex-1 min-w-0">
                         <div className="text-white font-medium truncate">{position.marketName}</div>
                         <div className="text-sm text-pm-text-dim">
-                          平均值: {formatUSD(position.averagePrice)} | 当前的: {formatUSD(position.currentPrice)}
+                          {t('profile.position.avg')}: {formatUSD(position.averagePrice)} | {t('profile.position.current')}: {formatUSD(position.currentPrice)}
                         </div>
                       </div>
                     </div>
@@ -382,7 +409,7 @@ function OverviewTab({
                       <button
                         onClick={(e) => handleShare(position.marketId, e)}
                         className="p-2 rounded-lg text-pm-text-dim opacity-0 group-hover:opacity-100 hover:text-white hover:bg-white/10 transition-all"
-                        title="分享市场链接"
+                        title={t('profile.position.share_market')}
                       >
                         <Share2 className="w-5 h-5" />
                       </button>
@@ -392,12 +419,12 @@ function OverviewTab({
               </div>
             ) : (
               <div className="text-center py-12 text-pm-text-dim">
-                <p>暂无职位</p>
+                <p>{t('profile.empty.positions')}</p>
               </div>
             )
           ) : (
             <div className="text-center py-12 text-pm-text-dim">
-              <p>暂无活动记录</p>
+              <p>{t('profile.empty.activity')}</p>
             </div>
           )}
         </div>
@@ -407,6 +434,7 @@ function OverviewTab({
 }
 
 export default function ProfilePage() {
+  const { t } = useLanguage();
   const { user, isLoggedIn, logout, currentUser, isLoading: authLoading } = useAuth();
   const { addNotification } = useNotification();
   const router = useRouter();
@@ -652,22 +680,22 @@ export default function ProfilePage() {
   const menuItems = [
     {
       id: "overview" as TabType,
-      label: "个人概览",
+      labelKey: "overview",
       icon: BarChart3,
     },
     {
       id: "settings" as TabType,
-      label: "账户设置",
+      labelKey: "settings",
       icon: Settings,
     },
     {
       id: "referral" as TabType,
-      label: "邀请返佣",
+      labelKey: "referral",
       icon: Users,
     },
     {
       id: "api" as TabType,
-      label: "API 管理",
+      labelKey: "api",
       icon: Key,
     },
   ];
@@ -692,7 +720,7 @@ export default function ProfilePage() {
                   <h2 className="text-base font-bold text-white truncate">
                     {user?.name || "用户"}
                   </h2>
-                  <p className="text-pm-text-dim text-xs">个人中心</p>
+                  <p className="text-pm-text-dim text-xs">{t('profile.sidebar.user_center')}</p>
                 </div>
               </div>
 
@@ -713,7 +741,7 @@ export default function ProfilePage() {
                         }`}
                       >
                         <Icon className="w-5 h-5" />
-                        <span>{item.label}</span>
+                        <span>{t(`profile.sidebar.${item.labelKey}`)}</span>
                       </button>
                     );
                   })}
@@ -733,12 +761,12 @@ export default function ProfilePage() {
                     {isLoggingOut ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>退出中...</span>
+                        <span>{t('profile.logging_out')}</span>
                       </>
                     ) : (
                       <>
                         <LogOut className="w-5 h-5" />
-                        <span>退出登录</span>
+                        <span>{t('navbar.logout')}</span>
                       </>
                     )}
                   </button>

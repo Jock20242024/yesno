@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import dayjs from "dayjs";
 
@@ -96,13 +97,13 @@ export default function SettlementPage() {
       const result = await response.json();
 
       if (result.success) {
-        alert('结算重试成功！');
+        toast.success('结算重试成功！');
         fetchSettlementData(); // 刷新数据
       } else {
-        alert(`结算重试失败: ${result.error}`);
+        toast.error(`结算重试失败: ${result.error}`);
       }
     } catch (err) {
-      alert(`结算重试失败: ${err instanceof Error ? err.message : '未知错误'}`);
+      toast.error(`结算重试失败: ${err instanceof Error ? err.message : '未知错误'}`);
     } finally {
       setRetryingMarkets(prev => {
         const next = new Set(prev);
@@ -132,13 +133,13 @@ export default function SettlementPage() {
       const result = await response.json();
 
       if (result.success) {
-        alert('强制结算成功！');
+        toast.success('强制结算成功！');
         fetchSettlementData(); // 刷新数据
       } else {
-        alert(`强制结算失败: ${result.error}`);
+        toast.error(`强制结算失败: ${result.error}`);
       }
     } catch (err) {
-      alert(`强制结算失败: ${err instanceof Error ? err.message : '未知错误'}`);
+      toast.error(`强制结算失败: ${err instanceof Error ? err.message : '未知错误'}`);
     } finally {
       setRetryingMarkets(prev => {
         const next = new Set(prev);

@@ -230,6 +230,18 @@ export default function AdminSidebar() {
               <p className="text-sm font-medium leading-normal">赔率管理</p>
             </Link>
 
+            <Link
+              href="/admin/referral-settings"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                pathname === "/admin/referral-settings"
+                  ? "bg-primary text-white shadow-sm hover:bg-blue-600"
+                  : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
+              }`}
+            >
+              <span className="material-symbols-outlined">account_tree</span>
+              <p className="text-sm font-medium leading-normal">返佣设置</p>
+            </Link>
+
             {/* 报表与日志分组 */}
             <div className="pt-2 pb-1">
               <p className="px-3 text-xs font-bold text-[#637588] dark:text-[#58677a] uppercase tracking-wider">报表与日志</p>

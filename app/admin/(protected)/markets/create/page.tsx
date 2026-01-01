@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { DollarSign, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
 
 interface Category {
   id: string;
@@ -48,7 +49,7 @@ export default function MarketCreationPage() {
           // 🔥 统一从数据库读取分类，不使用硬编码的默认分类
           if (data.data.length > 0) {
             setCategories(data.data);
-            console.log(`✅ [CreateMarket] 已加载 ${data.data.length} 个分类`);
+
           } else {
             console.warn('⚠️ [CreateMarket] 数据库中没有分类数据，请先在后台创建分类');
             setCategories([]);
@@ -153,7 +154,7 @@ export default function MarketCreationPage() {
 
     // 验证分类是否至少选择一个
     if (!formData.categories || formData.categories.length === 0) {
-      alert("请至少选择一个分类");
+      toast.error("请至少选择一个分类");
       return;
     }
 
@@ -179,7 +180,7 @@ export default function MarketCreationPage() {
       });
 
       if (validCategoryIds.length === 0) {
-        alert("请至少选择一个有效的分类");
+        toast.error("请至少选择一个有效的分类");
         return;
       }
 
@@ -188,17 +189,12 @@ export default function MarketCreationPage() {
       const selectedCategory = categories.find(cat => cat.id === selectedCategoryId);
       const categoryName = selectedCategory ? selectedCategory.name : '';
 
-      console.log('📤 [CreateMarket] 提交数据:', {
-        categories: validCategoryIds,
-        categoryName,
-      });
-
       const response = await fetch("/api/admin/markets", {
         method: "POST",
         headers: {
-          Authorization: "Bearer ADMIN_SECRET_TOKEN",
           "Content-Type": "application/json",
         },
+        credentials: 'include', // 🔥 修复：使用 credentials 自动发送 HttpOnly Cookie，而不是硬编码 Token
         body: JSON.stringify({
           title: formData.marketName,
           description: formData.description,
@@ -229,15 +225,16 @@ export default function MarketCreationPage() {
           initialPriceLeft: "50",
           initialLiquidity: "",
           feeRate: "0.05",
+          isHot: false,
         });
         // 显示成功消息（可以使用 toast 或其他通知组件）
-        alert("市场创建成功！");
+        toast.success("市场创建成功！");
       } else {
-        alert(data.error || "创建市场失败");
+        toast.error(data.error || "创建市场失败");
       }
     } catch (error) {
       console.error("Create market error:", error);
-      alert("创建市场失败");
+      toast.error("创建市场失败");
     }
   };
 

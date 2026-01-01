@@ -39,8 +39,7 @@ export async function GET() {
     // 请返回 { success: true, balance: 0, isGuest: true } 并给状态码 200
     // 这样可以彻底阻止前端 AuthProvider 触发登出死循环
     if (!session?.user?.id) {
-      console.log('DEBUG: Session missing in Assets API');
-      console.log('🔒 [Assets API] No session or user.id, returning 200 with balance: 0, isGuest: true');
+
       // 🔥 强制 API 健壮化：返回 200 状态码，而不是 401，彻底阻止前端 AuthProvider 触发登出死循环
       const response = NextResponse.json({
         success: true,
@@ -73,7 +72,7 @@ export async function GET() {
     // 🔥 修复：处理数据库查询超时错误
     let user;
     try {
-      user = await prisma.user.findUnique({
+      user = await prisma.users.findUnique({
         where: { id: userId },
         select: {
           id: true,
@@ -83,24 +82,17 @@ export async function GET() {
       });
       
       // ========== STEP 1: 深度日志埋点 - User 查询结果 ==========
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('🔍 [STEP 1] User 查询结果（数据库原始值）:');
-      console.log('  ✅ User 对象存在:', !!user);
+
       if (user) {
-        console.log('  📋 User ID:', user.id);
-        console.log('  📧 User Email:', user.email);
-        console.log('  💰 User.balance (原始数据库值):', user.balance);
-        console.log('  💰 User.balance 类型:', typeof user.balance);
-        console.log('  💰 User.balance 是否为 null:', user.balance === null);
-        console.log('  💰 User.balance 是否为 undefined:', user.balance === undefined);
+
       } else {
-        console.log('  ⚠️ User 对象为 null 或 undefined');
+
       }
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
     } catch (dbError: any) {
       // 🔥 修复：数据库连接超时或其他错误时，返回降级数据（零值），但不返回 isGuest: true
       console.error('❌ [Assets API] 用户查询失败（可能是超时）:', dbError?.message || dbError);
-      console.log('🔒 [Assets API] 用户查询失败，返回降级数据（零值）而非 isGuest: true');
+
       const response = NextResponse.json({
         success: true,
         data: {
@@ -123,7 +115,7 @@ export async function GET() {
     }
 
     if (!user) {
-      console.log('🔒 [Assets API] User not found by id, returning 200 with balance: 0');
+
       const response = NextResponse.json({
         success: true,
         data: {
@@ -149,14 +141,6 @@ export async function GET() {
     const availableBalance = user.balance ?? 0;
 
     // ========== STEP 2: 深度日志埋点 - AvailableBalance 计算后 ==========
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔍 [STEP 2] AvailableBalance 计算结果:');
-    console.log('  💰 user.balance (原始值):', user.balance);
-    console.log('  💰 user.balance ?? 0 计算结果:', availableBalance);
-    console.log('  📊 availableBalance 类型:', typeof availableBalance);
-    console.log('  ✅ availableBalance 是否为数字:', typeof availableBalance === 'number');
-    console.log('  ⚠️ availableBalance 是否为 NaN:', isNaN(availableBalance));
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // 2. 获取用户所有订单
     const orders = await DBService.findOrdersByUserId(userId);
@@ -171,13 +155,13 @@ export async function GET() {
 
     // ========== 修复：从Position表计算持仓价值，不再从Order数组计算 ==========
     // 强制规则：UI的"我的持仓"100%只能来自Position表，不允许从Trade计算
-    const positions = await prisma.position.findMany({
+    const positions = await prisma.positions.findMany({
       where: {
         userId,
         status: 'OPEN', // ========== 强制规则：只计算OPEN状态的持仓 ==========
       },
       include: {
-        market: {
+        markets: {
           select: {
             id: true,
             totalYes: true,
@@ -199,10 +183,10 @@ export async function GET() {
         // 🔥 确保 outcome 类型正确（Position.outcome 是 Outcome 枚举，需要转换为 'YES' | 'NO'）
         const outcomeStr = position.outcome as 'YES' | 'NO';
         const currentPrice = calculatePositionPrice(outcomeStr, {
-          status: position.market.status,
-          resolvedOutcome: position.market.resolvedOutcome,
-          totalYes: position.market.totalYes || 0,
-          totalNo: position.market.totalNo || 0,
+          status: position.markets.status,
+          resolvedOutcome: position.markets.resolvedOutcome,
+          totalYes: position.markets.totalYes || 0,
+          totalNo: position.markets.totalNo || 0,
         });
 
         // 持仓价值 = 份额 * 当前价格
@@ -217,18 +201,6 @@ export async function GET() {
     const totalBalance = availableBalance + frozenBalance + positionsValue;
 
     // ========== STEP 3: 深度日志埋点 - TotalBalance 计算后（最终返回前）==========
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔍 [STEP 3] TotalBalance 最终计算结果（即将返回给前端）:');
-    console.log('  💰 availableBalance:', availableBalance, `(类型: ${typeof availableBalance})`);
-    console.log('  🧊 frozenBalance:', frozenBalance, `(类型: ${typeof frozenBalance})`);
-    console.log('  📈 positionsValue:', positionsValue, `(类型: ${typeof positionsValue})`);
-    console.log('  🧮 计算公式: totalBalance = availableBalance + frozenBalance + positionsValue');
-    console.log('  🧮 计算过程:', `${availableBalance} + ${frozenBalance} + ${positionsValue}`);
-    console.log('  💎 totalBalance (最终结果):', totalBalance, `(类型: ${typeof totalBalance})`);
-    console.log('  ⚠️ totalBalance 是否为 NaN:', isNaN(totalBalance));
-    console.log('  ⚠️ totalBalance 是否为 0:', totalBalance === 0);
-    console.log('  ✅ 即将返回的 JSON.data.balance 字段值:', totalBalance);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // 6. 计算历史资产（用于计算收益）
     // 获取不同时间点的订单和交易记录
@@ -239,12 +211,12 @@ export async function GET() {
     const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000;
 
     // 获取充值记录（用于计算历史余额）
-    const deposits = await prisma.deposit.findMany({
+    const deposits = await prisma.deposits.findMany({
       where: { userId },
       orderBy: { createdAt: 'asc' },
     });
 
-    const withdrawals = await prisma.withdrawal.findMany({
+    const withdrawals = await prisma.withdrawals.findMany({
       where: { userId },
       orderBy: { createdAt: 'asc' },
     });
@@ -264,7 +236,7 @@ export async function GET() {
       // ========== 修复：从Position历史计算持仓价值 ==========
       // 查询该时间点之前创建的Position记录（包括CLOSED的）
       // 注意：这是一个简化实现，生产环境应该使用历史快照表记录每个时间点的持仓价值
-      const historicalPositions = await prisma.position.findMany({
+      const historicalPositions = await prisma.positions.findMany({
         where: {
           userId,
           createdAt: {
@@ -272,7 +244,7 @@ export async function GET() {
           },
         },
         include: {
-          market: {
+          markets: {
             select: {
               id: true,
               totalYes: true,
@@ -289,15 +261,15 @@ export async function GET() {
         try {
           // 🔥 重构：使用统一的 calculatePositionPrice 工具函数
           // 只计算 OPEN 市场的持仓价值（已结算的应该已经计入余额）
-          if (position.market.status !== 'OPEN') {
+          if (position.markets.status !== 'OPEN') {
             continue;
           }
 
-          const currentPrice = calculatePositionPrice(position.outcome, {
-            status: position.market.status,
-            resolvedOutcome: position.market.resolvedOutcome,
-            totalYes: position.market.totalYes || 0,
-            totalNo: position.market.totalNo || 0,
+          const currentPrice = calculatePositionPrice(position.outcome as 'YES' | 'NO', {
+            status: position.markets.status,
+            resolvedOutcome: position.markets.resolvedOutcome,
+            totalYes: position.markets.totalYes || 0,
+            totalNo: position.markets.totalNo || 0,
           });
 
           // 只计算该时间点之前创建的持仓份额
@@ -336,13 +308,7 @@ export async function GET() {
     // 🔥 注意：totalBalance 已在第 193 行计算，此处不再重复定义
     
     // 🔥 在返回前打印最终计算结果
-    console.log('💰 [Assets API] 最终资产计算结果:');
-    console.log('  AvailableBalance (可用余额):', availableBalance);
-    console.log('  FrozenBalance (冻结余额):', frozenBalance);
-    console.log('  PositionsValue (持仓价值):', positionsValue);
-    console.log('  TotalBalance (总资产):', totalBalance);
-    console.log('═══════════════════════════════════════════════════════');
-    
+
     const response = NextResponse.json({
       success: true,
       data: {

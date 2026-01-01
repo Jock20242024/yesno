@@ -7,240 +7,145 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id            String        @id @default(uuid())
-  email         String        @unique
-  passwordHash  String?
-  provider      String        @default("email")
-  balance       Float         @default(0.0)
-  walletAddress String?
-  isAdmin       Boolean       @default(false)
-  isBanned      Boolean       @default(false)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  adminLogs     AdminLog[]    @relation("AdminLogs")
-  authSessions  AuthSession[]
-  deposits      Deposit[]
-  orders        Order[]
-  positions     Position[]
-  transactions  Transaction[]
-  withdrawals   Withdrawal[]
-
-  @@map("users")
-}
-
-model AuthSession {
-  id        String   @id @default(uuid())
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("auth_sessions")
-}
-
-model Category {
-  id           String           @id @default(uuid())
-  name         String
-  slug         String           @unique
-  icon         String?
-  displayOrder Int              @default(0)
-  status       String           @default("active")
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  level        Int              @default(0)
-  parentId     String?
-  sortOrder    Int              @default(0)
-  parent       Category?        @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children     Category[]       @relation("CategoryChildren")
-  markets      MarketCategory[]
-
-  @@index([parentId])
-  @@index([status])
-  @@index([level])
-  @@map("categories")
-}
-
-model Market {
-  id              String           @id @default(uuid())
-  title           String
-  description     String           @default("")
-  closingDate     DateTime
-  resolvedOutcome Outcome?
-  status          MarketStatus     @default(OPEN)
-  totalVolume     Float            @default(0.0)
-  totalYes        Float            @default(0.0)
-  totalNo         Float            @default(0.0)
-  feeRate         Float            @default(0.05)
-  category        String?
-  categorySlug    String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  isHot           Boolean          @default(false)
-  externalId      String?
-  externalSource  String?
-  noProbability   Int?
-  rank            Int?
-  reviewStatus    ReviewStatus     @default(PENDING)
-  yesProbability  Int?
-  descriptionZh   String?
-  titleZh         String?
-  externalVolume  Float            @default(0.0)
-  internalVolume  Float            @default(0.0)
-  manualOffset    Float            @default(0.0)
-  source          MarketSource     @default(INTERNAL)
-  isActive        Boolean          @default(true)
-  iconUrl         String?
-  image           String?
-  initialPrice    Float?
-  outcomePrices   String?
-  volume24h       Float?
-  isFactory       Boolean          @default(false)
-  period          Int?
-  strikePrice     Float?
-  symbol          String?
-  templateId      String?
-  categories      MarketCategory[]
-  orders          Order[]
-  positions       Position[]
-
-  @@index([isHot])
-  @@index([externalId, externalSource])
-  @@index([reviewStatus])
-  @@index([templateId])
-  @@index([symbol])
-  @@index([isFactory])
-  @@map("markets")
-}
-
-model MarketCategory {
-  id         String   @id @default(uuid())
-  marketId   String
-  categoryId String
-  createdAt  DateTime @default(now())
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  market     Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
-
-  @@unique([marketId, categoryId])
-  @@index([marketId])
-  @@index([categoryId])
-  @@map("market_categories")
-}
-
-model Order {
-  id               String   @id @default(uuid())
-  userId           String
-  marketId         String
-  outcomeSelection Outcome
-  amount           Float
-  payout           Float?
-  feeDeducted      Float    @default(0.0)
-  type             String?  @default("BUY")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  filledAmount     Float    @default(0.0)
-  limitPrice       Float?
-  orderType        String   @default("MARKET")
-  status           String   @default("PENDING")
-  market           Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([marketId])
-  @@index([createdAt])
-  @@index([type])
-  @@index([status])
-  @@index([orderType])
-  @@map("orders")
-}
-
-model Position {
-  id        String         @id @default(uuid())
-  userId    String
-  marketId  String
-  outcome   Outcome
-  shares    Float          @default(0.0)
-  avgPrice  Float          @default(0.0)
-  status    PositionStatus @default(OPEN)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  market    Market         @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, marketId, outcome, status])
-  @@index([userId])
-  @@index([marketId])
-  @@index([status])
-  @@map("positions")
-}
-
-model Deposit {
-  id        String            @id @default(uuid())
-  userId    String
-  amount    Float
-  txHash    String
-  status    TransactionStatus @default(PENDING)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
-  @@map("deposits")
-}
-
-model Withdrawal {
-  id            String            @id @default(uuid())
-  userId        String
-  amount        Float
-  targetAddress String
-  status        TransactionStatus @default(PENDING)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
-  @@map("withdrawals")
-}
-
-model Transaction {
-  id        String            @id @default(uuid())
-  userId    String
-  amount    Float
-  type      TransactionType
-  reason    String?
-  createdAt DateTime          @default(now())
-  status    TransactionStatus @default(COMPLETED)
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([type])
-  @@index([status])
-  @@index([createdAt])
-  @@map("transactions")
-}
-
-model AdminLog {
-  id         String   @id @default(uuid())
+model admin_logs {
+  id         String   @id
   adminId    String
   actionType String
   details    String
   timestamp  DateTime @default(now())
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  admin      User     @relation("AdminLogs", fields: [adminId], references: [id], onDelete: Cascade)
+  updatedAt  DateTime
+  users      users    @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
-  @@index([adminId])
   @@index([actionType])
+  @@index([adminId])
   @@index([timestamp])
-  @@map("admin_logs")
 }
 
-model MarketTemplate {
-  id                String    @id @default(uuid())
+model api_keys {
+  id         String    @id
+  userId     String
+  keyPrefix  String
+  keyHash    String    @unique
+  label      String
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  users      users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([keyHash])
+  @@index([userId])
+}
+
+model auth_sessions {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  users     users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model categories {
+  id                String              @id
+  name              String
+  slug              String              @unique
+  icon              String?
+  displayOrder      Int                 @default(0)
+  status            String              @default("active")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime
+  level             Int                 @default(0)
+  parentId          String?
+  sortOrder         Int                 @default(0)
+  categories        categories?         @relation("categoriesTocategories", fields: [parentId], references: [id], onDelete: Cascade)
+  other_categories  categories[]        @relation("categoriesTocategories")
+  market_categories market_categories[]
+
+  @@index([level])
+  @@index([parentId])
+  @@index([status])
+}
+
+model commission_logs {
+  id                                         String   @id
+  beneficiaryId                              String
+  sourceUserId                               String
+  orderId                                    String
+  amount                                     Float
+  type                                       String   @default("TRADING_REBATE")
+  createdAt                                  DateTime @default(now())
+  users_commission_logs_beneficiaryIdTousers users    @relation("commission_logs_beneficiaryIdTousers", fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  users_commission_logs_sourceUserIdTousers  users    @relation("commission_logs_sourceUserIdTousers", fields: [sourceUserId], references: [id], onDelete: Cascade)
+
+  @@index([beneficiaryId])
+  @@index([createdAt])
+  @@index([orderId])
+  @@index([sourceUserId])
+}
+
+model data_sources {
+  id           String           @id
+  sourceName   String           @unique
+  status       DataSourceStatus @default(ACTIVE)
+  lastSyncTime DateTime?
+  itemsCount   Int              @default(0)
+  multiplier   Float            @default(1.0)
+  config       String?          @default("{}")
+  errorMessage String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime
+
+  @@index([sourceName])
+  @@index([status])
+}
+
+model deposits {
+  id        String            @id
+  userId    String
+  amount    Float
+  txHash    String
+  status    TransactionStatus @default(PENDING)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime
+  users     users             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([userId])
+}
+
+model global_stats {
+  id            String   @id
+  label         String
+  value         Float    @default(0.0)
+  unit          String?
+  icon          String?
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime
+  manualOffset  Float    @default(0.0)
+  overrideValue Float?
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model market_categories {
+  id         String     @id
+  marketId   String
+  categoryId String
+  createdAt  DateTime   @default(now())
+  categories categories @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  markets    markets    @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([marketId, categoryId])
+  @@index([categoryId])
+  @@index([marketId])
+}
+
+model market_templates {
+  id                String    @id
   name              String
   symbol            String
   period            Int
@@ -250,7 +155,7 @@ model MarketTemplate {
   lastMarketId      String?
   lastCreatedAt     DateTime?
   createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  updatedAt         DateTime
   categorySlug      String?
   externalIdPattern String?
   failureCount      Int       @default(0)
@@ -266,103 +171,182 @@ model MarketTemplate {
   @@index([isActive])
   @@index([status])
   @@index([symbol])
-  @@map("market_templates")
 }
 
-model SystemSettings {
-  key       String   @id
-  value     String
-  updatedAt DateTime @updatedAt
+model markets {
+  id                String              @id
+  title             String
+  description       String              @default("")
+  closingDate       DateTime
+  resolvedOutcome   Outcome?
+  status            MarketStatus        @default(OPEN)
+  totalVolume       Float               @default(0.0)
+  totalYes          Float               @default(0.0)
+  totalNo           Float               @default(0.0)
+  feeRate           Float               @default(0.05)
+  category          String?
+  categorySlug      String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime
+  isHot             Boolean             @default(false)
+  externalId        String?
+  externalSource    String?
+  noProbability     Int?
+  rank              Int?
+  reviewStatus      ReviewStatus        @default(PENDING)
+  yesProbability    Int?
+  descriptionZh     String?
+  titleZh           String?
+  externalVolume    Float               @default(0.0)
+  internalVolume    Float               @default(0.0)
+  manualOffset      Float               @default(0.0)
+  source            MarketSource        @default(INTERNAL)
+  isActive          Boolean             @default(true)
+  iconUrl           String?
+  image             String?
+  initialPrice      Float?
+  outcomePrices     String?
+  volume24h         Float?
+  isFactory         Boolean             @default(false)
+  period            Int?
+  strikePrice       Float?
+  symbol            String?
+  templateId        String?
+  market_categories market_categories[]
+  orders            orders[]
+  positions         positions[]
 
-  @@map("system_settings")
+  @@index([externalId, externalSource])
+  @@index([isFactory])
+  @@index([isHot])
+  @@index([reviewStatus])
+  @@index([symbol])
+  @@index([templateId])
 }
 
-model GlobalStat {
-  id            String   @id @default(uuid())
-  label         String
-  value         Float    @default(0.0)
-  unit          String?
-  icon          String?
-  sortOrder     Int      @default(0)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  manualOffset  Float    @default(0.0)
-  overrideValue Float?
+model orders {
+  id               String   @id
+  userId           String
+  marketId         String
+  outcomeSelection Outcome
+  amount           Float
+  payout           Float?
+  feeDeducted      Float    @default(0.0)
+  type             String?  @default("BUY")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
+  filledAmount     Float    @default(0.0)
+  limitPrice       Float?
+  orderType        String   @default("MARKET")
+  status           String   @default("PENDING")
+  markets          markets  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  users            users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([isActive])
-  @@index([sortOrder])
-  @@map("global_stats")
-}
-
-model DataSource {
-  id           String           @id @default(uuid())
-  sourceName   String           @unique
-  status       DataSourceStatus @default(ACTIVE)
-  lastSyncTime DateTime?
-  itemsCount   Int              @default(0)
-  multiplier   Float            @default(1.0)
-  config       String?          @default("{}")
-  errorMessage String?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-
+  @@index([createdAt])
+  @@index([marketId])
+  @@index([orderType])
   @@index([status])
-  @@index([sourceName])
-  @@map("data_sources")
+  @@index([type])
+  @@index([userId])
 }
 
-model ScraperTask {
-  id          String   @id @default(cuid())
+model positions {
+  id        String         @id
+  userId    String
+  marketId  String
+  outcome   Outcome
+  shares    Float          @default(0.0)
+  avgPrice  Float          @default(0.0)
+  status    PositionStatus @default(OPEN)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime
+  markets   markets        @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  users     users          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketId, outcome, status])
+  @@index([marketId])
+  @@index([status])
+  @@index([userId])
+}
+
+model scraper_tasks {
+  id          String   @id
   name        String   @unique
   lastRunTime DateTime @default(now())
   status      String   @default("NORMAL")
   message     String?
   frequency   Int      @default(10)
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime
 
   @@index([name])
   @@index([status])
-  @@map("scraper_tasks")
 }
 
-enum MarketStatus {
-  OPEN
-  CLOSED
-  RESOLVED
-  CANCELED
-  PENDING_REVIEW
+model system_settings {
+  key       String   @id
+  value     String
+  updatedAt DateTime
 }
 
-enum ReviewStatus {
-  PENDING
-  PUBLISHED
-  REJECTED
+model transactions {
+  id        String            @id
+  userId    String
+  amount    Float
+  type      TransactionType
+  reason    String?
+  createdAt DateTime          @default(now())
+  status    TransactionStatus @default(COMPLETED)
+  users     users             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([type])
+  @@index([userId])
 }
 
-enum Outcome {
-  YES
-  NO
-  CANCELED
+model users {
+  id                                                   String            @id
+  email                                                String            @unique
+  passwordHash                                         String?
+  provider                                             String            @default("email")
+  balance                                              Float             @default(0.0)
+  walletAddress                                        String?
+  isAdmin                                              Boolean           @default(false)
+  isBanned                                             Boolean           @default(false)
+  createdAt                                            DateTime          @default(now())
+  updatedAt                                            DateTime
+  invitedById                                          String?
+  referralCode                                         String?           @unique
+  admin_logs                                           admin_logs[]
+  api_keys                                             api_keys[]
+  auth_sessions                                        auth_sessions[]
+  commission_logs_commission_logs_beneficiaryIdTousers commission_logs[] @relation("commission_logs_beneficiaryIdTousers")
+  commission_logs_commission_logs_sourceUserIdTousers  commission_logs[] @relation("commission_logs_sourceUserIdTousers")
+  deposits                                             deposits[]
+  orders                                               orders[]
+  positions                                            positions[]
+  transactions                                         transactions[]
+  users                                                users?            @relation("usersTousers", fields: [invitedById], references: [id])
+  other_users                                          users[]           @relation("usersTousers")
+  withdrawals                                          withdrawals[]
+
+  @@index([invitedById])
+  @@index([referralCode])
 }
 
-enum TransactionStatus {
-  PENDING
-  COMPLETED
-  FAILED
-}
+model withdrawals {
+  id            String            @id
+  userId        String
+  amount        Float
+  targetAddress String
+  status        TransactionStatus @default(PENDING)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime
+  users         users             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-enum PositionStatus {
-  OPEN
-  CLOSED
-}
-
-enum TransactionType {
-  DEPOSIT
-  WITHDRAW
-  BET
-  WIN
-  ADMIN_ADJUSTMENT
+  @@index([createdAt])
+  @@index([status])
+  @@index([userId])
 }
 
 enum DataSourceStatus {
@@ -374,4 +358,43 @@ enum DataSourceStatus {
 enum MarketSource {
   POLYMARKET
   INTERNAL
+}
+
+enum MarketStatus {
+  OPEN
+  CLOSED
+  RESOLVED
+  CANCELED
+  PENDING_REVIEW
+}
+
+enum Outcome {
+  YES
+  NO
+  CANCELED
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+  BET
+  WIN
+  ADMIN_ADJUSTMENT
 }

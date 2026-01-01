@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     // 查找用户
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { email },
     });
 
@@ -35,6 +35,12 @@ export async function POST(request: Request) {
     }
 
     // 验证密码
+    if (!user.passwordHash) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid email or password' },
+        { status: 401 }
+      );
+    }
     const isPasswordValid = await comparePassword(password, user.passwordHash);
     
     if (!isPasswordValid) {

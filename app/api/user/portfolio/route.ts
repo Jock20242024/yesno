@@ -46,14 +46,14 @@ export async function GET() {
     // - 也自动排除了已关闭（CLOSED）的持仓
     // - 当前 Order 模型没有 status 字段，因此无法通过 Order.status 过滤
     // - 使用 Position 表是正确的做法，因为它代表了"实际持有的仓位"
-    const positions = await prisma.position.findMany({
+    const positions = await prisma.positions.findMany({
       where: {
         userId,
         status: 'OPEN', // 🔥 只返回持仓中的仓位，排除已关闭（CLOSED）的
         // 注意：PENDING 订单不会出现在这里，因为它们还没有创建 Position 记录
       },
       include: {
-        market: {
+        markets: {
           select: {
             id: true,
             title: true,
@@ -77,24 +77,24 @@ export async function GET() {
         {
           shares: position.shares,
           avgPrice: position.avgPrice,
-          outcome: position.outcome,
+          outcome: position.outcome as 'YES' | 'NO',
         },
         {
-          status: position.market.status,
-          resolvedOutcome: position.market.resolvedOutcome,
-          totalYes: position.market.totalYes || 0,
-          totalNo: position.market.totalNo || 0,
+          status: position.markets.status,
+          resolvedOutcome: position.markets.resolvedOutcome,
+          totalYes: position.markets.totalYes || 0,
+          totalNo: position.markets.totalNo || 0,
         }
       );
 
       return {
         id: position.id,
         marketId: position.marketId,
-        marketTitle: position.market.title,
-        marketStatus: position.market.status,
-        marketClosingDate: position.market.closingDate.toISOString(),
-        resolvedOutcome: position.market.resolvedOutcome,
-        outcome: position.outcome,
+        marketTitle: position.markets.title,
+        marketStatus: position.markets.status,
+        marketClosingDate: position.markets.closingDate.toISOString(),
+        resolvedOutcome: position.markets.resolvedOutcome,
+        outcome: position.outcome as 'YES' | 'NO',
         shares: position.shares,
         avgPrice: position.avgPrice,
         currentPrice: valuation.currentPrice,

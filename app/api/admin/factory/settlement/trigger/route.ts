@@ -41,8 +41,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('⚖️ [Admin Settlement Trigger] 管理员手动触发结算扫描器...');
-    
     const stats = await runSettlementScanner();
     
     return NextResponse.json({

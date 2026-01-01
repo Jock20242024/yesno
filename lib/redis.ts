@@ -50,12 +50,12 @@ export function getRedisClient(): Redis {
       });
 
       redisClient.on('connect', () => {
-        console.log('✅ [Redis] 连接成功');
+
         isConnecting = false;
       });
 
       redisClient.on('ready', () => {
-        console.log('✅ [Redis] 客户端就绪');
+
         isConnecting = false;
       });
 
@@ -65,7 +65,7 @@ export function getRedisClient(): Redis {
       });
 
       redisClient.on('reconnecting', () => {
-        console.log('🔄 [Redis] 正在重连...');
+
         isConnecting = true;
       });
     } catch (error: any) {
@@ -102,7 +102,7 @@ export async function closeRedisClient(): Promise<void> {
   if (redisClient) {
     await redisClient.quit();
     redisClient = null;
-    console.log('🔒 [Redis] 连接已关闭');
+
   }
 }
 
@@ -141,7 +141,7 @@ export async function setSchedulerActiveStatus(active: boolean): Promise<void> {
   try {
     const client = getRedisClient();
     await client.set(SCHEDULER_STATUS_KEY, active ? 'true' : 'false');
-    console.log(`✅ [Redis] 调度器状态已更新: ${active ? '启用' : '暂停'}`);
+
   } catch (error: any) {
     console.error(`❌ [Redis] 设置调度器状态失败: ${error.message}`);
     throw error;

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Check, X, CheckCheck, Loader2, XCircle, Languages } from "lucide-react";
+import { toast } from "sonner";
 
 interface PendingMarket {
   id: string;
@@ -50,14 +51,11 @@ export default function MarketReviewPage() {
     try {
       setIsLoading(true);
       setError(null);
-      
-      console.log('🔄 [Review Frontend] 开始请求待审核市场列表...');
+
       const response = await fetch("/api/admin/markets/review", {
         cache: 'no-store', // 🔥 强制刷新，不使用缓存
       });
-      
-      console.log(`📥 [Review Frontend] API 响应状态: ${response.status} ${response.statusText}`);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`❌ [Review Frontend] API 响应错误:`, errorText);
@@ -65,15 +63,10 @@ export default function MarketReviewPage() {
       }
 
       const result = await response.json();
-      console.log(`📊 [Review Frontend] API 返回结果:`, {
-        success: result.success,
-        dataLength: result.data?.length || 0,
-        dataType: Array.isArray(result.data) ? 'Array' : typeof result.data,
-      });
-      
+
       if (result.success) {
         const data = result.data || [];
-        console.log(`✅ [Review Frontend] 成功获取 ${data.length} 条待审核市场`);
+
         setMarkets(data);
       } else {
         console.error(`❌ [Review Frontend] API 返回失败:`, result.error);
@@ -152,13 +145,13 @@ export default function MarketReviewPage() {
   const handleApprove = async (marketId: string) => {
     try {
       // 🔥 获取选中的分类ID
-      let categoryId = selectedCategories[marketId];
+      let categoryId: string | null = selectedCategories[marketId] || null;
       
       // 🔥 如果未选择分类，尝试自动推断
       if (!categoryId) {
         const market = markets.find(m => m.id === marketId);
         if (market) {
-          categoryId = inferCategoryFromTitle(market.title);
+          categoryId = inferCategoryFromTitle(market.title); // 可能返回 null
         }
       }
       
@@ -174,7 +167,7 @@ export default function MarketReviewPage() {
         },
         body: JSON.stringify({
           action: "approve", // approve 或 reject
-          categoryId: categoryId, // 🔥 传递分类ID
+          categoryId: categoryId || undefined, // 🔥 传递分类ID（null 转换为 undefined，JSON.stringify 会忽略 undefined）
         }),
       });
 
@@ -198,7 +191,7 @@ export default function MarketReviewPage() {
     } catch (err) {
       console.error("❌ [Review] 审核失败:", err);
       const errorMessage = err instanceof Error ? err.message : "审核失败，请重试";
-      alert(`审核失败: ${errorMessage}`);
+      toast.error(`审核失败: ${errorMessage}`);
     } finally {
       setProcessingIds(prev => {
         const next = new Set(prev);
@@ -237,7 +230,7 @@ export default function MarketReviewPage() {
     } catch (err) {
       console.error("❌ [Review] 忽略失败:", err);
       const errorMessage = err instanceof Error ? err.message : "忽略失败，请重试";
-      alert(`忽略失败: ${errorMessage}`);
+      toast.error(`忽略失败: ${errorMessage}`);
     } finally {
       setProcessingIds(prev => {
         const next = new Set(prev);
@@ -286,7 +279,7 @@ export default function MarketReviewPage() {
     } catch (err) {
       console.error("❌ [Review] 拒绝失败:", err);
       const errorMessage = err instanceof Error ? err.message : "拒绝失败，请重试";
-      alert(`拒绝失败: ${errorMessage}`);
+      toast.error(`拒绝失败: ${errorMessage}`);
     } finally {
       setProcessingIds(prev => {
         const next = new Set(prev);
@@ -347,10 +340,10 @@ export default function MarketReviewPage() {
 
       // 关闭对话框
       handleCloseTranslationDialog();
-      alert('翻译已保存成功！');
+      toast.success('翻译已保存成功！');
     } catch (err) {
       console.error('保存翻译失败:', err);
-      alert(err instanceof Error ? err.message : '保存翻译失败，请重试');
+      toast.error(err instanceof Error ? err.message : '保存翻译失败，请重试');
     } finally {
       setIsSavingTranslation(false);
     }
@@ -359,7 +352,7 @@ export default function MarketReviewPage() {
   // 批量审核通过
   const handleBatchApprove = async () => {
     if (markets.length === 0) {
-      alert("没有待审核的市场");
+      toast.info("没有待审核的市场");
       return;
     }
 
@@ -396,10 +389,10 @@ export default function MarketReviewPage() {
 
       // 刷新列表（重新获取数据）
       await fetchPendingMarkets();
-      alert(`成功审核通过 ${result.count || allIds.length} 个事件`);
+      toast.success(`成功审核通过 ${result.count || allIds.length} 个事件`);
     } catch (err) {
       console.error("批量审核失败:", err);
-      alert(err instanceof Error ? err.message : "批量审核失败，请重试");
+      toast.error(err instanceof Error ? err.message : "批量审核失败，请重试");
     } finally {
       setProcessingIds(new Set());
     }

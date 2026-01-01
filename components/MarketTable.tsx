@@ -20,6 +20,7 @@ import { Market } from "@/types/api";
 import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
 import { formatCurrency } from "@/lib/utils";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 const iconMap: Record<string, LucideIcon> = {
   Bitcoin,
@@ -59,6 +60,7 @@ function parseVolume(volume?: string): number {
 }
 
 export default function MarketTable({ data: staticData }: MarketTableProps) {
+  const { t } = useLanguage();
   const [marketData, setMarketData] = useState<Market[]>([]);
   const [isLoading, setIsLoading] = useState(!staticData);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +128,7 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
   // 将 Market 类型转换为 MarketEvent 类型（用于兼容现有 UI）
   const convertMarketToEvent = (market: Market, rank: number): MarketEvent => {
     // 🔥 优先使用 displayVolume，如果没有则使用 volume 或 totalVolume（向后兼容）
-    const displayVolume = market.displayVolume ?? market.volume ?? market.totalVolume ?? 0;
+    const displayVolume = market.displayVolume ?? market.volume ?? (market as any).totalVolume ?? 0;
     
     // 🚀 第一优先级：解析 outcomePrices（数据库真实数据）
     let yesPercent: number = market.yesPercent || 50;
@@ -173,14 +175,14 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       deadline: new Date(market.endTime).toISOString().split('T')[0],
       imageUrl,
       // 🔥 添加原始数据字段（传递给 MarketCard 使用）
-      outcomePrices: (market as any).outcomePrices || null,
-      image: (market as any).image || null,
-      iconUrl: (market as any).iconUrl || null,
-      initialPrice: (market as any).initialPrice || null,
-      volume24h: (market as any).volume24h || null,
-      totalVolume: (market as any).totalVolume || null,
-      externalVolume: (market as any).externalVolume || null,
-      originalId: market.id,
+      // outcomePrices: (market as any).outcomePrices || null, // Not in MarketEvent interface
+      // image: (market as any).image || null, // Not in MarketEvent interface
+      // iconUrl: (market as any).iconUrl || null, // Not in MarketEvent interface
+      // initialPrice: (market as any).initialPrice || null, // Not in MarketEvent interface
+      // volume24h: (market as any).volume24h || null, // Not in MarketEvent interface
+      // totalVolume: (market as any).totalVolume || null, // Not in MarketEvent interface
+      // externalVolume: (market as any).externalVolume || null, // Not in MarketEvent interface
+      // originalId: market.id, // Not in MarketEvent interface
       volume: formatVolume((market as any).volume24h || displayVolume),
       comments: market.commentsCount,
     };
@@ -211,7 +213,7 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
           <div className="p-2 bg-surface-dark rounded-lg border border-border-dark text-primary">
             <Trophy className="w-5 h-5" />
           </div>
-          <h2 className="text-white text-xl font-bold">Top 10 Trending Markets</h2>
+          <h2 className="text-white text-xl font-bold">{t('home.market_list.title')}</h2>
         </div>
       </div>
 
@@ -219,7 +221,7 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       {isLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
-          <span className="text-text-secondary">Loading markets...</span>
+          <span className="text-text-secondary">{t('home.market_list.loading_markets')}</span>
         </div>
       )}
 
@@ -227,7 +229,7 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       {error && !isLoading && (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
-            <p className="text-red-500 font-medium mb-2">Error fetching data.</p>
+            <p className="text-red-500 font-medium mb-2">{t('home.market_list.error')}</p>
             <p className="text-text-secondary text-sm">{error}</p>
           </div>
         </div>
@@ -241,19 +243,19 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
             <thead>
               <tr className="bg-surface-dark border-b border-border-dark">
                 <th className="px-4 py-4 text-text-secondary text-xs font-medium uppercase tracking-wider w-16 text-center">
-                  排名
+                  {t('home.market_list.rank')}
                 </th>
                 <th className="px-4 py-4 text-text-secondary text-xs font-medium uppercase tracking-wider min-w-[280px]">
-                  事件
+                  {t('home.market_list.event')}
                 </th>
                 <th className="px-4 py-4 text-text-secondary text-xs font-medium uppercase tracking-wider min-w-[280px]">
-                  预测概率 (Yes/No)
+                  {t('home.market_list.prediction_probability')}
                 </th>
                 <th className="px-4 py-4 text-text-secondary text-xs font-medium uppercase tracking-wider w-32 hidden sm:table-cell">
-                  截止日期
+                  {t('home.market_list.deadline')}
                 </th>
                 <th className="px-4 py-4 text-text-secondary text-xs font-medium uppercase tracking-wider w-24 text-right">
-                  交易量
+                  {t('home.market_list.volume')}
                 </th>
               </tr>
             </thead>
@@ -348,10 +350,10 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
             {isLoadingMore ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                加载中...
+                {t('home.market_list.loading')}
               </>
             ) : (
-              '加载更多'
+              t('home.market_list.load_more')
             )}
           </button>
         </div>

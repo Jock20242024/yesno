@@ -43,13 +43,13 @@ export async function POST(request: NextRequest) {
 
         if (id) {
           // 通过 ID 更新
-          updatedStat = await prisma.globalStat.update({
+          updatedStat = await prisma.global_stats.update({
             where: { id },
             data: { value: parseFloat(value) },
           });
         } else if (label) {
           // 通过 label 更新
-          const existingStat = await prisma.globalStat.findFirst({
+          const existingStat = await prisma.global_stats.findFirst({
             where: { label: label.trim() },
           });
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
             continue;
           }
 
-          updatedStat = await prisma.globalStat.update({
+          updatedStat = await prisma.global_stats.update({
             where: { id: existingStat.id },
             data: { value: parseFloat(value) },
           });

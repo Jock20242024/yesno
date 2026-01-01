@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { auth } from "@/lib/authExport";
 import { prisma } from '@/lib/prisma';
 
@@ -17,10 +18,9 @@ export const dynamic = "force-dynamic";
  */
 async function calculateGlobalStats() {
   try {
-    console.log(`🔄 [Global Stats Calculate API] ========== 开始计算全局统计数据 ==========`);
 
     // 1. 计算 24H 交易量（Top 100 市场的总交易量）
-    const topMarkets = await prisma.market.findMany({
+    const topMarkets = await prisma.markets.findMany({
       where: {
         status: { in: ['OPEN', 'PENDING_REVIEW'] },
         isActive: true,
@@ -37,7 +37,7 @@ async function calculateGlobalStats() {
     const totalVolume24h = topMarkets.reduce((sum, m) => sum + (m.totalVolume || 0), 0);
 
     // 2. 计算 TVL
-    const marketsWithVolume = await prisma.market.findMany({
+    const marketsWithVolume = await prisma.markets.findMany({
       where: {
         source: 'POLYMARKET',
         status: { in: ['OPEN', 'PENDING_REVIEW'] },
@@ -53,7 +53,7 @@ async function calculateGlobalStats() {
 
     // 3. 计算活跃人数
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const activeTraders = await prisma.order.groupBy({
+    const activeTraders = await prisma.orders.groupBy({
       by: ['userId'],
       where: {
         createdAt: {
@@ -67,7 +67,7 @@ async function calculateGlobalStats() {
     const totalActiveUsers = localActiveUsers + externalActiveUsersEstimate;
 
     // 4. 计算全网持仓量
-    const topMarketsForPositions = await prisma.market.findMany({
+    const topMarketsForPositions = await prisma.markets.findMany({
       where: {
         status: { in: ['OPEN', 'PENDING_REVIEW'] },
         isActive: true,
@@ -91,7 +91,7 @@ async function calculateGlobalStats() {
     const updateResults: any = {};
 
     // 更新 24H 交易量
-    const volumeStat = await prisma.globalStat.findFirst({
+    const volumeStat = await prisma.global_stats.findFirst({
       where: {
         OR: [
           { label: { contains: '24H 交易量' } },
@@ -101,17 +101,17 @@ async function calculateGlobalStats() {
     });
 
     if (volumeStat && volumeStat.isActive && volumeStat.overrideValue === null) {
-      await prisma.globalStat.update({
+      await prisma.global_stats.update({
         where: { id: volumeStat.id },
         data: { value: totalVolume24h },
       });
       updateResults.volume24h = totalVolume24h;
     } else if (!volumeStat) {
-      console.log(`⚠️ [Global Stats Calculate API] 24H 交易量指标不存在，跳过更新（不自动创建）`);
+
     }
 
     // 更新 TVL
-    const tvlStat = await prisma.globalStat.findFirst({
+    const tvlStat = await prisma.global_stats.findFirst({
       where: {
         OR: [
           { label: { contains: 'TVL' } },
@@ -122,17 +122,17 @@ async function calculateGlobalStats() {
     });
 
     if (tvlStat && tvlStat.isActive && tvlStat.overrideValue === null) {
-      await prisma.globalStat.update({
+      await prisma.global_stats.update({
         where: { id: tvlStat.id },
         data: { value: totalTVL },
       });
       updateResults.tvl = totalTVL;
     } else if (!tvlStat) {
-      console.log(`⚠️ [Global Stats Calculate API] TVL 指标不存在，跳过更新（不自动创建）`);
+
     }
 
     // 更新活跃人数
-    const activeUsersStat = await prisma.globalStat.findFirst({
+    const activeUsersStat = await prisma.global_stats.findFirst({
       where: {
         OR: [
           { label: { contains: '活跃交易者' } },
@@ -143,17 +143,17 @@ async function calculateGlobalStats() {
     });
 
     if (activeUsersStat && activeUsersStat.isActive && activeUsersStat.overrideValue === null) {
-      await prisma.globalStat.update({
+      await prisma.global_stats.update({
         where: { id: activeUsersStat.id },
         data: { value: totalActiveUsers },
       });
       updateResults.activeUsers = totalActiveUsers;
     } else if (!activeUsersStat) {
-      console.log(`⚠️ [Global Stats Calculate API] 活跃人数指标不存在，跳过更新（不自动创建）`);
+
     }
 
     // 更新全网持仓量
-    const positionsStat = await prisma.globalStat.findFirst({
+    const positionsStat = await prisma.global_stats.findFirst({
       where: {
         OR: [
           { label: { contains: '全网持仓' } },
@@ -163,21 +163,23 @@ async function calculateGlobalStats() {
     });
 
     if (positionsStat && positionsStat.isActive && positionsStat.overrideValue === null) {
-      await prisma.globalStat.update({
+      await prisma.global_stats.update({
         where: { id: positionsStat.id },
         data: { value: totalPositions },
       });
       updateResults.positions = totalPositions;
     } else if (!positionsStat) {
-      console.log(`⚠️ [Global Stats Calculate API] 全网持仓量指标不存在，跳过更新（不自动创建）`);
+
     }
 
     // 6. 更新 ScraperTask 状态
     const taskName = 'GlobalStats_Calc';
     try {
-      await prisma.scraperTask.upsert({
+      await prisma.scraper_tasks.upsert({
         where: { name: taskName },
         create: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           name: taskName,
           lastRunTime: new Date(),
           status: 'NORMAL',
@@ -210,9 +212,11 @@ async function calculateGlobalStats() {
     // 更新 ScraperTask 状态为异常
     const taskName = 'GlobalStats_Calc';
     try {
-      await prisma.scraperTask.upsert({
+      await prisma.scraper_tasks.upsert({
         where: { name: taskName },
         create: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           name: taskName,
           lastRunTime: new Date(),
           status: 'ABNORMAL',

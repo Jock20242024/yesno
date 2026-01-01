@@ -180,7 +180,7 @@ export default function AdminUserManagement() {
         refetch(); // 刷新用户列表
         
         // 强制刷新余额显示：使用 window.location.reload() 作为临时测试手段
-        console.log('💰 [Admin] 余额调整成功，强制刷新页面以更新余额显示');
+
         setTimeout(() => {
           window.location.reload();
         }, 500);

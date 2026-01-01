@@ -12,7 +12,7 @@ async function main() {
 
   try {
     // 查找 entertainment 分类
-    const entertainmentCategory = await prisma.category.findFirst({
+    const entertainmentCategory = await prisma.categories.findFirst({
       where: {
         slug: 'entertainment',
       },
@@ -35,7 +35,7 @@ async function main() {
     }
 
     // 删除分类（级联删除会同时删除关联的 MarketCategory 记录）
-    await prisma.category.delete({
+    await prisma.categories.delete({
       where: {
         id: entertainmentCategory.id,
       },

@@ -22,7 +22,7 @@ export async function GET(
     const { market_id } = await params;
 
     // 1. 验证市场是否存在
-    const market = await prisma.market.findUnique({
+    const market = await prisma.markets.findUnique({
       where: { id: market_id },
       select: {
         id: true,
@@ -46,7 +46,7 @@ export async function GET(
     }
 
     // 2. 🔥 查询所有 PENDING 状态的 LIMIT 订单
-    const pendingOrders = await prisma.order.findMany({
+    const pendingOrders = await prisma.orders.findMany({
       where: {
         marketId: market_id,
         status: 'PENDING',

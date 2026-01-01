@@ -66,18 +66,10 @@ export async function POST(request: Request) {
     }
 
     // 调试日志：记录用户信息和密码验证过程
-    console.log('🔍 [Admin Login] 开始密码验证:');
-    console.log(`   Email: ${user.email}`);
-    console.log(`   User ID: ${user.id}`);
-    console.log(`   isAdmin: ${user.isAdmin}`);
-    console.log(`   Password Hash (前30字符): ${user.passwordHash?.substring(0, 30)}...`);
-    console.log(`   Password Hash 长度: ${user.passwordHash?.length || 0}`);
 
     // 使用 authService.comparePassword 验证密码（强制等待 await）
     const isPasswordValid = await comparePassword(adminPassword, user.passwordHash);
-    
-    console.log(`🔍 [Admin Login] 密码验证结果: ${isPasswordValid}`);
-    
+
     if (!isPasswordValid) {
       console.error('❌ [Admin Login] 密码验证失败');
       return NextResponse.json(
@@ -88,8 +80,6 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
-
-    console.log('✅ [Admin Login] 密码验证成功');
 
     // Token 生成：生成专属的 adminAuthToken
     // 格式: admin-token-{userId}-{timestamp}-{random}
@@ -112,8 +102,6 @@ export async function POST(request: Request) {
       maxAge: 60 * 60 * 24 * 7, // 7 天 (604800 秒)
       path: '/',
     });
-
-    console.log('✅ [Admin Login] adminToken Cookie 已设置');
 
     // 同时设置 authToken（用于向后兼容）
     const authToken = `auth-token-${user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;

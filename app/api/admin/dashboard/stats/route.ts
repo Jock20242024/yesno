@@ -71,8 +71,6 @@ export async function GET(request: NextRequest) {
     // 获取本月开始时间
     const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    console.log('📊 [Admin Dashboard Stats] 开始查询统计数据...', { timeRange });
-
     // ========== 一、实时状态指标（不需要时间范围） ==========
     const [
       totalUsers,
@@ -85,10 +83,10 @@ export async function GET(request: NextRequest) {
       runningTemplatesCount,
     ] = await Promise.all([
       // 1. 总注册用户数（累计）
-      prisma.user.count(),
+      prisma.users.count(),
 
       // 2. 活跃用户数（24小时内登录或下单的用户）
-      prisma.user.count({
+      prisma.users.count({
         where: {
           OR: [
             {
@@ -112,7 +110,7 @@ export async function GET(request: NextRequest) {
       // 3. 活跃市场数（当前状态）- 🔥 使用基于 templateId 的去重计数
       (async () => {
         const { aggregateMarketsByTemplate } = await import('@/lib/marketAggregation');
-        const markets = await prisma.market.findMany({
+        const markets = await prisma.markets.findMany({
           where: {
             status: MarketStatus.OPEN,
             reviewStatus: 'PUBLISHED',
@@ -133,14 +131,14 @@ export async function GET(request: NextRequest) {
       })(),
 
       // 4. 待处理提现（当前状态）
-      prisma.withdrawal.count({
+      prisma.withdrawals.count({
         where: {
           status: TransactionStatus.PENDING,
         },
       }),
 
       // 5. 待审核事件数（当前状态）
-      prisma.market.count({
+      prisma.markets.count({
         where: {
           reviewStatus: 'PENDING',
           isActive: true,
@@ -152,7 +150,7 @@ export async function GET(request: NextRequest) {
       // 查找所有 isFactory: true 且有关联订单（有交易）的市场，统计不同的 templateId 数量
       (async () => {
         // 查找所有工厂生成的市场，这些市场有订单（有交易）
-        const marketsWithTrades = await prisma.market.findMany({
+        const marketsWithTrades = await prisma.markets.findMany({
           where: {
             isFactory: true,
             templateId: { not: null },
@@ -177,7 +175,7 @@ export async function GET(request: NextRequest) {
       })(),
 
       // 7. 异常熔断模版数及详情（当前状态）
-      prisma.marketTemplate.findMany({
+      prisma.market_templates.findMany({
         where: {
           status: 'PAUSED',
         },
@@ -193,7 +191,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // 7.5. 自动化工厂运行状态：检查是否有运行中的模版
-      prisma.marketTemplate.count({
+      prisma.market_templates.count({
         where: {
           isActive: true,
           status: 'ACTIVE',
@@ -210,7 +208,7 @@ export async function GET(request: NextRequest) {
       todayMarkets,
     ] = await Promise.all([
       // 1. 今日新增注册用户
-      prisma.user.count({
+      prisma.users.count({
         where: {
           createdAt: {
             gte: today,
@@ -220,7 +218,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // 2. 今日交易量（本平台产生的）
-      prisma.order.aggregate({
+      prisma.orders.aggregate({
         _sum: {
           amount: true,
         },
@@ -233,7 +231,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // 3. 今日订单数
-      prisma.order.count({
+      prisma.orders.count({
         where: {
           createdAt: {
             gte: today,
@@ -243,7 +241,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // 4. 今日手续费收入
-      prisma.order.aggregate({
+      prisma.orders.aggregate({
         _sum: {
           feeDeducted: true,
         },
@@ -256,7 +254,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // 5. 今日生成盘口数（工厂）
-      prisma.market.count({
+      prisma.markets.count({
         where: {
           createdAt: {
             gte: today,
@@ -275,7 +273,7 @@ export async function GET(request: NextRequest) {
       weekFeeRevenue,
     ] = await Promise.all([
       // 1. 本周交易量
-      prisma.order.aggregate({
+      prisma.orders.aggregate({
         _sum: {
           amount: true,
         },
@@ -287,7 +285,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // 2. 本周新增用户
-      prisma.user.count({
+      prisma.users.count({
         where: {
           createdAt: {
             gte: thisWeekStart,
@@ -296,7 +294,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // 3. 本周订单数
-      prisma.order.count({
+      prisma.orders.count({
         where: {
           createdAt: {
             gte: thisWeekStart,
@@ -305,7 +303,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // 4. 本周手续费收入
-      prisma.order.aggregate({
+      prisma.orders.aggregate({
         _sum: {
           feeDeducted: true,
         },
@@ -318,7 +316,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     // ========== 四、累计总交易量（本平台产生的） ==========
-    const totalVolumeResult = await prisma.market.aggregate({
+    const totalVolumeResult = await prisma.markets.aggregate({
       _sum: {
         internalVolume: true,
       },
@@ -338,7 +336,7 @@ export async function GET(request: NextRequest) {
 
     try {
       // 查询赔率机器人状态
-      const robotTask = await prisma.scraperTask.findUnique({
+      const robotTask = await prisma.scraper_tasks.findUnique({
         where: { name: 'OddsRobot' },
         select: {
           status: true,
@@ -347,7 +345,7 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      const activePoolSize = await prisma.market.count({
+      const activePoolSize = await prisma.markets.count({
         where: {
           source: 'POLYMARKET',
           isActive: true,
@@ -394,7 +392,7 @@ export async function GET(request: NextRequest) {
 
     if (trendStartDate) {
       // 1. 交易量趋势（按日期分组，统计订单金额）
-      const orders = await prisma.order.findMany({
+      const orders = await prisma.orders.findMany({
         where: {
           createdAt: {
             gte: trendStartDate,
@@ -424,7 +422,7 @@ export async function GET(request: NextRequest) {
         // 注意：这里需要 userId，但上面的查询没有包含，需要重新查询
       });
 
-      const ordersWithUsers = await prisma.order.findMany({
+      const ordersWithUsers = await prisma.orders.findMany({
         where: {
           createdAt: {
             gte: trendStartDate,
@@ -469,8 +467,6 @@ export async function GET(request: NextRequest) {
     // 计算运营指标
     const avgOrderAmount = todayOrders > 0 ? todayVolumeValue / todayOrders : 0;
     const activeUserRate = totalUsers > 0 ? (activeUsers24h / totalUsers) * 100 : 0;
-
-    console.log('✅ [Admin Dashboard Stats] 统计数据查询成功');
 
     return NextResponse.json({
       success: true,

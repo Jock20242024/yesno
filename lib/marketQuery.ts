@@ -29,7 +29,7 @@ async function getHotCategoryId(): Promise<string | null> {
   }
 
   try {
-    const hotCategory = await prisma.category.findFirst({
+    const hotCategory = await prisma.categories.findFirst({
       where: {
         OR: [
           { slug: '-1' },
@@ -61,7 +61,7 @@ async function getHotCategoryId(): Promise<string | null> {
  * 一个市场可以属于任何分类，只要 isHot: true，它就出现在热门里
  * 如果 isHot: false，即便它分类填错了被填成了热门，它也不准出现在前端热门列表里
  */
-export async function buildHotMarketFilter(baseFilter = BASE_MARKET_FILTER): Promise<Prisma.MarketWhereInput> {
+export async function buildHotMarketFilter(baseFilter = BASE_MARKET_FILTER): Promise<Prisma.marketsWhereInput> {
   // 🚀 唯一标准：必须物理勾选了 isHot
   return {
     ...baseFilter,
@@ -75,7 +75,7 @@ export async function buildHotMarketFilter(baseFilter = BASE_MARKET_FILTER): Pro
  * 
  * 🚀 物理收紧：热门列表的唯一标准是 isHot: true
  */
-export function buildHotMarketFilterSync(baseFilter = BASE_MARKET_FILTER): Prisma.MarketWhereInput {
+export function buildHotMarketFilterSync(baseFilter = BASE_MARKET_FILTER): Prisma.marketsWhereInput {
   // 🚀 唯一标准：必须物理勾选了 isHot
   return {
     ...baseFilter,
@@ -92,10 +92,10 @@ export function buildHotMarketFilterSync(baseFilter = BASE_MARKET_FILTER): Prism
 export function buildCategoryMarketFilter(
   categoryId: string,
   baseFilter = BASE_MARKET_FILTER
-): Prisma.MarketWhereInput {
+): Prisma.marketsWhereInput {
   return {
     ...baseFilter,
-    categories: {
+    market_categories: {
       some: {
         categoryId: categoryId
       }
@@ -112,7 +112,7 @@ export async function buildMarketFilter(options: {
   categoryId?: string;
   isHot?: boolean;
   baseFilter?: typeof BASE_MARKET_FILTER;
-}): Promise<Prisma.MarketWhereInput> {
+}): Promise<Prisma.marketsWhereInput> {
   const { categoryId, isHot, baseFilter = BASE_MARKET_FILTER } = options;
 
   // 热门查询

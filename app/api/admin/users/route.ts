@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
 
     // 4. 查询总数和分页数据
     const [total, dbUsers] = await Promise.all([
-      prisma.user.count({ where }),
-      prisma.user.findMany({
+      prisma.users.count({ where }),
+      prisma.users.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,

@@ -25,8 +25,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('🔄 [Cron] 开始执行工厂自动接力任务...');
-    
     await runRelayEngine();
     
     return NextResponse.json({

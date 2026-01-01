@@ -7,7 +7,7 @@ import Link from "next/link";
 export interface OrderHistoryItem {
   id: number;
   timestamp: string;
-  marketId: number;
+  marketId: number | string; // 支持 UUID 字符串格式
   marketTitle: string;
   marketImageUrl?: string;
   action: "buy" | "sell" | "redeem";
@@ -140,7 +140,7 @@ export default function OrderHistoryTable({ orders }: OrderHistoryTableProps) {
             <div className="min-w-0">
               <div className="text-xs text-zinc-500 md:hidden mb-0.5">市场</div>
               <Link
-                href={`/markets/${order.marketId}`}
+                href={`/markets/${typeof order.marketId === 'string' ? order.marketId : order.marketId.toString()}`}
                 className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               >
                 {order.marketImageUrl && (

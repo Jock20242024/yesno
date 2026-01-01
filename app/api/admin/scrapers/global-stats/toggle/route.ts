@@ -4,6 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { randomUUID } from "crypto";
 import prisma from '@/lib/prisma'; // 🔥 使用 default import
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     // 🔥 暴力检查：确保 Prisma 客户端正确加载
-    if (!prisma || !prisma.scraperTask) {
+    if (!prisma || !prisma.scraper_tasks) {
       throw new Error("数据库客户端 Prisma 未能正确加载");
     }
 
@@ -28,12 +29,12 @@ export async function POST(req: Request) {
     const targetStatus = action === 'enable' ? 'NORMAL' : 'STOPPED';
 
     // 🔥 暴力三步法替代 upsert
-    const existing = await prisma.scraperTask.findUnique({
+    const existing = await prisma.scraper_tasks.findUnique({
       where: { name: taskName }
     });
 
     if (existing) {
-      await prisma.scraperTask.update({
+      await prisma.scraper_tasks.update({
         where: { name: taskName },
         data: { 
           status: targetStatus,
@@ -42,8 +43,10 @@ export async function POST(req: Request) {
         }
       });
     } else {
-      await prisma.scraperTask.create({
-        data: { 
+      await prisma.scraper_tasks.create({
+        data: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           name: taskName, 
           status: targetStatus,
           lastRunTime: new Date(),
@@ -54,7 +57,7 @@ export async function POST(req: Request) {
     }
 
     // 更新 GlobalStat.isActive
-    await prisma.globalStat.updateMany({
+    await prisma.global_stats.updateMany({
       where: { label: 'external_active_markets_count' },
       data: { isActive: action === 'enable' },
     });

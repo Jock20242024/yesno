@@ -22,7 +22,7 @@ export async function PUT(
     const { titleZh, descriptionZh } = body;
 
     // 查找市场
-    const market = await prisma.market.findUnique({
+    const market = await prisma.markets.findUnique({
       where: { id: market_id },
     });
 
@@ -34,7 +34,7 @@ export async function PUT(
     }
 
     // 更新翻译字段
-    const updatedMarket = await prisma.market.update({
+    const updatedMarket = await prisma.markets.update({
       where: { id: market_id },
       data: {
         titleZh: titleZh || null,
@@ -42,8 +42,6 @@ export async function PUT(
         updatedAt: new Date(),
       },
     });
-
-    console.log(`✅ [Admin Translate] 市场翻译已更新: ${market.title}`);
 
     return NextResponse.json({
       success: true,

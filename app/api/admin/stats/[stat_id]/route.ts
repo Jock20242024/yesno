@@ -39,7 +39,7 @@ export async function PUT(
     const { label, value, unit, icon, sortOrder, isActive, overrideValue, manualOffset } = body;
 
     // 检查指标是否存在
-    const existingStat = await prisma.globalStat.findUnique({
+    const existingStat = await prisma.global_stats.findUnique({
       where: { id: stat_id },
     });
 
@@ -51,7 +51,7 @@ export async function PUT(
     }
 
     // 更新指标
-    const updatedStat = await prisma.globalStat.update({
+    const updatedStat = await prisma.global_stats.update({
       where: { id: stat_id },
       data: {
         ...(label !== undefined && { label: label.trim() }),
@@ -114,7 +114,7 @@ export async function DELETE(
     const { stat_id } = await params;
 
     // 检查指标是否存在
-    const existingStat = await prisma.globalStat.findUnique({
+    const existingStat = await prisma.global_stats.findUnique({
       where: { id: stat_id },
     });
 
@@ -126,7 +126,7 @@ export async function DELETE(
     }
 
     // 删除指标
-    await prisma.globalStat.delete({
+    await prisma.global_stats.delete({
       where: { id: stat_id },
     });
 

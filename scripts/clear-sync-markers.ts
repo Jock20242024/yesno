@@ -14,7 +14,7 @@ async function clearSyncMarkers() {
     console.log('🧹 开始清理同步标记...');
     
     // 清空所有 DataSource 的同步时间记录
-    const result = await prisma.dataSource.updateMany({
+    const result = await prisma.data_sources.updateMany({
       data: {
         lastSyncTime: null,
         itemsCount: 0,
@@ -26,7 +26,7 @@ async function clearSyncMarkers() {
     console.log(`✅ 已清理 ${result.count} 个数据源的同步标记`);
     
     // 验证清理结果
-    const dataSources = await prisma.dataSource.findMany();
+    const dataSources = await prisma.data_sources.findMany();
     console.log(`📊 当前数据源列表:`);
     dataSources.forEach(ds => {
       console.log(`  - ${ds.sourceName}: lastSyncTime=${ds.lastSyncTime || 'null'}, itemsCount=${ds.itemsCount}, status=${ds.status}`);

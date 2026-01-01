@@ -2,13 +2,20 @@
  * NextAuth 统一认证工具函数
  * 
  * 用于所有需要身份验证的 API 路由
+ * 
+ * 支持两种认证方式：
+ * 1. NextAuth Session (Cookie-based) - 网页用户
+ * 2. API Key (Bearer Token) - 程序化访问
  */
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/authExport';
+import { extractApiKeyFromHeader, verifyApiKey } from '@/lib/utils/apiKeyAuth';
 
 /**
  * 获取当前认证用户 ID
+ * 
+ * 优先检查 API Key (Bearer Token)，如果不存在则检查 Session
  * 
  * @returns {Promise<{ success: true; userId: string } | { success: false; error: string; statusCode: number }>}
  * 
@@ -29,7 +36,20 @@ export async function requireAuth(): Promise<
   | { success: false; error: string; statusCode: number }
 > {
   try {
-    // 🔥 NextAuth v5 使用 auth() 函数获取 session
+    // 🔥 第一步：检查 API Key (Bearer Token)
+    const apiKey = await extractApiKeyFromHeader();
+    if (apiKey) {
+      const apiKeyResult = await verifyApiKey(apiKey);
+      if (apiKeyResult.success) {
+        return {
+          success: true,
+          userId: apiKeyResult.userId,
+        };
+      }
+      // API Key 无效，继续尝试 Session 认证
+    }
+
+    // 🔥 第二步：检查 NextAuth Session (Cookie-based)
     const session = await auth();
 
     // 检查 session 是否存在

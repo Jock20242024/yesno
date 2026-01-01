@@ -46,7 +46,7 @@ export async function GET(
     }
 
     // 获取模板详情（包含所有字段）
-    const template = await prisma.marketTemplate.findUnique({
+    const template = await prisma.market_templates.findUnique({
       where: { id: template_id },
     });
 
@@ -141,7 +141,7 @@ export async function PUT(
     } = body;
 
     // 检查模板是否存在
-    const existingTemplate = await prisma.marketTemplate.findUnique({
+    const existingTemplate = await prisma.market_templates.findUnique({
       where: { id: template_id },
     });
 
@@ -175,7 +175,7 @@ export async function PUT(
       }
     }
 
-    const updatedTemplate = await prisma.marketTemplate.update({
+    const updatedTemplate = await prisma.market_templates.update({
       where: { id: template_id },
       data: updateData,
     });
@@ -256,7 +256,7 @@ export async function PATCH(
     }
 
     // 检查模板是否存在
-    const existingTemplate = await prisma.marketTemplate.findUnique({
+    const existingTemplate = await prisma.market_templates.findUnique({
       where: { id: template_id },
     });
 
@@ -282,7 +282,7 @@ export async function PATCH(
       updateData.status = 'PAUSED';
     }
 
-    const updatedTemplate = await prisma.marketTemplate.update({
+    const updatedTemplate = await prisma.market_templates.update({
       where: { id: template_id },
       data: updateData,
     });

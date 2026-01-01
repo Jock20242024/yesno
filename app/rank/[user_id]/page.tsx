@@ -6,8 +6,10 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import UserProfileHeader from "@/components/user/UserProfileHeader";
 import UserActivityTable from "@/components/user/UserActivityTable";
 import { formatUSD } from "@/lib/utils";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 export default function UserProfilePage() {
+  const { t, language } = useLanguage();
   const params = useParams();
   const router = useRouter();
   const user_id = params.user_id as string;
@@ -44,11 +46,20 @@ export default function UserProfilePage() {
             positionsValue: formatUSD(data.positionsValue || 0),
             biggestWin: data.biggestWin > 0 ? `+${formatUSD(data.biggestWin)}` : formatUSD(0),
             predictions: data.predictions || 0,
-            joinDate: new Date(data.createdAt).toLocaleDateString('en-US', { 
-              year: 'numeric', 
-              month: 'short', 
-              day: 'numeric' 
-            }),
+            joinDate: (() => {
+              const date = new Date(data.createdAt);
+              // 根据当前语言格式化日期
+              // 英文格式：Joined Oct 2025
+              // 中文格式：2025年10月加入
+              if (language === 'zh') {
+                return `${date.getFullYear()}年${date.getMonth() + 1}月加入`;
+              } else {
+                return `Joined ${date.toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  year: 'numeric' 
+                })}`;
+              }
+            })(),
           });
         } else {
           throw new Error(result.error || "Invalid response format");
@@ -75,7 +86,7 @@ export default function UserProfilePage() {
           className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/50 hover:bg-black/70 border border-pm-border hover:border-pm-green transition-all group"
         >
           <ArrowLeft className="w-4 h-4 text-pm-text-dim group-hover:text-white transition-colors" />
-          <span className="text-sm text-pm-text-dim group-hover:text-white transition-colors">返回排行榜</span>
+          <span className="text-sm text-pm-text-dim group-hover:text-white transition-colors">{t('rank.back_to_leaderboard')}</span>
         </button>
       </div>
 
@@ -83,7 +94,7 @@ export default function UserProfilePage() {
       {isLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-pm-green mr-2" />
-          <span className="text-zinc-400">加载中...</span>
+          <span className="text-zinc-400">{t('rank.loading')}</span>
         </div>
       )}
 
@@ -91,7 +102,7 @@ export default function UserProfilePage() {
       {error && !isLoading && (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
-            <p className="text-red-500 font-medium mb-2">加载失败</p>
+            <p className="text-red-500 font-medium mb-2">{t('rank.error')}</p>
             <p className="text-zinc-400 text-sm">{error}</p>
           </div>
         </div>

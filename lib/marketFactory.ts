@@ -59,13 +59,10 @@ function getNextPeriodTime(periodMinutes: number): Date {
  */
 async function createMarketFromTemplateOld(template: MarketTemplate): Promise<string> {
   try {
-    console.log(`🏗️ [MarketFactory] 开始为模板 ${template.name} 创建市场...`);
 
     // 1. 获取实时价格（行权价）
     const priceResult = await getPrice(template.symbol);
     const strikePrice = priceResult.price;
-    
-    console.log(`💰 [MarketFactory] 获取到 ${template.symbol} 价格: $${strikePrice}`);
 
     // 2. 计算结束时间（下一个周期的时间点）
     const endTime = getNextPeriodTime(template.period);
@@ -110,10 +107,8 @@ async function createMarketFromTemplateOld(template: MarketTemplate): Promise<st
       }
     );
 
-    console.log(`✅ [MarketFactory] 市场创建成功: ${newMarket.id}`);
-
     // 6. 更新模板的最后创建时间
-    await prisma.marketTemplate.update({
+    await prisma.market_templates.update({
       where: { id: template.id },
       data: {
         lastMarketId: newMarket.id,
@@ -134,16 +129,13 @@ async function createMarketFromTemplateOld(template: MarketTemplate): Promise<st
  */
 async function checkAndCreateMarketsOld(): Promise<void> {
   try {
-    console.log('🔄 [MarketFactory] 开始检查模板...');
 
     // 获取所有激活的模板
-    const templates = await prisma.marketTemplate.findMany({
+    const templates = await prisma.market_templates.findMany({
       where: {
         isActive: true,
       },
     });
-
-    console.log(`📋 [MarketFactory] 找到 ${templates.length} 个激活的模板`);
 
     for (const template of templates) {
       try {
@@ -159,13 +151,14 @@ async function checkAndCreateMarketsOld(): Promise<void> {
             const halfPeriod = (template.period * 60 * 1000) / 2;
             
             if (timeSinceLastCreate < halfPeriod) {
-              console.log(`⏭️ [MarketFactory] 模板 ${template.name} 最近已创建，跳过`);
+
               continue;
             }
           }
 
+          const { createMarketFromTemplate } = await import('./factory/engine');
           await createMarketFromTemplate(template);
-          console.log(`✅ [MarketFactory] 模板 ${template.name} 市场创建完成`);
+
         }
       } catch (error) {
         console.error(`❌ [MarketFactory] 处理模板 ${template.name} 失败:`, error);

@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-// 临时禁用权限检查，优先确保审核功能能运行
-// TODO: 修复后恢复权限检查 - 其他 admin API 使用以下方式：
-// import { auth } from "@/lib/authExport";
-// const session = await auth();
+import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +12,15 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: NextRequest) {
   try {
-    // TODO: 临时禁用权限检查，优先确保审核功能能运行
-    // 修复 getServerSession 导入问题后恢复权限检查
+    // 🔥 恢复权限检查：使用统一的 Admin Token 验证函数
+    const authResult = await verifyAdminToken(request);
+
+    if (!authResult.success) {
+      return createUnauthorizedResponse(
+        authResult.error || 'Unauthorized. Admin access required.',
+        authResult.statusCode || 401
+      );
+    }
 
     const body = await request.json();
     const { action, marketIds } = body;
@@ -40,7 +43,7 @@ export async function POST(request: NextRequest) {
     const reviewStatus = action === 'approve' ? 'PUBLISHED' : 'REJECTED';
     
     try {
-      const result = await prisma.market.updateMany({
+      const result = await prisma.markets.updateMany({
         where: {
           id: {
             in: marketIds,
@@ -51,8 +54,6 @@ export async function POST(request: NextRequest) {
           reviewStatus,
         },
       });
-
-      console.log(`✅ [Admin Review] 批量${action === 'approve' ? '审核通过' : '永久拒绝'} ${result.count} 个市场`);
 
       return NextResponse.json({
         success: true,

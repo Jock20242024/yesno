@@ -7,6 +7,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../services/authService';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -31,7 +32,7 @@ async function main() {
 
   // 使用 upsert 创建或更新管理员账户
   console.log('👤 正在创建/更新管理员账户...');
-  const adminUser = await prisma.user.upsert({
+  const adminUser = await prisma.users.upsert({
     where: {
       email: adminEmail,
     },
@@ -41,11 +42,13 @@ async function main() {
       isBanned: false,
     },
     create: {
+      id: randomUUID(),
       email: adminEmail,
       passwordHash: passwordHash,
       isAdmin: isAdmin,
       isBanned: false,
       balance: 0.0,
+      updatedAt: new Date(),
     },
   });
 
@@ -84,7 +87,7 @@ async function main() {
   ];
 
   for (const categoryData of defaultCategories) {
-    const category = await prisma.category.upsert({
+    const category = await prisma.categories.upsert({
       where: {
         slug: categoryData.slug,
       },
@@ -95,11 +98,13 @@ async function main() {
         status: 'active',
       },
       create: {
+        id: randomUUID(),
         name: categoryData.name,
         slug: categoryData.slug,
         icon: categoryData.icon,
         displayOrder: categoryData.displayOrder,
         status: 'active',
+        updatedAt: new Date(),
       },
     });
     console.log(`  ✅ 分类已创建/更新: ${category.name} (${category.slug})`);
@@ -121,7 +126,7 @@ async function main() {
 
   for (const statData of defaultStats) {
     // 检查是否已存在相同 label 的指标
-    const existing = await prisma.globalStat.findFirst({
+    const existing = await prisma.global_stats.findFirst({
       where: { label: statData.label },
     });
 
@@ -129,14 +134,16 @@ async function main() {
       // 如果已存在，只更新值（保留用户可能已修改的值）
       console.log(`  ⏭️  指标已存在，跳过: ${statData.label}`);
     } else {
-      const stat = await prisma.globalStat.create({
+      const stat = await prisma.global_stats.create({
         data: {
+          id: randomUUID(),
           label: statData.label,
           value: statData.value,
           unit: statData.unit,
           icon: statData.icon,
           sortOrder: statData.sortOrder,
           isActive: true,
+          updatedAt: new Date(),
         },
       });
       console.log(`  ✅ 全局指标已创建: ${stat.label}`);
@@ -150,7 +157,7 @@ async function main() {
   console.log('🔥 开始标记热门市场...');
   
   // 获取前 5 个开放的市场，按交易量排序
-  const openMarkets = await prisma.market.findMany({
+  const openMarkets = await prisma.markets.findMany({
     where: {
       status: 'OPEN',
     },
@@ -163,7 +170,7 @@ async function main() {
   if (openMarkets.length > 0) {
     let markedCount = 0;
     for (const market of openMarkets) {
-      await prisma.market.update({
+      await prisma.markets.update({
         where: { id: market.id },
         data: { isHot: true },
       });

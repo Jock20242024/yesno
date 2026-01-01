@@ -13,6 +13,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 import { MarketStatus, Outcome } from '@/types/data';
 
 /**
@@ -82,7 +83,7 @@ export async function executeSettlement(
     // console.log(`⚖️ [Settlement] 开始结算市场: ${marketId}`);
 
     // 1. 获取市场信息
-    const market = await prisma.market.findUnique({
+    const market = await prisma.markets.findUnique({
       where: { id: marketId },
       select: {
         id: true,
@@ -107,7 +108,7 @@ export async function executeSettlement(
     if (market.status === MarketStatus.RESOLVED) {
       return {
         success: false,
-        outcome: market.resolvedOutcome,
+        outcome: market.resolvedOutcome as Outcome | null,
         error: '市场已经结算过了',
       };
     }
@@ -118,7 +119,7 @@ export async function executeSettlement(
     if (providedOutcome) {
       // 如果管理员指定了结果，直接使用
       finalOutcome = providedOutcome as Outcome;
-      console.log(`✅ [Settlement] 使用管理员指定的结果: ${finalOutcome}`);
+
     } else if (market.isFactory) {
       // 工厂市场：从 outcomePrices 自动判定
       if (!market.outcomePrices) {
@@ -126,7 +127,7 @@ export async function executeSettlement(
         const hoursSinceEnd = (Date.now() - new Date(market.closingDate).getTime()) / (1000 * 60 * 60);
         if (hoursSinceEnd > 1) {
           console.warn(`⚠️ [Settlement] 市场 ${marketId} 已过期 ${hoursSinceEnd.toFixed(1)} 小时且没有赔率数据，标记为需要人工处理`);
-          await prisma.market.update({
+          await prisma.markets.update({
             where: { id: marketId },
             data: {
               status: MarketStatus.CLOSED,
@@ -150,8 +151,6 @@ export async function executeSettlement(
         };
       }
 
-      console.log(`📊 [Settlement] 市场 ${marketId} 的赔率: YES=${prices.yesPrice.toFixed(3)}, NO=${prices.noPrice.toFixed(3)}`);
-
       // 判定胜负
       const priceDiff = Math.abs(prices.yesPrice - prices.noPrice);
       const PRICE_THRESHOLD = 0.05; // 价格差值阈值
@@ -159,7 +158,7 @@ export async function executeSettlement(
       if (priceDiff < PRICE_THRESHOLD) {
         // 价格极度接近，需要人工处理
         console.warn(`⚠️ [Settlement] 市场 ${marketId} 的 YES 和 NO 价格极度接近（差值=${priceDiff.toFixed(3)}），需要人工处理`);
-        await prisma.market.update({
+        await prisma.markets.update({
           where: { id: marketId },
           data: {
             status: MarketStatus.CLOSED,
@@ -190,7 +189,7 @@ export async function executeSettlement(
     }
 
     // 4. 获取所有订单
-    const orders = await prisma.order.findMany({
+    const orders = await prisma.orders.findMany({
       where: { marketId: marketId },
     });
 
@@ -200,7 +199,7 @@ export async function executeSettlement(
       // console.log(`ℹ️ [Settlement] 市场 ${marketId} 没有订单，直接标记为已结算`);
       await prisma.$transaction(async (tx) => {
         // 🔥 修复：即使没有订单，也要关闭所有 Position
-        const allPositions = await tx.position.findMany({
+        const allPositions = await tx.positions.findMany({
           where: {
             marketId: marketId,
             status: 'OPEN',
@@ -208,16 +207,16 @@ export async function executeSettlement(
         });
 
         for (const position of allPositions) {
-          await tx.position.update({
+          await tx.positions.update({
             where: { id: position.id },
             data: {
               status: 'CLOSED',
             },
           });
-          console.log(`📦 [Settlement] 持仓 ${position.id} 已关闭（无订单情况，用户: ${position.userId}, 方向: ${position.outcome}）`);
+
         }
 
-        await tx.market.update({
+        await tx.markets.update({
           where: { id: marketId },
           data: {
             status: MarketStatus.RESOLVED,
@@ -288,14 +287,14 @@ export async function executeSettlement(
       // 批量更新订单 payout
       for (const order of orders) {
         const payout = orderPayouts.get(order.id) || 0;
-        await tx.order.update({
+        await tx.orders.update({
           where: { id: order.id },
           data: { payout },
         });
       }
 
       // 🔥 修复：更新所有 Position 的状态（赢家和输家都设为 CLOSED）
-      const allPositions = await tx.position.findMany({
+      const allPositions = await tx.positions.findMany({
         where: {
           marketId: marketId,
           status: 'OPEN', // 只更新 OPEN 状态的持仓
@@ -304,20 +303,20 @@ export async function executeSettlement(
 
       for (const position of allPositions) {
         // 无论输赢，都将 Position 状态设为 CLOSED
-        await tx.position.update({
+        await tx.positions.update({
           where: { id: position.id },
           data: {
             status: 'CLOSED',
           },
         });
-        console.log(`📦 [Settlement] 持仓 ${position.id} 已关闭（用户: ${position.userId}, 方向: ${position.outcome}）`);
+
       }
 
       // 批量更新用户余额并创建 Transaction 记录
       for (const [userId, payout] of userPayouts.entries()) {
         if (payout > 0) {
           // 更新用户余额
-          await tx.user.update({
+          await tx.users.update({
             where: { id: userId },
             data: {
               balance: {
@@ -325,11 +324,11 @@ export async function executeSettlement(
               },
             },
           });
-          console.log(`💰 [Settlement] 用户 ${userId} 获得回报: $${payout.toFixed(2)}`);
 
           // 🔥 修复：创建 Transaction 记录记录奖金发放
-          await tx.transaction.create({
+          await tx.transactions.create({
             data: {
+              id: randomUUID(),
               userId: userId,
               amount: payout,
               type: 'WIN', // 使用 WIN 类型表示结算奖金
@@ -337,12 +336,12 @@ export async function executeSettlement(
               status: 'COMPLETED',
             },
           });
-          console.log(`📝 [Settlement] 已创建 Transaction 记录（用户: ${userId}, 金额: $${payout.toFixed(2)}）`);
+
         }
       }
 
       // 更新市场状态
-      await tx.market.update({
+      await tx.markets.update({
         where: { id: marketId },
         data: {
           status: MarketStatus.RESOLVED,
@@ -357,11 +356,6 @@ export async function executeSettlement(
       totalPayout,
       affectedUsers: userPayouts.size,
     };
-
-    console.log(`✅ [Settlement] 市场 ${marketId} 结算完成:`, {
-      outcome: finalOutcome,
-      ...statistics,
-    });
 
     return {
       success: true,
@@ -394,13 +388,13 @@ export async function runSettlementScanner(): Promise<{
   };
 
   try {
-    console.log('⚖️ [Settlement Scanner] 开始扫描需要结算的市场...');
+
     const now = new Date();
     const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000); // 10分钟前
 
     // 🔥 查询所有已过结束时间超过 10 分钟且尚未结算的工厂市场
     // 修复：不再限制状态为 OPEN，包括所有非 RESOLVED/CANCELED 的状态（OPEN, CLOSED, PENDING 等）
-    const marketsToSettle = await prisma.market.findMany({
+    const marketsToSettle = await prisma.markets.findMany({
       where: {
         isFactory: true,
         status: {
@@ -417,7 +411,6 @@ export async function runSettlementScanner(): Promise<{
     });
 
     stats.scanned = marketsToSettle.length;
-    console.log(`📊 [Settlement Scanner] 找到 ${marketsToSettle.length} 个需要结算的市场`);
 
     // 逐个结算（调用统一的核心函数）
     for (const market of marketsToSettle) {
@@ -430,7 +423,6 @@ export async function runSettlementScanner(): Promise<{
       }
     }
 
-    console.log(`✅ [Settlement Scanner] 扫描完成: 扫描 ${stats.scanned}, 成功 ${stats.settled}, 失败 ${stats.errors}`);
     return stats;
   } catch (error: any) {
     console.error('❌ [Settlement Scanner] 扫描失败:', error);

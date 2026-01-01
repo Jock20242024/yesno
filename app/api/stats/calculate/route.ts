@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     // 获取所有激活的采集源
-    const activeSources = await prisma.dataSource.findMany({
+    const activeSources = await prisma.data_sources.findMany({
       where: {
         status: 'ACTIVE',
       },
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     }
 
     // 获取已发布的本地市场数量
-    const localMarkets = await prisma.market.count({
+    const localMarkets = await prisma.markets.count({
       where: {
         reviewStatus: 'PUBLISHED',
         status: 'OPEN',
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
 
     // 计算 24H 活跃交易者（可以根据订单数量估算）
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const activeTraders = await prisma.order.groupBy({
+    const activeTraders = await prisma.orders.groupBy({
       by: ['userId'],
       where: {
         createdAt: {

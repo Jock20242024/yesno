@@ -79,11 +79,11 @@ export async function GET(request: NextRequest) {
     }
 
     const [completedDeposits, completedWithdrawals] = await Promise.all([
-      prisma.deposit.findMany({
+      prisma.deposits.findMany({
         where: depositWhere,
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.withdrawal.findMany({
+      prisma.withdrawals.findMany({
         where: withdrawalWhere,
         orderBy: { createdAt: 'desc' },
       }),

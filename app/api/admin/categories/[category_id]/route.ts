@@ -39,7 +39,7 @@ export async function PUT(
     const { name, icon, displayOrder, sortOrder, parentId, status } = body;
 
     // 查找现有分类
-    const existingCategory = await prisma.category.findUnique({
+    const existingCategory = await prisma.categories.findUnique({
       where: { id: category_id },
     });
 
@@ -67,7 +67,7 @@ export async function PUT(
           );
         }
 
-        const parentCategory = await prisma.category.findUnique({
+        const parentCategory = await prisma.categories.findUnique({
           where: { id: parentId },
         });
         
@@ -99,7 +99,7 @@ export async function PUT(
       // 先获取父类 slug（如果需要）
       let parentSlugForSlug = null;
       if (existingCategory.parentId) {
-        const parentCat = await prisma.category.findUnique({
+        const parentCat = await prisma.categories.findUnique({
           where: { id: existingCategory.parentId },
           select: { slug: true },
         });
@@ -117,7 +117,7 @@ export async function PUT(
       slug = parentSlugForSlug ? `${parentSlugForSlug}-${namePart}` : namePart;
       
       // 🔥 修复'自残式'查重：检查新 slug 是否已存在（必须排除当前正在编辑的这个 ID）
-      const existingSlug = await prisma.category.findFirst({
+      const existingSlug = await prisma.categories.findFirst({
         where: {
           slug: slug,
           id: { not: category_id }, // 🔥 必须加上这一行，排除掉自己！
@@ -133,7 +133,7 @@ export async function PUT(
     }
 
     // 更新分类
-    const updatedCategory = await prisma.category.update({
+    const updatedCategory = await prisma.categories.update({
       where: { id: category_id },
       data: {
         ...(name && { name: name.trim() }),
@@ -148,7 +148,7 @@ export async function PUT(
         ...(status !== undefined && { status }),
       },
       include: {
-        parent: {
+        categories: {
           select: {
             id: true,
             name: true,
@@ -204,7 +204,7 @@ export async function DELETE(
     const { category_id } = await params;
 
     // 检查是否有子分类
-    const childrenCount = await prisma.category.count({
+    const childrenCount = await prisma.categories.count({
       where: { parentId: category_id },
     });
 
@@ -216,7 +216,7 @@ export async function DELETE(
     }
 
     // 删除分类
-    await prisma.category.delete({
+    await prisma.categories.delete({
       where: { id: category_id },
     });
 
@@ -251,7 +251,7 @@ async function checkIfDescendant(categoryId: string, potentialParentId: string):
     
     visited.add(currentParentId);
     
-    const parent = await prisma.category.findUnique({
+    const parent = await prisma.categories.findUnique({
       where: { id: currentParentId },
       select: { parentId: true },
     });

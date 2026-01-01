@@ -2,16 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useLanguage } from "@/i18n/LanguageContext";
 
-const categories = [
-  { slug: "politics", label: "政治" },
-  { slug: "sports", label: "体育" },
-  { slug: "tech", label: "科技" },
-  { slug: "finance", label: "商业" },
+const categorySlugs = [
+  { slug: "politics" },
+  { slug: "sports" },
+  { slug: "technology" },
+  { slug: "finance" },
 ];
 
 export default function MobileCategoryBar() {
+  const { t } = useLanguage();
   const pathname = usePathname();
+  
+  const categories = categorySlugs.map(({ slug }) => ({
+    slug,
+    label: t(`home.categories.${slug}`),
+  }));
 
   const getIsActive = (slug: string): boolean => {
     return pathname === `/category/${slug}`;

@@ -1,55 +1,55 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Search, Trophy, Bell, CheckCircle, XCircle, Info, X, User } from "lucide-react";
+import { Search, Trophy, User, Globe } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { useNotification } from "@/components/providers/NotificationProvider";
+import { useLanguage } from "@/i18n/LanguageContext";
 import LiveWallet from "@/components/user/LiveWallet";
-
-// 格式化相对时间
-function formatRelativeTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (seconds < 60) return "刚刚";
-  if (minutes < 60) return `${minutes}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
-  if (days < 7) return `${days}天前`;
-  return new Date(timestamp).toLocaleDateString("zh-CN");
-}
 
 export default function Navbar() {
   const router = useRouter();
   const { isLoggedIn, user, currentUser, logout } = useAuth();
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotification();
-  const [showNotifications, setShowNotifications] = useState(false);
-  const notificationRef = useRef<HTMLDivElement>(null);
+  const { language, setLanguage, t } = useLanguage();
+  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const languageMenuRefLoggedIn = useRef<HTMLDivElement>(null);
+  const languageMenuRefLoggedOut = useRef<HTMLDivElement>(null);
+
+  // 🔥 修复 Hydration 错误：等待客户端挂载后再渲染动态内容
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // 语言选项配置
+  const languageOptions = [
+    { code: 'zh' as const, label: '中文' },
+    { code: 'en' as const, label: 'English' },
+  ];
 
   // 点击外部关闭下拉框
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      // 检查语言菜单（已登录或未登录状态）
+      const languageMenuRef = languageMenuRefLoggedIn.current || languageMenuRefLoggedOut.current;
       if (
-        notificationRef.current &&
-        !notificationRef.current.contains(event.target as Node)
+        showLanguageMenu &&
+        languageMenuRef &&
+        !languageMenuRef.contains(event.target as Node)
       ) {
-        setShowNotifications(false);
+        setShowLanguageMenu(false);
       }
     }
 
-    if (showNotifications) {
+    if (showLanguageMenu) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [showNotifications]);
+  }, [showLanguageMenu]);
   
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-border-dark bg-black/90 backdrop-blur-md px-2 md:px-4 lg:px-6 py-2 h-16 w-full">
@@ -115,18 +115,31 @@ export default function Navbar() {
             YesNo
           </h2>
         </Link>
-        <label className="hidden sm:flex flex-col min-w-40 !h-9 flex-1 ml-2 md:ml-4 max-w-[100px] md:max-w-sm">
+        <form 
+          className="hidden sm:flex flex-col min-w-40 !h-9 flex-1 ml-2 md:ml-4 max-w-[100px] md:max-w-sm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            const searchQuery = formData.get('search') as string;
+            if (searchQuery && searchQuery.trim()) {
+              router.push(`/category/hot?search=${encodeURIComponent(searchQuery.trim())}`);
+            }
+          }}
+        >
           <div className="flex w-full flex-1 items-stretch rounded-md h-full border border-border-dark bg-surface-dark hover:border-text-secondary focus-within:border-primary transition-colors">
             <div className="text-text-secondary flex items-center justify-center pl-3 pr-2">
               <Search className="w-[18px] h-[18px]" />
             </div>
             <input
+              name="search"
+              type="text"
               className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-md bg-transparent text-white focus:outline-none focus:ring-0 border-none h-full placeholder:text-text-secondary px-0 text-xs font-medium leading-normal"
-              placeholder="搜索市场"
+              placeholder={mounted ? t('navbar.search_placeholder') : 'Search Market'}
+              suppressHydrationWarning
               defaultValue=""
             />
           </div>
-        </label>
+        </form>
         <div className="flex flex-1 justify-end gap-3 lg:gap-6 items-center">
           {isLoggedIn ? (
             <>
@@ -142,8 +155,53 @@ export default function Navbar() {
                     strokeWidth: 2,
                   }}
                 />
-                <span className="hidden sm:inline">排行榜</span>
+                <span className="hidden sm:inline" suppressHydrationWarning>
+                  {mounted ? t('navbar.rank') : 'Rankings'}
+                </span>
               </Link>
+              <div className="h-5 w-px bg-border-dark" />
+              {/* 语言切换器 */}
+              <div className="relative" ref={languageMenuRefLoggedIn}>
+                <button
+                  onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+                  className="flex items-center justify-center size-8 rounded-md bg-surface-dark border border-border-dark hover:border-text-secondary text-white transition-colors"
+                  title={mounted ? (language === 'zh' ? 'Switch to English' : '切换到中文') : 'Switch Language'}
+                  suppressHydrationWarning
+                >
+                  <Globe className="w-4 h-4" />
+                </button>
+                
+                {showLanguageMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-32 bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col">
+                    <button
+                      onClick={() => {
+                        setLanguage('zh');
+                        setShowLanguageMenu(false);
+                      }}
+                      className={`w-full px-4 py-2.5 text-left text-sm transition-colors cursor-pointer border-b border-white/5 first:rounded-t-lg last:rounded-b-lg ${
+                        language === 'zh'
+                          ? 'bg-primary/20 text-primary font-bold'
+                          : 'text-white hover:bg-white/10'
+                      }`}
+                    >
+                      中文
+                    </button>
+                    <button
+                      onClick={() => {
+                        setLanguage('en');
+                        setShowLanguageMenu(false);
+                      }}
+                      className={`w-full px-4 py-2.5 text-left text-sm transition-colors cursor-pointer border-b border-white/5 first:rounded-t-lg last:rounded-b-lg last:border-b-0 ${
+                        language === 'en'
+                          ? 'bg-primary/20 text-primary font-bold'
+                          : 'text-white hover:bg-white/10'
+                      }`}
+                    >
+                      English
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="h-5 w-px bg-border-dark" />
               <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 ml-auto">
                 {/* 余额区域 - 点击跳转到钱包 */}
@@ -153,142 +211,25 @@ export default function Navbar() {
                   className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity cursor-pointer group flex-shrink-1 min-w-0"
                 >
                   <div className="flex flex-col items-end mr-1">
-                    <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1">
-                      总资产
+                    <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1" suppressHydrationWarning>
+                      {mounted ? t('layout.header.total_assets') : 'Total Assets'}
                     </span>
                     <LiveWallet className="group-hover:text-primary transition-colors" />
                   </div>
                   <div className="flex flex-col items-end mr-2">
-                    <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1">
-                      可用
+                    <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1" suppressHydrationWarning>
+                      {mounted ? t('layout.header.available') : 'Available'}
                     </span>
                     <LiveWallet className="text-poly-green group-hover:text-primary transition-colors" />
                   </div>
                 </Link>
                 <div className="flex items-center gap-2">
-                  {/* 通知按钮 */}
-                  <div className="relative" ref={notificationRef}>
-                    <button
-                      onClick={() => setShowNotifications(!showNotifications)}
-                      className="relative flex items-center justify-center size-8 rounded-md bg-surface-dark border border-border-dark hover:border-text-secondary text-white transition-colors"
-                      title="通知"
-                    >
-                      <Bell className="w-5 h-5" />
-                      {unreadCount > 0 && (
-                        <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-black">
-                          {unreadCount > 99 ? "99+" : unreadCount}
-                        </span>
-                      )}
-                    </button>
-
-                    {/* 通知下拉框 */}
-                    {showNotifications && (
-                      <div className="absolute right-0 top-full mt-2 w-80 bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
-                        {/* 头部 */}
-                        <div className="flex items-center justify-between p-4 border-b border-white/10">
-                          <h3 className="text-white text-sm font-bold">通知</h3>
-                          <div className="flex items-center gap-2">
-                            {unreadCount > 0 && (
-                              <button
-                                onClick={markAllAsRead}
-                                className="text-xs text-zinc-400 hover:text-white transition-colors"
-                              >
-                                全部已读
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setShowNotifications(false)}
-                              className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* 通知列表 */}
-                        <div className="max-h-96 overflow-y-auto">
-                          {notifications.length === 0 ? (
-                            <div className="p-8 text-center">
-                              <p className="text-zinc-500 text-sm">暂无通知</p>
-                            </div>
-                          ) : (
-                            <div className="divide-y divide-white/10">
-                              {notifications.map((notification) => {
-                                const Icon =
-                                  notification.type === "success"
-                                    ? CheckCircle
-                                    : notification.type === "error"
-                                    ? XCircle
-                                    : Info;
-                                const iconColor =
-                                  notification.type === "success"
-                                    ? "text-emerald-500"
-                                    : notification.type === "error"
-                                    ? "text-rose-500"
-                                    : "text-blue-500";
-
-                                return (
-                                  <div
-                                    key={notification.id}
-                                    onClick={() => {
-                                      if (!notification.read) {
-                                        markAsRead(notification.id);
-                                      }
-                                    }}
-                                    className={`p-4 cursor-pointer transition-colors ${
-                                      notification.read
-                                        ? "bg-transparent"
-                                        : "bg-white/5 hover:bg-white/10"
-                                    }`}
-                                  >
-                                    <div className="flex items-start gap-3">
-                                      <Icon
-                                        className={`w-5 h-5 flex-shrink-0 mt-0.5 ${iconColor}`}
-                                      />
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-start justify-between gap-2 mb-1">
-                                          <h4 className="text-white text-sm font-bold">
-                                            {notification.title}
-                                          </h4>
-                                          {!notification.read && (
-                                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1.5" />
-                                          )}
-                                        </div>
-                                        <p className="text-zinc-400 text-xs mb-2">
-                                          {notification.message}
-                                        </p>
-                                        <span className="text-zinc-500 text-[10px]">
-                                          {formatRelativeTime(notification.timestamp)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 底部 */}
-                        {notifications.length > 0 && (
-                          <div className="p-3 border-t border-white/10">
-                            <Link
-                              href="#"
-                              onClick={() => setShowNotifications(false)}
-                              className="block text-center text-xs text-zinc-400 hover:text-white transition-colors"
-                            >
-                              查看所有
-                            </Link>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
                   {/* 头像区域 - 点击跳转到个人中心 */}
                   <Link
                     href="/profile"
                     className="flex items-center justify-center size-8 rounded-full bg-surface-dark border border-border-dark hover:border-text-secondary text-white transition-colors ml-1 overflow-hidden cursor-pointer group"
-                    title="个人中心"
+                    title={mounted ? t('navbar.profile') : 'Profile'}
+                    suppressHydrationWarning
                     style={{ position: 'relative', zIndex: 50 }}
                   >
                     {user?.avatar ? (
@@ -319,27 +260,78 @@ export default function Navbar() {
                       }
                     }}
                     className="flex items-center justify-center min-w-[44px] px-3 md:px-3 min-h-[44px] py-1.5 rounded-lg bg-surface-dark hover:bg-red-500/10 border border-border-dark hover:border-red-500/30 text-text-secondary hover:text-red-400 text-xs font-bold transition-colors ml-1 md:ml-2 flex-shrink-0"
-                    title="退出"
+                    title={mounted ? t('navbar.logout') : 'Logout'}
+                    suppressHydrationWarning
                   >
-                    <span className="hidden sm:inline">退出</span>
-                    <span className="sm:hidden">出</span>
+                    <span className="hidden sm:inline" suppressHydrationWarning>
+                      {mounted ? t('navbar.logout') : 'Logout'}
+                    </span>
+                    <span className="sm:hidden" suppressHydrationWarning>
+                      {mounted ? (language === 'zh' ? '出' : 'Out') : 'Out'}
+                    </span>
                   </button>
                 </div>
               </div>
             </>
           ) : (
             <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+              {/* 语言切换器（未登录时） */}
+              <div className="relative" ref={languageMenuRefLoggedOut}>
+                <button
+                  onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+                  className="flex items-center justify-center size-8 rounded-md bg-surface-dark border border-border-dark hover:border-text-secondary text-white transition-colors"
+                  title={mounted ? (language === 'zh' ? 'Switch to English' : '切换到中文') : 'Switch Language'}
+                  suppressHydrationWarning
+                >
+                  <Globe className="w-4 h-4" />
+                </button>
+                
+                {showLanguageMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-32 bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col">
+                    <button
+                      onClick={() => {
+                        setLanguage('zh');
+                        setShowLanguageMenu(false);
+                      }}
+                      className={`w-full px-4 py-2.5 text-left text-sm transition-colors cursor-pointer border-b border-white/5 first:rounded-t-lg last:rounded-b-lg ${
+                        language === 'zh'
+                          ? 'bg-primary/20 text-primary font-bold'
+                          : 'text-white hover:bg-white/10'
+                      }`}
+                    >
+                      中文
+                    </button>
+                    <button
+                      onClick={() => {
+                        setLanguage('en');
+                        setShowLanguageMenu(false);
+                      }}
+                      className={`w-full px-4 py-2.5 text-left text-sm transition-colors cursor-pointer border-b border-white/5 first:rounded-t-lg last:rounded-b-lg last:border-b-0 ${
+                        language === 'en'
+                          ? 'bg-primary/20 text-primary font-bold'
+                          : 'text-white hover:bg-white/10'
+                      }`}
+                    >
+                      English
+                    </button>
+                  </div>
+                )}
+              </div>
               <Link
                 href="/login"
                 className="flex min-w-[44px] md:min-w-[80px] cursor-pointer items-center justify-center rounded-lg min-h-[44px] h-9 px-3 md:px-4 bg-surface-dark hover:bg-border-dark transition-colors text-white text-sm font-bold leading-normal tracking-wide border border-border-dark flex-shrink-0"
               >
-                <span className="truncate text-xs md:text-sm">登录</span>
+                <span className="truncate text-xs md:text-sm" suppressHydrationWarning>
+                  {mounted ? t('navbar.login') : 'Login'}
+                </span>
               </Link>
               <Link
                 href="/register"
                 className="relative z-10 flex flex-shrink-0 min-w-[44px] md:min-w-[80px] cursor-pointer items-center justify-center rounded-lg min-h-[44px] h-9 px-3 md:px-4 bg-[#ec9c13] hover:bg-primary-hover transition-colors text-[#18181b] text-sm font-bold leading-normal tracking-wide shadow-[0_0_10px_rgba(236,156,19,0.2)] opacity-100 pointer-events-auto"
               >
-                <span className="truncate text-[#18181b] opacity-100 text-xs md:text-sm">注册</span>
+                <span className="truncate text-[#18181b] opacity-100 text-xs md:text-sm" suppressHydrationWarning>
+                  {mounted ? t('navbar.register') : 'Register'}
+                </span>
               </Link>
             </div>
           )}

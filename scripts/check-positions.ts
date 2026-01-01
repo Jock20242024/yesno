@@ -12,7 +12,7 @@ async function checkPositions() {
     console.log('🔍 开始查询 Position 数据...\n');
     
     // 查询所有最近的 Position 记录（按创建时间倒序）
-    const positions = await prisma.position.findMany({
+    const positions = await prisma.positions.findMany({
       include: {
         market: {
           select: {

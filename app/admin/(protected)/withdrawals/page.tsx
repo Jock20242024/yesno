@@ -2,8 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useWithdrawals } from "@/hooks/useAdminData";
-
-const ADMIN_SECRET_TOKEN = "ADMIN_SECRET_TOKEN";
+import { toast } from "sonner";
 
 export default function AdminWithdrawalsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -105,9 +104,9 @@ export default function AdminWithdrawalsPage() {
       const response = await fetch(`/api/admin/withdrawals/${orderId}`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${ADMIN_SECRET_TOKEN}`,
           "Content-Type": "application/json",
         },
+        credentials: 'include', // 🔥 修复：使用 credentials 自动发送 HttpOnly Cookie，而不是硬编码 Token
         body: JSON.stringify({ status: "approved" }),
       });
 
@@ -119,13 +118,13 @@ export default function AdminWithdrawalsPage() {
       const result = await response.json();
       if (result.success) {
         // UI 反馈：操作成功后刷新页面数据
-        alert("提现请求已成功审批");
+        toast.success("提现请求已成功审批");
         window.location.reload();
       } else {
         throw new Error(result.error || "审批失败");
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "审批失败");
+      toast.error(err instanceof Error ? err.message : "审批失败");
     } finally {
       setProcessingId(null);
     }
@@ -141,9 +140,9 @@ export default function AdminWithdrawalsPage() {
       const response = await fetch(`/api/admin/withdrawals/${orderId}`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${ADMIN_SECRET_TOKEN}`,
           "Content-Type": "application/json",
         },
+        credentials: 'include', // 🔥 修复：使用 credentials 自动发送 HttpOnly Cookie，而不是硬编码 Token
         body: JSON.stringify({ status: "rejected", reason }),
       });
 
@@ -155,13 +154,13 @@ export default function AdminWithdrawalsPage() {
       const result = await response.json();
       if (result.success) {
         // UI 反馈：操作成功后刷新页面数据
-        alert("提现请求已成功拒绝，金额已退还给用户");
+        toast.success("提现请求已成功拒绝，金额已退还给用户");
         window.location.reload();
       } else {
         throw new Error(result.error || "拒绝失败");
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "拒绝失败");
+      toast.error(err instanceof Error ? err.message : "拒绝失败");
     } finally {
       setProcessingId(null);
     }

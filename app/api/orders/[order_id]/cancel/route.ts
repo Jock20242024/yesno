@@ -33,10 +33,10 @@ export async function POST(
     const { order_id } = await params;
 
     // 查找订单
-    const order = await prisma.order.findUnique({
+    const order = await prisma.orders.findUnique({
       where: { id: order_id },
       include: {
-        user: {
+        users: {
           select: {
             id: true,
             balance: true,
@@ -73,7 +73,7 @@ export async function POST(
     const result = await prisma.$transaction(async (tx) => {
       // 1. 退回冻结资金到用户余额
       const refundAmount = order.amount;
-      const updatedUser = await tx.user.update({
+      const updatedUser = await tx.users.update({
         where: { id: userId },
         data: {
           balance: {
@@ -84,7 +84,7 @@ export async function POST(
 
       // 2. 更新订单状态为 CANCELLED
       // TODO: 当 Order 模型添加 status 字段后，使用以下代码更新状态：
-      // const updatedOrder = await tx.order.update({
+      // const updatedOrder = await tx.orders.update({
       //   where: { id: order_id },
       //   data: {
       //     status: 'CANCELLED',
@@ -94,7 +94,7 @@ export async function POST(
       // 🔥 当前暂时方案：由于 Order 模型没有 status 字段，暂时删除订单
       // ⚠️ 注意：这是一个临时方案，当 Order 模型添加 status 字段后应该改为 update 而不是 delete
       // 在真正的限价订单系统中，应该保留订单记录，只更新状态，以便用户查看历史挂单
-      await tx.order.delete({
+      await tx.orders.delete({
         where: { id: order_id },
       });
 

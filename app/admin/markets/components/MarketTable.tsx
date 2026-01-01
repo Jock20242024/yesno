@@ -16,7 +16,7 @@ interface Market {
   id: string;
   title: string;
   status: string;
-  volume: number;
+  volume?: number; // 🔥 修复类型：可选字段（兼容 types/api.Market 的 volume?: number）
   endTime?: string | null;
   templateId?: string;
   stats?: {
@@ -99,9 +99,9 @@ const formatStartTime = (endTime: string, period?: number | null) => {
 
 // 判断市场是否已同步（有 externalId 且有赔率数据）
 const isMarketSynced = (market: SubMarketDetail): boolean => {
-  const hasExternalId = market.externalId && market.externalId.trim() !== '';
-  const hasOutcomePrices = market.outcomePrices && market.outcomePrices.trim() !== '';
-  return hasExternalId && hasOutcomePrices;
+  const hasExternalId = market.externalId && typeof market.externalId === 'string' && market.externalId.trim() !== '';
+  const hasOutcomePrices = market.outcomePrices && typeof market.outcomePrices === 'string' && market.outcomePrices.trim() !== '';
+  return Boolean(hasExternalId && hasOutcomePrices);
 };
 
 // 格式化金额

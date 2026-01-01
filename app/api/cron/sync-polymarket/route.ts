@@ -27,8 +27,6 @@ export async function POST(request: Request) {
     //   );
     // }
 
-    console.log('🔄 [Cron] 开始同步 Polymarket 市场数据...');
-    
     const stats = await syncPolymarketMarkets(limit);
 
     return NextResponse.json({

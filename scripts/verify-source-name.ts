@@ -10,7 +10,7 @@ async function verifySourceName() {
 
   try {
     // 从数据库查询采集源
-    const dataSources = await prisma.dataSource.findMany({
+    const dataSources = await prisma.data_sources.findMany({
       where: {
         sourceName: 'Polymarket',
       },

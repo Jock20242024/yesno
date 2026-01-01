@@ -17,12 +17,12 @@ async function main() {
   
   // 1. 先删除所有旧的分类（删除关联关系）
   console.log('🗑️  正在删除旧的分类关联关系...');
-  await prisma.marketCategory.deleteMany({});
+  await prisma.market_categories.deleteMany({});
   console.log('✅ 已清空所有分类关联关系');
   
   // 2. 删除所有旧的分类记录
   console.log('🗑️  正在删除旧的分类记录...');
-  await prisma.category.deleteMany({});
+  await prisma.categories.deleteMany({});
   console.log('✅ 已清空所有分类记录');
   
   // 3. 插入 ID 必须等于 Slug 的分类（这样前端传 'tech' 就能对上 ID 'tech'）
@@ -38,7 +38,7 @@ async function main() {
 
   for (const cat of categories) {
     try {
-      await prisma.category.create({ 
+      await prisma.categories.create({ 
         data: {
           id: cat.id,
           name: cat.name,
@@ -60,7 +60,7 @@ async function main() {
   
   // 验证：显示所有分类
   console.log('\n🔍 验证数据库中的分类:');
-  const allCategories = await prisma.category.findMany({
+  const allCategories = await prisma.categories.findMany({
     orderBy: { displayOrder: 'asc' },
   });
   

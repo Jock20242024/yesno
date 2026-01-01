@@ -4,6 +4,7 @@ import { Market, MarketStatus, Outcome } from "@/types/data";
 import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
 import { prisma } from '@/lib/prisma';
 import { auth } from "@/lib/authExport";
+import { randomUUID } from 'crypto';
 
 // 🔥 强制清理前端缓存：确保不使用旧缓存
 export const dynamic = 'force-dynamic';
@@ -30,20 +31,19 @@ export async function GET(
     }
 
     const { market_id } = await params;
-    console.log('🔍 [Admin Market GET] 获取市场详情，ID:', market_id);
 
     // 🔥 使用 Prisma 直接查询，包含所有字段（包括赔率、描述、分类等）
     let dbMarket;
     try {
-      dbMarket = await prisma.market.findFirst({
+      dbMarket = await prisma.markets.findFirst({
         where: {
           id: market_id,
           isActive: true, // 只返回未删除的市场
         },
         include: {
-          categories: {
+          market_categories: {
             include: {
-              category: {
+              categories: {
                 select: {
                   id: true,
                   name: true,
@@ -54,7 +54,7 @@ export async function GET(
           },
         },
       });
-      console.log('✅ [Admin Market GET] 数据库查询成功');
+
     } catch (dbError) {
       console.error('❌ [Admin Market GET] 数据库查询失败:');
       console.error('查询条件: market_id =', market_id);
@@ -108,14 +108,14 @@ export async function GET(
             : 50),
       yesProbability: dbMarket.yesProbability,
       noProbability: dbMarket.noProbability,
-      category: dbMarket.categories[0]?.category?.name || dbMarket.category || null,
-      categorySlug: dbMarket.categories[0]?.category?.slug || dbMarket.categorySlug || null,
-      categoryId: dbMarket.categories[0]?.category?.id || null,
+      category: dbMarket.market_categories[0]?.categories?.name || dbMarket.category || null,
+      categorySlug: dbMarket.market_categories[0]?.categories?.slug || dbMarket.categorySlug || null,
+      categoryId: dbMarket.market_categories[0]?.categories?.id || null,
       // 🔥 返回所有分类信息（用于多选）
-      categories: dbMarket.categories.map((mc: any) => ({
-        id: mc.category.id,
-        name: mc.category.name,
-        slug: mc.category.slug,
+      categories: dbMarket.market_categories.map((mc: any) => ({
+        id: mc.categories.id,
+        name: mc.categories.name,
+        slug: mc.categories.slug,
       })),
       feeRate: dbMarket.feeRate,
       imageUrl: (dbMarket as any).image || null, // 使用数据库的 image 字段
@@ -134,8 +134,6 @@ export async function GET(
       outcomePrices: (dbMarket as any).outcomePrices || null,
       period: (dbMarket as any).period || null,
     };
-
-      console.log('✅ [Admin Market GET] 市场详情获取成功:', marketData.id);
 
       return NextResponse.json({
         success: true,
@@ -181,19 +179,14 @@ export async function PUT(
   { params }: { params: Promise<{ market_id: string }> }
 ) {
   try {
-    console.log('🔐 [Admin PUT] ========== 开始处理更新市场请求 ==========');
-    
+
     // 🔥 权限校验：使用 NextAuth session 验证管理员身份
     const session = await auth();
     
     // 🔥 调试日志：输出当前 Session 用户信息
-    console.log('🔐 [Admin PUT] 当前 Session 用户:', session?.user);
-    console.log('🔐 [Admin PUT] Session 存在:', !!session);
-    console.log('🔐 [Admin PUT] User 存在:', !!session?.user);
+
     if (session?.user) {
-      console.log('🔐 [Admin PUT] User Role:', (session.user as any).role);
-      console.log('🔐 [Admin PUT] User Email:', session.user.email);
-      console.log('🔐 [Admin PUT] User isAdmin:', (session.user as any).isAdmin);
+
     }
     
     // 🔥 核心修复：确保 session 存在且角色为 ADMIN
@@ -223,21 +216,19 @@ export async function PUT(
         { status: 401 }
       );
     }
-    
-    console.log('✅ [Admin PUT] 权限验证通过，用户:', userEmail);
 
     const { market_id } = await params;
     const body = await request.json();
     const { title, description, endTime, image, externalId, categoryIds, isHot, reviewStatus } = body;
 
     // 查找市场（使用 Prisma 直接查询，以便更新分类关联）
-    const existingMarket = await prisma.market.findFirst({
+    const existingMarket = await prisma.markets.findFirst({
       where: {
         id: market_id,
         isActive: true,
       },
       include: {
-        categories: true,
+        market_categories: true,
       },
     });
 
@@ -286,21 +277,22 @@ export async function PUT(
     // 🔥 修复'设为热门'保存：必须显式更新 isHot（即使为 false 也要更新）
     if (isHot !== undefined) {
       updateData.isHot = Boolean(isHot);
-      console.log(`🔥 [Admin Market PUT] 显式更新 isHot: ${updateData.isHot}`);
+
     }
     if (reviewStatus !== undefined) updateData.reviewStatus = reviewStatus; // 🔥 审核状态
 
     // 🔥 处理分类关联更新（如果提供了 categoryIds）
     if (categoryIds !== undefined && Array.isArray(categoryIds)) {
       // 先删除所有现有关联
-      await prisma.marketCategory.deleteMany({
+      await prisma.market_categories.deleteMany({
         where: { marketId: market_id },
       });
 
       // 创建新的关联
       if (categoryIds.length > 0) {
-        await prisma.marketCategory.createMany({
+        await prisma.market_categories.createMany({
           data: categoryIds.map((categoryId: string) => ({
+            id: randomUUID(),
             marketId: market_id,
             categoryId: categoryId,
           })),
@@ -308,7 +300,7 @@ export async function PUT(
       }
       
       // 🔥 修复热门标签逻辑：检查是否包含热门分类（ID=-1 或 slug="-1"）
-      const hotCategory = await prisma.category.findFirst({
+      const hotCategory = await prisma.categories.findFirst({
         where: {
           OR: [
             { slug: '-1' },
@@ -322,24 +314,24 @@ export async function PUT(
       if (hotCategory && categoryIds.includes(hotCategory.id)) {
         // 如果分类列表中包含热门分类，自动设置 isHot = true
         updateData.isHot = true;
-        console.log('🔥 [Admin Market PUT] 检测到热门分类，自动设置 isHot = true');
+
       } else if (categoryIds.length > 0) {
         // 如果分类列表中不包含热门分类，且 isHot 未显式提供，设置为 false
         if (isHot === undefined) {
           updateData.isHot = false;
-          console.log('🔥 [Admin Market PUT] 分类中不包含热门分类，自动设置 isHot = false');
+
         }
       }
     }
 
     // 使用 Prisma 直接更新市场信息
-    const updatedMarket = await prisma.market.update({
+    const updatedMarket = await prisma.markets.update({
       where: { id: market_id },
       data: updateData,
       include: {
-        categories: {
+        market_categories: {
           include: {
-            category: {
+            categories: {
               select: {
                 id: true,
                 name: true,
@@ -367,10 +359,10 @@ export async function PUT(
       title: updatedMarket.title,
       description: updatedMarket.description || '',
       status: updatedMarket.status,
-      categories: updatedMarket.categories.map((mc: any) => ({
-        id: mc.category.id,
-        name: mc.category.name,
-        slug: mc.category.slug,
+      categories: updatedMarket.market_categories.map((mc: any) => ({
+        id: mc.categories.id,
+        name: mc.categories.name,
+        slug: mc.categories.slug,
       })),
       isHot: (updatedMarket as any).isHot || false,
       reviewStatus: updatedMarket.reviewStatus || 'PENDING',
@@ -404,8 +396,7 @@ export async function DELETE(
   { params }: { params: Promise<{ market_id: string }> }
 ) {
   try {
-    console.log('🗑️ [Admin Market DELETE] ========== 开始处理删除市场请求 ==========');
-    
+
     // 🔥 修复：使用与 GET/POST 路由相同的验证方式（NextAuth session）
     const session = await auth();
     
@@ -437,13 +428,10 @@ export async function DELETE(
       );
     }
 
-    console.log('✅ [Admin Market DELETE] 权限验证通过，用户:', userEmail);
-
     const { market_id } = await params;
-    console.log('🗑️ [Admin Market DELETE] 准备删除市场（软删除）:', market_id);
 
     // 检查市场是否存在且未删除
-    const existingMarket = await prisma.market.findFirst({
+    const existingMarket = await prisma.markets.findFirst({
       where: {
         id: market_id,
         isActive: true,
@@ -461,12 +449,10 @@ export async function DELETE(
     }
 
     // 软删除：将 isActive 设置为 false
-    await prisma.market.update({
+    await prisma.markets.update({
       where: { id: market_id },
       data: { isActive: false },
     });
-
-    console.log('✅ [Admin Market DELETE] 市场已软删除:', market_id);
 
     return NextResponse.json({
       success: true,

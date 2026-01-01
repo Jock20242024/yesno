@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Clock, TrendingUp } from "lucide-react";
 import { MarketEvent } from "@/lib/data";
 import dayjs from "@/lib/dayjs"; // 🔥 使用全局初始化的 dayjs
+import { useLanguage } from "@/i18n/LanguageContext";
 import {
   Bitcoin,
   Building2,
@@ -67,6 +68,8 @@ function calculateCountdown(closingDate: string): { days: number; hours: number;
 }
 
 export default function MarketHeader({ event, status = "open", result = null, closingDate, period, isFactory }: MarketHeaderProps) {
+  const { t, language } = useLanguage();
+  
   // 🔥 逻辑守卫：确保 event 存在
   if (!event || !event.id) {
     return (
@@ -138,13 +141,14 @@ export default function MarketHeader({ event, status = "open", result = null, cl
       const endTime = dayjs(closingDate).tz(userTimeZone);
       const startTime = endTime.subtract(period, 'minute'); // 减去周期（分钟）
       
-      // 🔥 使用 dayjs 格式化用户本地时区
-      const dateStr = startTime.format('M月D日');
+      // 🔥 根据语言切换日期格式
+      const dateFormat = language === 'en' ? 'MMM D' : 'M月D日';
+      const dateStr = startTime.format(dateFormat);
       const startTimeStr = startTime.format('HH:mm');
       const endTimeStr = endTime.format('HH:mm');
       
-      // 🔥 规范化格式：删除地理位置字符串，只显示简洁的时间格式
-      return `${dateStr}，当地时间 ${startTimeStr}–${endTimeStr}`;
+      // 🔥 规范化格式：使用翻译的"当地时间"
+      return `${dateStr}, ${t('market.time.local_time')} ${startTimeStr}–${endTimeStr}`;
     } catch (error) {
       console.error('计算时间区间失败:', error);
       return null;
@@ -235,7 +239,7 @@ export default function MarketHeader({ event, status = "open", result = null, cl
               <div className="flex items-baseline gap-1">
                 <span className="font-mono font-bold tracking-wide text-sm">
                   {String(countdown.days).padStart(2, '0')}<span className="text-[10px] text-pm-text-dim font-sans ml-0.5 mr-1">
-                    天
+                    {t('market.time.days')}
                   </span>
                   {String(countdown.hours).padStart(2, '0')}:{String(countdown.minutes).padStart(2, '0')}:{String(countdown.seconds).padStart(2, '0')}
                 </span>

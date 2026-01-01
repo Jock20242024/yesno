@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Plus, X } from "lucide-react";
 
 interface CreateTemplateModalProps {
@@ -58,11 +59,11 @@ export default function CreateTemplateModal({
     
     // 🔥 验证必填字段
     if (!formData.name || !formData.name.trim()) {
-      alert("请填写模版名称！");
+      toast.info("请填写模版名称！");
       return;
     }
     if (!formData.symbol || !formData.symbol.trim()) {
-      alert("请填写标的符号！");
+      toast.info("请填写标的符号！");
       return;
     }
     
@@ -105,15 +106,15 @@ export default function CreateTemplateModal({
           oracleUrl: "",
           isActive: true,
         });
-        alert("模板创建成功！");
+        toast.success("模板创建成功！");
         onSuccess();
         onClose();
       } else {
-        alert(data.error || "创建模板失败");
+        toast.error(data.error || "创建模板失败");
       }
     } catch (error: any) {
       console.error("创建模板失败:", error);
-      alert(`创建模板失败: ${error.message || '未知错误'}`);
+      toast.error(`创建模板失败: ${error.message || '未知错误'}`);
     }
   };
 

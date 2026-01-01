@@ -28,10 +28,10 @@ async function resetMarkets() {
     console.log('🧹 [Reset Markets] 开始清理市场数据...\n');
     
     // 1. 统计当前数据量
-    const positionCount = await prisma.position.count();
-    const orderCount = await prisma.order.count();
+    const positionCount = await prisma.positions.count();
+    const orderCount = await prisma.orders.count();
     const marketCount = await prisma.market.count();
-    const marketCategoryCount = await prisma.marketCategory.count();
+    const marketCategoryCount = await prisma.market_categories.count();
     
     console.log('📊 [Reset Markets] 当前数据统计：');
     console.log(`  持仓 (Position): ${positionCount} 条`);
@@ -49,17 +49,17 @@ async function resetMarkets() {
     
     // 步骤1：删除 Position（持仓）
     console.log('🗑️  [Reset Markets] 正在删除持仓记录 (Position)...');
-    const positionResult = await prisma.position.deleteMany({});
+    const positionResult = await prisma.positions.deleteMany({});
     console.log(`✅ [Reset Markets] 已删除 ${positionResult.count} 条持仓记录\n`);
     
     // 步骤2：删除 Order（订单）
     console.log('🗑️  [Reset Markets] 正在删除订单记录 (Order)...');
-    const orderResult = await prisma.order.deleteMany({});
+    const orderResult = await prisma.orders.deleteMany({});
     console.log(`✅ [Reset Markets] 已删除 ${orderResult.count} 条订单记录\n`);
     
     // 步骤3：删除 MarketCategory（市场分类关联）
     console.log('🗑️  [Reset Markets] 正在删除市场分类关联 (MarketCategory)...');
-    const marketCategoryResult = await prisma.marketCategory.deleteMany({});
+    const marketCategoryResult = await prisma.market_categories.deleteMany({});
     console.log(`✅ [Reset Markets] 已删除 ${marketCategoryResult.count} 条市场分类关联记录\n`);
     
     // 步骤4：删除 Market（市场）
@@ -68,10 +68,10 @@ async function resetMarkets() {
     console.log(`✅ [Reset Markets] 已删除 ${marketResult.count} 条市场记录\n`);
     
     // 3. 验证删除结果
-    const remainingPositionCount = await prisma.position.count();
-    const remainingOrderCount = await prisma.order.count();
+    const remainingPositionCount = await prisma.positions.count();
+    const remainingOrderCount = await prisma.orders.count();
     const remainingMarketCount = await prisma.market.count();
-    const remainingMarketCategoryCount = await prisma.marketCategory.count();
+    const remainingMarketCategoryCount = await prisma.market_categories.count();
     
     console.log('📊 [Reset Markets] 删除后数据统计：');
     console.log(`  持仓 (Position): ${remainingPositionCount} 条`);

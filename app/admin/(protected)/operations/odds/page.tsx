@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Activity, Gauge, RefreshCw, Play, AlertCircle, CheckCircle2, Clock } from "lucide-react";
 
 interface FailedMarket {
@@ -68,15 +69,15 @@ export default function OddsMonitoringPage() {
 
       const result = await response.json();
       if (result.success) {
-        alert('机器人已标记为重启');
+        toast.info('机器人已标记为重启');
         // 刷新统计数据
         await fetchStats();
       } else {
-        alert(`重启失败: ${result.error}`);
+        toast.error(`重启失败: ${result.error}`);
       }
     } catch (error) {
       console.error('Error restarting robot:', error);
-      alert('重启失败，请稍后重试');
+      toast.error('重启失败，请稍后重试');
     } finally {
       setIsRestarting(false);
     }
@@ -93,15 +94,15 @@ export default function OddsMonitoringPage() {
 
       const result = await response.json();
       if (result.success) {
-        alert('强制更新已触发');
+        toast.info('强制更新已触发');
         // 刷新统计数据
         await fetchStats();
       } else {
-        alert(`强制更新失败: ${result.error}`);
+        toast.error(`强制更新失败: ${result.error}`);
       }
     } catch (error) {
       console.error('Error forcing update:', error);
-      alert('强制更新失败，请稍后重试');
+      toast.error('强制更新失败，请稍后重试');
     } finally {
       setIsUpdating(false);
     }

@@ -31,7 +31,7 @@ async function diagnoseMatcher() {
     
     let sampleMarket = await prisma.market.findFirst({
       where: {
-        npm run devisFactory: true,
+        isFactory: true,
         isActive: true,
         status: MarketStatus.OPEN,
         externalId: null,

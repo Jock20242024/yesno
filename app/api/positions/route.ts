@@ -60,10 +60,10 @@ export async function GET(request: Request) {
     }
 
     // 3. 从Position表查询持仓
-    const positions = await prisma.position.findMany({
+    const positions = await prisma.positions.findMany({
       where: whereClause,
       include: {
-        market: {
+        markets: {
           select: {
             id: true,
             title: true,
@@ -86,12 +86,12 @@ export async function GET(request: Request) {
     if (type === 'active') {
       // 活跃持仓：只返回市场未结算的
       filteredPositions = positions.filter(
-        (p) => p.market.status !== 'RESOLVED' && p.market.status !== 'CLOSED'
+        (p) => p.markets.status !== 'RESOLVED' && p.markets.status !== 'CLOSED'
       );
     } else if (type === 'history') {
       // 已结束持仓：Position status = CLOSED 或 Market status = RESOLVED
       filteredPositions = positions.filter(
-        (p) => p.status === 'CLOSED' || p.market.status === 'RESOLVED'
+        (p) => p.status === 'CLOSED' || p.markets.status === 'RESOLVED'
       );
     }
 
@@ -102,23 +102,23 @@ export async function GET(request: Request) {
         {
           shares: position.shares,
           avgPrice: position.avgPrice,
-          outcome: position.outcome,
+          outcome: position.outcome as 'YES' | 'NO',
         },
         {
-          status: position.market.status,
-          resolvedOutcome: position.market.resolvedOutcome,
-          totalYes: position.market.totalYes || 0,
-          totalNo: position.market.totalNo || 0,
+          status: position.markets.status,
+          resolvedOutcome: position.markets.resolvedOutcome,
+          totalYes: position.markets.totalYes || 0,
+          totalNo: position.markets.totalNo || 0,
         }
       );
 
       return {
         id: position.id,
         marketId: position.marketId,
-        marketTitle: position.market.title,
-        marketStatus: position.market.status,
-        resolvedOutcome: position.market.resolvedOutcome,
-        outcome: position.outcome,
+        marketTitle: position.markets.title,
+        marketStatus: position.markets.status,
+        resolvedOutcome: position.markets.resolvedOutcome,
+        outcome: position.outcome as 'YES' | 'NO',
         shares: position.shares,
         avgPrice: position.avgPrice,
         currentPrice: valuation.currentPrice,

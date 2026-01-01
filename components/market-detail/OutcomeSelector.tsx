@@ -30,7 +30,7 @@ export default function OutcomeSelector({
       return;
     }
     // TODO: 实现交易逻辑
-    console.log("执行交易", outcome);
+
   };
 
   return (

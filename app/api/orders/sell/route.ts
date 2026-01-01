@@ -18,7 +18,7 @@ const SYSTEM_ACCOUNT_EMAILS = {
  * @returns User 对象或 null
  */
 async function getSystemUser(email: string) {
-  return await prisma.user.findUnique({ 
+  return await prisma.users.findUnique({ 
     where: { email },
     select: {
       id: true,
@@ -118,9 +118,11 @@ export async function POST(request: Request) {
 
     // 🔥 如果系统账户不存在，自动创建
     if (!feeAccount) {
-      console.log('⚠️ [Sell API] 手续费账户不存在，自动创建...');
-      feeAccount = await prisma.user.create({
+
+      feeAccount = await prisma.users.create({
         data: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           email: SYSTEM_ACCOUNT_EMAILS.FEE,
           balance: 0,
           isAdmin: false,
@@ -132,13 +134,15 @@ export async function POST(request: Request) {
           balance: true,
         },
       });
-      console.log('✅ [Sell API] 手续费账户已创建:', feeAccount.id);
+
     }
 
     if (!ammAccount) {
-      console.log('⚠️ [Sell API] AMM 资金池账户不存在，自动创建...');
-      ammAccount = await prisma.user.create({
+
+      ammAccount = await prisma.users.create({
         data: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           email: SYSTEM_ACCOUNT_EMAILS.AMM,
           balance: 0,
           isAdmin: false,
@@ -150,7 +154,7 @@ export async function POST(request: Request) {
           balance: true,
         },
       });
-      console.log('✅ [Sell API] AMM 资金池账户已创建:', ammAccount.id);
+
     }
 
     // 8. 使用事务执行卖出操作
@@ -158,7 +162,7 @@ export async function POST(request: Request) {
     
     const result = await prisma.$transaction(async (tx) => {
       // 8.1 锁定用户和Position记录
-      const user = await tx.user.findUnique({
+      const user = await tx.users.findUnique({
         where: { id: userId },
       });
 
@@ -167,7 +171,7 @@ export async function POST(request: Request) {
       }
 
       // 8.2 查询OPEN Position（带锁）
-      const position = await tx.position.findFirst({
+      const position = await tx.positions.findFirst({
         where: {
           userId,
           marketId,
@@ -212,7 +216,7 @@ export async function POST(request: Request) {
       const newUserBalanceCents = userBalanceCents + netReturnCents;
       const newUserBalance = newUserBalanceCents / PRECISION_MULTIPLIER;
 
-      const updatedUser = await tx.user.update({
+      const updatedUser = await tx.users.update({
         where: { id: userId },
         data: { balance: newUserBalance },
       });
@@ -222,7 +226,7 @@ export async function POST(request: Request) {
       const newFeeBalanceCents = feeAccountBalanceCents + feeDeductedCents;
       const newFeeBalance = newFeeBalanceCents / PRECISION_MULTIPLIER;
 
-      await tx.user.update({
+      await tx.users.update({
         where: { id: feeAccount.id },
         data: { balance: newFeeBalance },
       });
@@ -236,14 +240,14 @@ export async function POST(request: Request) {
       const newAmmBalanceCents = ammAccountBalanceCents - grossValueCents;
       const newAmmBalance = newAmmBalanceCents / PRECISION_MULTIPLIER;
 
-      await tx.user.update({
+      await tx.users.update({
         where: { id: ammAccount.id },
         data: { balance: newAmmBalance },
       });
 
       // 8.6 更新市场池（反向操作）
       // 🔥 修复：只更新 internalVolume（内部交易量），不覆盖 externalVolume
-      const marketInternalVolumeCents = Math.round((market.internalVolume || 0) * PRECISION_MULTIPLIER);
+      const marketInternalVolumeCents = Math.round(((market as any).internalVolume || 0) * PRECISION_MULTIPLIER);
       const marketTotalYesCents = Math.round((market.totalYes || 0) * PRECISION_MULTIPLIER);
       const marketTotalNoCents = Math.round((market.totalNo || 0) * PRECISION_MULTIPLIER);
 
@@ -263,13 +267,13 @@ export async function POST(request: Request) {
       // 🔥 计算展示交易量（向后兼容）
       const { calculateDisplayVolume } = await import('@/lib/marketUtils');
       const displayVolume = calculateDisplayVolume({
-        source: market.source || 'INTERNAL',
-        externalVolume: market.externalVolume || 0,
+        source: (market as any).source || 'INTERNAL',
+        externalVolume: (market as any).externalVolume || 0,
         internalVolume: newInternalVolume,
-        manualOffset: market.manualOffset || 0,
+        manualOffset: (market as any).manualOffset || 0,
       });
 
-      const updatedMarket = await tx.market.update({
+      const updatedMarket = await tx.markets.update({
         where: { id: marketId },
         data: {
           internalVolume: newInternalVolume, // 🔥 只更新内部交易量
@@ -281,9 +285,10 @@ export async function POST(request: Request) {
 
       // 8.7 创建Order记录（SELL类型）- 使用 UUID
       const orderId = randomUUID();
-      const newOrder = await tx.order.create({
+      const newOrder = await tx.orders.create({
         data: {
           id: orderId,
+          updatedAt: new Date(),
           userId,
           marketId,
           outcomeSelection: outcome as Outcome,
@@ -300,7 +305,7 @@ export async function POST(request: Request) {
       const remainingShares = position.shares - sharesNum;
       const shouldClose = remainingShares <= 0.001;
 
-      const updatedPosition = await tx.position.update({
+      const updatedPosition = await tx.positions.update({
         where: { id: position.id },
         data: {
           shares: shouldClose ? 0 : remainingShares,
@@ -310,7 +315,7 @@ export async function POST(request: Request) {
 
       // 🔥 8.9 记录流水 (Transaction) - 复式记账
       // 8.9.1 用户流水：收到卖出收益
-      await tx.transaction.create({
+      await tx.transactions.create({
         data: {
           id: randomUUID(),
           userId: userId,
@@ -322,7 +327,7 @@ export async function POST(request: Request) {
       });
 
       // 8.9.2 手续费账户流水：收到手续费
-      await tx.transaction.create({
+      await tx.transactions.create({
         data: {
           id: randomUUID(),
           userId: feeAccount.id,
@@ -334,7 +339,7 @@ export async function POST(request: Request) {
       });
 
       // 8.9.3 AMM 账户流水：支付给用户
-      await tx.transaction.create({
+      await tx.transactions.create({
         data: {
           id: randomUUID(),
           userId: ammAccount.id,
@@ -354,15 +359,6 @@ export async function POST(request: Request) {
         grossValue,
         feeDeducted,
       };
-    });
-
-    console.log('✅ [Sell API] 卖出成功:', {
-      userId,
-      marketId,
-      outcome,
-      shares: sharesNum,
-      netReturn: result.netReturn,
-      positionStatus: result.updatedPosition.status,
     });
 
     return NextResponse.json({

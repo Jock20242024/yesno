@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 
 export interface PolymarketMarket {
   id: string;
@@ -45,8 +46,6 @@ export async function fetchPolymarketMarkets(
     url.searchParams.set('order', 'id');
     url.searchParams.set('ascending', 'false'); // 最新的在前
 
-    console.log('📡 [Polymarket] 正在获取市场数据:', url.toString());
-
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
@@ -63,9 +62,7 @@ export async function fetchPolymarketMarkets(
     
     // Polymarket API 返回数组格式
     const markets: PolymarketMarket[] = Array.isArray(data) ? data : [];
-    
-    console.log(`✅ [Polymarket] 成功获取 ${markets.length} 个市场`);
-    
+
     return markets;
   } catch (error) {
     console.error('❌ [Polymarket] 获取市场数据失败:', error);
@@ -127,19 +124,18 @@ export async function upsertMarketFromPolymarket(
     // 获取或创建分类（结合标签和标题进行智能匹配）
     let categoryId: string | null = null;
     const categorySlug = mapPolymarketCategory(
-      polymarketMarket.tags || [],
-      polymarketMarket.title || polymarketMarket.question || ''
+      polymarketMarket.tags || []
     ) || 'all';
     
     if (categorySlug !== 'all') {
       // 🔥 物理切断：只使用 findUnique 查找现有分类，禁止创建
-      const category = await prisma.category.findUnique({
+      const category = await prisma.categories.findUnique({
         where: { slug: categorySlug },
       });
       
       if (category) {
         categoryId = category.id;
-        console.log(`✅ [Polymarket] 找到分类: ${category.id} (slug: ${categorySlug})`);
+
       } else {
         // 🔥 兜底逻辑：如果分类不存在，跳过分类关联（市场将出现在"所有市场"中）
         console.warn(`⚠️ [Polymarket] 未找到分类 '${categorySlug}'，将跳过分类关联（市场将出现在"所有市场"中）`);
@@ -179,7 +175,7 @@ export async function upsertMarketFromPolymarket(
       isHot: (polymarketMarket.volumeNum || 0) > 10000,
       externalId: polymarketMarket.id,
       externalSource: 'polymarket',
-      status: polymarketMarket.closed ? 'CLOSED' : 'OPEN',
+      status: (polymarketMarket.closed ? 'CLOSED' : 'OPEN') as any, // Type cast for Prisma MarketStatus
     };
 
     // 使用 upsert 逻辑：基于 externalId 和 externalSource 的唯一组合
@@ -187,13 +183,13 @@ export async function upsertMarketFromPolymarket(
     // 1. 新事件：设为 PENDING（待审核）
     // 2. 已拒绝事件：如果状态为 REJECTED，直接跳过
     // 3. 已发布事件：仅更新交易量和概率，保持 PUBLISHED 状态
-    const existingMarket = await prisma.market.findFirst({
+    const existingMarket = await prisma.markets.findFirst({
       where: {
         externalId: polymarketMarket.id,
         externalSource: 'polymarket',
       },
       include: {
-        categories: true,
+        market_categories: true,
       },
     });
 
@@ -201,13 +197,13 @@ export async function upsertMarketFromPolymarket(
     if (existingMarket) {
       // 如果已拒绝，直接跳过
       if (existingMarket.reviewStatus === 'REJECTED') {
-        console.log(`⏭️ [Polymarket] 市场已拒绝，跳过: ${existingMarket.title} (${existingMarket.id})`);
+
         return;
       }
 
       // 如果已发布，只更新交易量和概率，保持 PUBLISHED 状态
       if (existingMarket.reviewStatus === 'PUBLISHED') {
-        market = await prisma.market.update({
+        market = await prisma.markets.update({
           where: { id: existingMarket.id },
           data: {
             totalVolume: marketData.totalVolume,
@@ -216,35 +212,38 @@ export async function upsertMarketFromPolymarket(
             // 保持 reviewStatus 为 PUBLISHED
           },
         });
-        console.log(`🔄 [Polymarket] 更新已发布市场（交易量和概率）: ${market.title} (${market.id})`);
+
       } else {
         // 如果状态是 PENDING 或其他，更新所有数据（包括 reviewStatus 保持为 PENDING）
-        market = await prisma.market.update({
+        market = await prisma.markets.update({
           where: { id: existingMarket.id },
           data: {
             ...marketData,
+            status: marketData.status as any, // Type cast for Prisma MarketStatus
             reviewStatus: 'PENDING', // 确保保持待审核状态
           },
         });
-        console.log(`🔄 [Polymarket] 更新待审核市场: ${market.title} (${market.id})`);
+
       }
     } else {
       // 🔥 审核中心权限：允许创建来自 Polymarket 的事件（待审核）
       // 创建新市场，状态设为 PENDING（待审核）
       // templateId 将在审核通过时自动生成（使用 poly- 前缀）
-      market = await prisma.market.create({
+      market = await prisma.markets.create({
         data: {
+          id: randomUUID(),
+          updatedAt: new Date(),
           ...marketData,
           reviewStatus: 'PENDING', // 新事件默认为待审核
           // templateId 留空，审核通过时会自动生成
         },
       });
-      console.log(`➕ [Polymarket] 创建新市场（待审核）: ${market.title} (${market.id})`);
+
     }
 
     // 处理分类关联：如果分类存在，确保关联已建立
     if (categoryId) {
-      const existingRelation = await prisma.marketCategory.findFirst({
+      const existingRelation = await prisma.market_categories.findFirst({
         where: {
           marketId: market.id,
           categoryId: categoryId,
@@ -252,13 +251,14 @@ export async function upsertMarketFromPolymarket(
       });
 
       if (!existingRelation) {
-        await prisma.marketCategory.create({
+        await prisma.market_categories.create({
           data: {
+            id: randomUUID(),
             marketId: market.id,
             categoryId: categoryId,
           },
         });
-        console.log(`🔗 [Polymarket] 关联分类: ${categorySlug} -> ${market.title}`);
+
       }
     }
 
@@ -286,8 +286,7 @@ export async function syncPolymarketMarkets(limit: number = 100): Promise<{
   };
 
   try {
-    console.log('🚀 [Polymarket] 开始批量同步市场数据...');
-    
+
     // 获取 Polymarket 市场列表
     const markets = await fetchPolymarketMarkets(limit, 0);
 
@@ -295,7 +294,7 @@ export async function syncPolymarketMarkets(limit: number = 100): Promise<{
     for (const market of markets) {
       try {
         // 检查是否已存在（用于统计）
-        const existing = await prisma.market.findFirst({
+        const existing = await prisma.markets.findFirst({
           where: {
             externalId: market.id,
             externalSource: 'polymarket',
@@ -319,7 +318,6 @@ export async function syncPolymarketMarkets(limit: number = 100): Promise<{
     }
 
     stats.success = true;
-    console.log(`✅ [Polymarket] 同步完成: 创建 ${stats.created}, 更新 ${stats.updated}, 错误 ${stats.errors}`);
 
     return stats;
   } catch (error) {

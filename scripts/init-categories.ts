@@ -33,11 +33,11 @@ async function main() {
   for (const categoryData of CATEGORIES_TO_INIT) {
     try {
       // 先检查是否存在相同 name 或 slug 的分类
-      const existingByName = await prisma.category.findUnique({
+      const existingByName = await prisma.categories.findUnique({
         where: { name: categoryData.name },
       });
       
-      const existingBySlug = await prisma.category.findUnique({
+      const existingBySlug = await prisma.categories.findUnique({
         where: { slug: categoryData.slug },
       });
       
@@ -45,7 +45,7 @@ async function main() {
       
       if (existingBySlug) {
         // 如果 slug 已存在，更新它（确保 name 和 displayOrder 正确）
-        category = await prisma.category.update({
+        category = await prisma.categories.update({
           where: { slug: categoryData.slug },
           data: {
             name: categoryData.name,
@@ -58,7 +58,7 @@ async function main() {
         updatedCount++;
       } else if (existingByName) {
         // 如果 name 已存在但 slug 不同，更新 slug（迁移到新的 slug）
-        category = await prisma.category.update({
+        category = await prisma.categories.update({
           where: { name: categoryData.name },
           data: {
             slug: categoryData.slug,
@@ -71,7 +71,7 @@ async function main() {
         updatedCount++;
       } else {
         // 如果都不存在，创建新分类
-        category = await prisma.category.create({
+        category = await prisma.categories.create({
           data: {
             slug: categoryData.slug,
             name: categoryData.name,
@@ -99,7 +99,7 @@ async function main() {
 
   // 验证：查询所有分类
   console.log('🔍 验证数据库中的分类:');
-  const allCategories = await prisma.category.findMany({
+  const allCategories = await prisma.categories.findMany({
     where: {
       status: 'active',
     },

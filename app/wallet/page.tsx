@@ -17,12 +17,14 @@ import DepositModal from '@/components/modals/DepositModal';
 import WithdrawModal from '@/components/modals/WithdrawModal';
 import { formatUSD } from '@/lib/utils';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 // 定义时间范围类型
 type TimeRange = '1D' | '1W' | '1M' | '1Y';
 
 export default function WalletPage() {
   const { currentUser, isLoggedIn } = useAuth();
+  const { t } = useLanguage();
   
   // 状态管理
   const [isDepositOpen, setIsDepositOpen] = useState(false);
@@ -104,6 +106,9 @@ export default function WalletPage() {
     }
   }, [isLoggedIn, currentUser?.id]);
 
+  // 持仓状态筛选
+  const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'RESOLVED'>('ACTIVE');
+
   // 获取持仓数据
   useEffect(() => {
     const fetchPositions = async () => {
@@ -114,7 +119,9 @@ export default function WalletPage() {
 
       setIsLoadingPositions(true);
       try {
-        const response = await fetch('/api/positions', {
+        // 根据筛选状态调用不同的 API 参数
+        const type = statusFilter === 'ACTIVE' ? 'active' : 'history';
+        const response = await fetch(`/api/positions?type=${type}`, {
           method: 'GET',
           credentials: 'include',
         });
@@ -122,9 +129,7 @@ export default function WalletPage() {
         if (response.ok) {
           const result = await response.json();
           if (result.success && result.data) {
-            // ========== 强制规则：只显示OPEN状态的持仓 ==========
-            const openPositions = result.data.filter((p: any) => p.status === 'OPEN');
-            setApiPositions(openPositions);
+            setApiPositions(result.data);
             // 架构加固：只从 API 获取，不计算
           } else {
             setApiPositions([]);
@@ -141,7 +146,7 @@ export default function WalletPage() {
     };
 
     fetchPositions();
-  }, [isLoggedIn, currentUser?.id]);
+  }, [isLoggedIn, currentUser?.id, statusFilter]);
 
   // 获取资金记录
   useEffect(() => {
@@ -164,21 +169,23 @@ export default function WalletPage() {
             // ========== 修复：转换 API 数据格式 ==========
             const deposits = (result.data.deposits || []).map((d: any) => ({
               id: d.id,
-              type: '充值' as const,
+              type: t('portfolio.types.deposit'),
               amount: Number(d.amount) || 0,
               network: 'Ethereum',
-              status: d.status === 'COMPLETED' ? '成功' as const : 
-                     d.status === 'PENDING' ? '处理中' as const : '失败' as const,
+              status: d.status === 'COMPLETED' ? t('portfolio.status.success') : 
+                     d.status === 'PENDING' ? t('portfolio.status.pending') : t('portfolio.status.failed'),
+              statusKey: d.status === 'COMPLETED' ? 'COMPLETED' : d.status === 'PENDING' ? 'PENDING' : 'FAILED',
               time: new Date(d.createdAt).toLocaleString('zh-CN'),
             }));
             
             const withdrawals = (result.data.withdrawals || []).map((w: any) => ({
               id: w.id,
-              type: '提现' as const,
+              type: t('portfolio.types.withdraw'),
               amount: Number(w.amount) || 0,
               network: 'Ethereum',
-              status: w.status === 'COMPLETED' ? '成功' as const : 
-                      w.status === 'PENDING' ? '处理中' as const : '失败' as const,
+              status: w.status === 'COMPLETED' ? t('portfolio.status.success') : 
+                      w.status === 'PENDING' ? t('portfolio.status.pending') : t('portfolio.status.failed'),
+              statusKey: w.status === 'COMPLETED' ? 'COMPLETED' : w.status === 'PENDING' ? 'PENDING' : 'FAILED',
               time: new Date(w.createdAt).toLocaleString('zh-CN'),
             }));
             
@@ -204,7 +211,7 @@ export default function WalletPage() {
     };
 
     fetchFunding();
-  }, [isLoggedIn, currentUser?.id]);
+  }, [isLoggedIn, currentUser?.id, t]);
 
   // ========== 架构加固：只从 API 获取，不计算 ==========
   // 前端禁止参与业务计算，所有字段直接从 API 返回的数据中读取
@@ -229,7 +236,7 @@ export default function WalletPage() {
       // 只映射 API 返回的字段，不计算
       return {
         id: pos.id?.toString() || `${pos.marketId}-${pos.outcome}`,
-        event: pos.marketTitle || `市场 ${pos.marketId}`,
+        event: pos.marketTitle || `${t('portfolio.table.market')} ${pos.marketId}`,
         type: (pos.outcome || 'YES').toUpperCase(),
         shares: pos.shares || 0,
         avgPrice: pos.avgPrice || 0,
@@ -240,7 +247,7 @@ export default function WalletPage() {
         marketId: pos.marketId?.toString() || pos.marketId,
       };
     });
-  }, [apiPositions]);
+  }, [apiPositions, t]);
 
   // ========== 架构加固：交易历史暂时为空（未来可从 API 获取） ==========
   // 新用户/空数据状态：空数组是合法状态，UI 会显示"暂无交易历史"
@@ -251,7 +258,7 @@ export default function WalletPage() {
     if (isLoadingPositions) {
       return (
         <div className="flex items-center justify-center py-12">
-          <div className="text-zinc-500 text-sm">加载中...</div>
+          <div className="text-zinc-500 text-sm">{t('portfolio.empty.loading')}</div>
         </div>
       );
     }
@@ -259,22 +266,47 @@ export default function WalletPage() {
     if (positions.length === 0) {
       return (
         <div className="flex items-center justify-center py-12">
-          <div className="text-zinc-600">暂无持仓</div>
+          <div className="text-zinc-600">
+            {statusFilter === 'ACTIVE' ? t('portfolio.empty.no_positions_active') : t('portfolio.empty.no_positions_resolved')}
+          </div>
         </div>
       );
     }
 
     return (
       <div className="overflow-x-auto p-4">
+        {/* 筛选按钮 */}
+        <div className="mb-4 flex gap-2">
+          <button
+            onClick={() => setStatusFilter('ACTIVE')}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              statusFilter === 'ACTIVE'
+                ? 'bg-pm-green/20 text-pm-green border border-pm-green/30'
+                : 'bg-zinc-800 text-zinc-400 hover:text-zinc-300 border border-zinc-700'
+            }`}
+          >
+            {t('portfolio.status.active')}
+          </button>
+          <button
+            onClick={() => setStatusFilter('RESOLVED')}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              statusFilter === 'RESOLVED'
+                ? 'bg-pm-green/20 text-pm-green border border-pm-green/30'
+                : 'bg-zinc-800 text-zinc-400 hover:text-zinc-300 border border-zinc-700'
+            }`}
+          >
+            {t('portfolio.status.resolved')}
+          </button>
+        </div>
         <table className="w-full text-left text-sm text-zinc-400">
           <thead className="border-b border-zinc-800 text-xs uppercase text-zinc-500 bg-zinc-900/50">
             <tr>
-              <th className="px-4 py-3 font-medium">事件</th>
-              <th className="px-4 py-3 font-medium text-center">类型</th>
-              <th className="px-4 py-3 font-medium text-right">持有份额</th>
-              <th className="px-4 py-3 font-medium text-right">均价</th>
-              <th className="px-4 py-3 font-medium text-right">当前价值</th>
-              <th className="px-4 py-3 font-medium text-right">盈亏</th>
+              <th className="px-4 py-3 font-medium">{t('portfolio.table.event')}</th>
+              <th className="px-4 py-3 font-medium text-center">{t('portfolio.table.type')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.shares')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.avg_price')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.current_value')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.pnl')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800/50">
@@ -318,7 +350,7 @@ export default function WalletPage() {
     if (history.length === 0) {
       return (
         <div className="flex items-center justify-center py-12">
-          <div className="text-zinc-600">暂无交易历史</div>
+          <div className="text-zinc-600">{t('portfolio.empty.no_history')}</div>
         </div>
       );
     }
@@ -328,14 +360,14 @@ export default function WalletPage() {
         <table className="w-full text-left text-sm text-zinc-400">
           <thead className="border-b border-zinc-800 text-xs uppercase text-zinc-500 bg-zinc-900/50">
             <tr>
-              <th className="px-4 py-3 font-medium">时间</th>
-              <th className="px-4 py-3 font-medium">市场</th>
-              <th className="px-4 py-3 font-medium">操作</th>
-              <th className="px-4 py-3 font-medium text-right">价格</th>
-              <th className="px-4 py-3 font-medium text-right">数量</th>
-              <th className="px-4 py-3 font-medium text-right">总额</th>
-              <th className="px-4 py-3 font-medium text-right">盈亏 (P&L)</th>
-              <th className="px-4 py-3 font-medium text-right">状态</th>
+              <th className="px-4 py-3 font-medium">{t('portfolio.table.time')}</th>
+              <th className="px-4 py-3 font-medium">{t('portfolio.table.market')}</th>
+              <th className="px-4 py-3 font-medium">{t('portfolio.table.action')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.price')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.quantity')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.total')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.pnl')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.status')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800/50">
@@ -365,7 +397,7 @@ export default function WalletPage() {
                   {(item.pnl ?? 0) === 0 ? '-' : (item.pnl ?? 0) > 0 ? '+' : ''}{formatUSD(item.pnl ?? 0)}
                 </td>
                 <td className="px-4 py-4 text-right flex justify-end items-center gap-1">
-                  {item.status === '成功' || item.status === '已结算' ? (
+                  {item.status === '成功' || item.status === '已结算' || item.status === 'Success' || item.status === 'Completed' ? (
                     <CheckCircle2 size={14} className="text-pm-green" />
                   ) : (
                     <CheckCircle2 size={14} className="text-zinc-500" />
@@ -384,7 +416,7 @@ export default function WalletPage() {
     if (isLoadingFunding) {
       return (
         <div className="flex items-center justify-center py-12">
-          <div className="text-zinc-500 text-sm">加载中...</div>
+          <div className="text-zinc-500 text-sm">{t('portfolio.empty.loading')}</div>
         </div>
       );
     }
@@ -392,7 +424,7 @@ export default function WalletPage() {
     if (fundingRecords.length === 0) {
       return (
         <div className="flex items-center justify-center py-12">
-          <div className="text-zinc-600">暂无资金记录</div>
+          <div className="text-zinc-600">{t('portfolio.empty.no_funding')}</div>
         </div>
       );
     }
@@ -402,11 +434,11 @@ export default function WalletPage() {
         <table className="w-full text-left text-sm text-zinc-400">
           <thead className="border-b border-zinc-800 text-xs uppercase text-zinc-500 bg-zinc-900/50">
             <tr>
-              <th className="px-4 py-3 font-medium">时间</th>
-              <th className="px-4 py-3 font-medium">类型</th>
-              <th className="px-4 py-3 font-medium">网络</th>
-              <th className="px-4 py-3 font-medium text-right">金额</th>
-              <th className="px-4 py-3 font-medium text-right">状态</th>
+              <th className="px-4 py-3 font-medium">{t('portfolio.table.time')}</th>
+              <th className="px-4 py-3 font-medium">{t('portfolio.table.type')}</th>
+              <th className="px-4 py-3 font-medium">{t('portfolio.table.network')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.amount')}</th>
+              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.status')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800/50">
@@ -416,13 +448,13 @@ export default function WalletPage() {
                 <td className="px-4 py-4 text-white font-medium">{item.type}</td>
                 <td className="px-4 py-4 text-zinc-400">{item.network}</td>
                 <td className={`px-4 py-4 text-right font-bold font-mono ${
-                  item.type === '充值' ? 'text-pm-green' : 'text-zinc-200'
+                  (item as any).type === t('portfolio.types.deposit') ? 'text-pm-green' : 'text-zinc-200'
                 }`}>
-                  {item.type === '充值' ? '+' : '-'}${item.amount.toFixed(2)}
+                  {(item as any).type === t('portfolio.types.deposit') ? '+' : '-'}${item.amount.toFixed(2)}
                 </td>
                 <td className="px-4 py-4 text-right">
                   <span className={`text-xs px-2 py-1 rounded-full ${
-                    item.status === '成功' 
+                    (item as any).statusKey === 'COMPLETED'
                       ? 'bg-green-500/10 text-green-400' 
                       : 'bg-yellow-500/10 text-yellow-400'
                   }`}>
@@ -446,13 +478,13 @@ export default function WalletPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-zinc-400">
               <Wallet size={18} />
-              <span className="text-sm font-medium">总资产估值</span>
+              <span className="text-sm font-medium">{t('portfolio.stats.total_value')}</span>
             </div>
             
             <div className="space-y-2">
               <div className="flex items-baseline gap-2">
                 {isLoadingAssets ? (
-                  <span className="text-5xl font-bold text-white tracking-tight">加载中...</span>
+                  <span className="text-5xl font-bold text-white tracking-tight">{t('portfolio.stats.loading')}</span>
                 ) : (
                   <>
                     {/* 架构加固：新用户/空数据支持，totalBalance 为 0 时显示 $0.00 */}
@@ -473,17 +505,17 @@ export default function WalletPage() {
                   {currentPnl.isPositive ? <ArrowUp size={14}/> : <ArrowDown size={14}/>}
                   ${Math.abs(currentPnl.value).toFixed(2)} ({currentPnl.percent.toFixed(2)}%)
                 </div>
-                <span className="text-xs text-zinc-500">过去 {timeRange}</span>
+                <span className="text-xs text-zinc-500">{t('portfolio.stats.past')} {timeRange}</span>
               </div>
             </div>
             <div className="flex gap-6 text-sm pt-2">
               {/* 架构加固：新用户/空数据支持，显示 $0.00 而不是崩溃 */}
               <div>
-                <span className="text-zinc-500 block mb-0.5">可用余额</span>
+                <span className="text-zinc-500 block mb-0.5">{t('portfolio.stats.available')}</span>
                 <span className="text-white font-mono">{formatUSD(availableBalance)}</span>
               </div>
               <div>
-                <span className="text-zinc-500 block mb-0.5">持仓价值</span>
+                <span className="text-zinc-500 block mb-0.5">{t('portfolio.stats.position_value')}</span>
                 <span className="text-white font-mono">{formatUSD(positionsValue)}</span>
               </div>
             </div>
@@ -514,14 +546,14 @@ export default function WalletPage() {
                 className="flex-1 md:flex-none px-6 py-3 bg-white text-black hover:bg-zinc-200 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors min-w-[120px]"
               >
                 <ArrowDownLeft size={18} />
-                充值
+                {t('portfolio.stats.deposit')}
               </button>
               <button 
                 onClick={() => setIsWithdrawOpen(true)}
                 className="flex-1 md:flex-none px-6 py-3 bg-zinc-800 text-white hover:bg-zinc-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors min-w-[120px]"
               >
                 <ArrowUpRight size={18} />
-                提现
+                {t('portfolio.stats.withdraw')}
               </button>
             </div>
           </div>
@@ -539,7 +571,7 @@ export default function WalletPage() {
                 : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            <TrendingUp size={16} /> 我的持仓
+            <TrendingUp size={16} /> {t('portfolio.tabs.positions')}
           </button>
           <button 
             onClick={() => setActiveTab('history')} 
@@ -549,7 +581,7 @@ export default function WalletPage() {
                 : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            <History size={16} /> 交易历史
+            <History size={16} /> {t('portfolio.tabs.history')}
           </button>
           <button 
             onClick={() => setActiveTab('funding')} 
@@ -559,7 +591,7 @@ export default function WalletPage() {
                 : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            <DollarSign size={16} /> 资金记录
+            <DollarSign size={16} /> {t('portfolio.tabs.funding')}
           </button>
         </div>
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden min-h-[400px]">

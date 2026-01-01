@@ -79,7 +79,7 @@ async function debugMarketVisibility() {
     
     // 验证点 1: categoryId 是否为"热门"的 ID
     console.log('✅ 验证点 1: categoryId 检查');
-    const hotCategory = await prisma.category.findFirst({
+    const hotCategory = await prisma.categories.findFirst({
       where: {
         OR: [
           { slug: 'hot' },

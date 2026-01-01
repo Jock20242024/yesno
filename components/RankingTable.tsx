@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Search, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { User } from "@/types/api";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface RankingUser {
   id: string;
@@ -14,19 +15,20 @@ interface RankingUser {
   volume: string;
 }
 
-const timeTabs = [
-  { id: "today", label: "Today" },
-  { id: "weekly", label: "Weekly" },
-  { id: "monthly", label: "Monthly" },
-  { id: "all", label: "All" },
-];
-
 export default function RankingTable() {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState("today");
   const [searchQuery, setSearchQuery] = useState("");
   const [rankingData, setRankingData] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const timeTabs = useMemo(() => [
+    { id: "today", label: t('rank.tabs.today') },
+    { id: "weekly", label: t('rank.tabs.weekly') },
+    { id: "monthly", label: t('rank.tabs.monthly') },
+    { id: "all", label: t('rank.tabs.all') },
+  ], [t]);
 
   // 格式化利润/亏损
   const formatProfit = (profit: number) => {
@@ -62,7 +64,7 @@ export default function RankingTable() {
       const response = await fetch(`/api/rankings?${params.toString()}`);
       
       if (!response.ok) {
-        throw new Error("Failed to fetch rankings");
+        throw new Error(t('rank.error'));
       }
 
       const result = await response.json();
@@ -70,10 +72,10 @@ export default function RankingTable() {
       if (result.success && result.data) {
         setRankingData(result.data);
       } else {
-        throw new Error("Invalid response format");
+        throw new Error(t('rank.error'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error fetching data.");
+      setError(err instanceof Error ? err.message : t('rank.error'));
       console.error("Error fetching rankings:", err);
     } finally {
       setIsLoading(false);
@@ -131,7 +133,7 @@ export default function RankingTable() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="text"
-            placeholder="Search by name"
+            placeholder={t('rank.search.placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-pm-green transition-colors"
@@ -143,7 +145,7 @@ export default function RankingTable() {
       {isLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-pm-green mr-2" />
-          <span className="text-zinc-400">Loading...</span>
+          <span className="text-zinc-400">{t('rank.loading')}</span>
         </div>
       )}
 
@@ -151,7 +153,7 @@ export default function RankingTable() {
       {error && !isLoading && (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
-            <p className="text-red-500 font-medium mb-2">Error fetching data.</p>
+            <p className="text-red-500 font-medium mb-2">{t('rank.error')}</p>
             <p className="text-zinc-400 text-sm">{error}</p>
           </div>
         </div>
@@ -165,16 +167,16 @@ export default function RankingTable() {
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  Rank
+                  {t('rank.table.rank')}
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  User
+                  {t('rank.table.trader')}
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  P&L
+                  {t('rank.table.pnl')}
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  Volume
+                  {t('rank.table.volume')}
                 </th>
               </tr>
             </thead>
@@ -236,7 +238,7 @@ export default function RankingTable() {
               ) : (
                 <tr>
                   <td colSpan={4} className="px-6 py-8 text-center text-zinc-400">
-                    No data available
+                    {t('rank.empty')}
                   </td>
                 </tr>
               )}

@@ -16,7 +16,7 @@ export interface AssetStats {
 export async function getAssetStats(): Promise<AssetStats> {
   try {
     // 1. 计算总用户余额：User 表中所有 balance 的总和
-    const totalBalanceResult = await prisma.user.aggregate({
+    const totalBalanceResult = await prisma.users.aggregate({
       _sum: {
         balance: true,
       },
@@ -24,7 +24,7 @@ export async function getAssetStats(): Promise<AssetStats> {
     const totalUserBalance = totalBalanceResult._sum.balance ?? 0;
 
     // 2. 计算总充值金额：Transaction 表中 type = 'DEPOSIT' 且 status = 'COMPLETED' 的金额总和
-    const depositsResult = await prisma.transaction.aggregate({
+    const depositsResult = await prisma.transactions.aggregate({
       where: {
         type: TransactionType.DEPOSIT,
         status: TransactionStatus.COMPLETED,
@@ -37,7 +37,7 @@ export async function getAssetStats(): Promise<AssetStats> {
 
     // 3. 计算总提现金额：Transaction 表中 type = 'WITHDRAW' 且 status = 'COMPLETED' 的金额总和
     // 注意：由于 amount 可能是负数，我们使用绝对值或者确保统计的是正数
-    const withdrawalsResult = await prisma.transaction.aggregate({
+    const withdrawalsResult = await prisma.transactions.aggregate({
       where: {
         type: TransactionType.WITHDRAW,
         status: TransactionStatus.COMPLETED,

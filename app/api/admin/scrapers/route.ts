@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   try {
-    const dataSources = await prisma.dataSource.findMany({
+    const dataSources = await prisma.data_sources.findMany({
       orderBy: {
         sourceName: 'asc',
       },

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LineChart, TrendingUp, Users, DollarSign, Activity, BarChart, LucideIcon, Globe, Shield, Zap, Trophy } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface HotMarket {
   id: string;
@@ -65,6 +66,7 @@ const iconMap: Record<string, LucideIcon | string> = {
 
 export function DataClient() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [globalStats, setGlobalStats] = useState<GlobalStat[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   
@@ -213,7 +215,7 @@ export function DataClient() {
                 ))}
               </div>
               <div className="text-center text-sm text-text-secondary mt-4">
-                正在同步全球实时数据...
+                {t('home.market_list.loading_markets')}
               </div>
             </div>
           </div>
@@ -305,11 +307,11 @@ export function DataClient() {
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       
       if (days > 0) {
-        return `${days} 天后`;
+        return t('home.status.days_later').replace('{days}', days.toString());
       } else if (hours > 0) {
-        return `${hours} 小时后`;
+        return t('home.status.hours_later').replace('{hours}', hours.toString());
       } else {
-        return "即将截止";
+        return t('home.status.ending_soon');
       }
     } catch (e) {
       console.error('❌ [DataClient] 日期格式化错误:', e, '原始值:', dateString);
@@ -327,23 +329,23 @@ export function DataClient() {
           
           <div className="flex flex-col gap-4 max-w-[720px] relative z-10">
             <h1 className="text-white text-3xl md:text-4xl lg:text-5xl font-black leading-tight tracking-tight">
-              <span className="text-primary">预测未来</span>，赢取丰厚奖励
+              <span className="text-primary">{t('home.hero.title_prefix')}</span>，{t('home.hero.title_suffix')}
             </h1>
             <p className="text-text-secondary text-lg font-normal leading-normal max-w-[600px]">
-              加入全球预测市场。不仅是旁观者，更是参与者。交易您对世界大事的看法，在每一份不确定中发现价值。
+              {t('home.hero.subtitle')}
             </p>
             <div className="flex gap-4 mt-2">
-              <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-border-dark hover:border-primary/40 transition-colors">
-                <Globe className="w-[18px] h-[18px] text-primary" />
-                全球热点
+              <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-border-dark hover:border-primary/40 transition-colors whitespace-nowrap">
+                <Globe className="w-[18px] h-[18px] text-primary flex-shrink-0" />
+                {t('home.hero.feature_global')}
               </div>
-              <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-border-dark hover:border-primary/40 transition-colors">
-                <TrendingUp className="w-[18px] h-[18px] text-primary" />
-                实时赔率
+              <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-border-dark hover:border-primary/40 transition-colors whitespace-nowrap">
+                <TrendingUp className="w-[18px] h-[18px] text-primary flex-shrink-0" />
+                {t('home.hero.feature_odds')}
               </div>
-              <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-border-dark hover:border-primary/40 transition-colors">
-                <Shield className="w-[18px] h-[18px] text-primary" />
-                安全透明
+              <div className="flex items-center gap-2 text-sm text-text-secondary bg-surface-dark/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-border-dark hover:border-primary/40 transition-colors whitespace-nowrap">
+                <Shield className="w-[18px] h-[18px] text-primary flex-shrink-0" />
+                {t('home.hero.feature_security')}
               </div>
             </div>
           </div>
@@ -355,7 +357,7 @@ export function DataClient() {
           <div className="lg:col-span-8">
             <div className="bg-surface-dark rounded-lg border border-border-dark p-6">
               <h2 className="text-xl font-bold text-white mb-4">
-                Top 10 Trending Markets
+                {t('home.market_list.title')}
               </h2>
 
               {/* 空数据提示 */}
@@ -376,20 +378,20 @@ export function DataClient() {
                       <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider w-16">
                         <div className="flex items-center gap-1.5">
                           <Trophy className="w-4 h-4 text-primary" />
-                          <span>Rank</span>
+                          <span>{t('home.market_list.rank')}</span>
                         </div>
                       </th>
                       <th className="px-3 py-3 pl-8 text-left text-xs font-bold text-primary uppercase tracking-wider min-w-[120px] md:min-w-[280px]">
-                        Market
+                        {t('home.market_list.event')}
                       </th>
                       <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider min-w-[120px] md:min-w-[200px]">
-                        Odds
+                        {t('home.market_list.prediction_probability')}
                       </th>
                       <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider w-24">
-                        End Date
+                        {t('home.market_list.deadline')}
                       </th>
                       <th className="px-3 py-3 text-right text-xs font-bold text-primary uppercase tracking-wider w-32">
-                        Volume
+                        {t('home.market_list.volume')}
                       </th>
                     </tr>
                   </thead>
@@ -397,7 +399,7 @@ export function DataClient() {
                     {displayMarkets.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="text-center py-10 text-text-secondary">
-                          No trending data available
+                          {t('home.market_list.no_data')}
                         </td>
                       </tr>
                     ) : (
@@ -498,13 +500,13 @@ export function DataClient() {
           <div className="lg:col-span-2">
             <div className="bg-surface-dark rounded-lg border border-border-dark p-6 sticky top-24 max-w-[280px]">
               <h2 className="text-xl font-bold text-white mb-6">
-                实时数据
+                {t('home.sidebar.title')}
               </h2>
 
               <div className="space-y-4">
                 {isLoadingStats ? (
                   <div className="text-center py-8 text-zinc-400">
-                    加载中...
+                    {t('home.sidebar.loading')}
                   </div>
                 ) : (globalStats.length === 0 ? (
                   // 默认占位符数据（当 GlobalStat 表中没有数据时显示）

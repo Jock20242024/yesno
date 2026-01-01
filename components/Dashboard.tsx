@@ -86,7 +86,7 @@ function DashboardMarketsList() {
     <div className="p-4 md:p-6 flex flex-col gap-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {markets.map((market) => {
-          const Icon = iconMap[market.icon || 'Bitcoin'] || Bitcoin;
+          const Icon = iconMap[(market as any).icon || 'Bitcoin'] || Bitcoin;
           const yesPercent = market.yesPercent ?? 50;
           const noPercent = market.noPercent ?? 50;
 
@@ -106,7 +106,7 @@ function DashboardMarketsList() {
               </div>
 
               <h3 className="text-white font-semibold text-sm mb-3 line-clamp-2 group-hover:text-primary transition-colors">
-                {market.titleZh || market.title}
+                {(market as any).titleZh || market.title}
               </h3>
 
               <div className="mt-auto">

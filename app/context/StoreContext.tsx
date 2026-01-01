@@ -54,10 +54,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // 只有在用户 ID 从有效值变为 null 或不同 ID 时才清空（真实的用户切换或登出）
     // 如果 previousUserId 是 null，说明是初始化阶段，不清空（可能只是 API 验证延迟）
     if (previousUserId !== null && (currentUserId === null || currentUserId !== previousUserId)) {
-      console.log('🧹 [StoreContext] 检测到用户切换或登出，清空所有状态（包括资金记录）', {
-        previousUserId,
-        currentUserId,
-      });
+
       setBalance(0);
       setPositions([]);
       setHistory([]);
@@ -277,8 +274,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     price: number
   ) => {
     // 调试日志
-    console.log('Trade Executed:', type, inputVal, marketId, outcome);
-    
+
     await new Promise(resolve => setTimeout(resolve, 600)); // 模拟延迟
 
     // 生成动态数据仅在事件触发后进行，这样是安全的

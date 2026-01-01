@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from 'crypto';
 import { auth } from "@/lib/authExport";
 import { prisma } from '@/lib/prisma';
 import { TransactionType, TransactionStatus } from '@prisma/client';
@@ -56,8 +57,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. 检查用户是否存在（根据管理员选中的 userId）
-    console.log(`🔍 [Admin Balance API] Querying user with id: ${userId}`);
-    const user = await prisma.user.findUnique({
+
+    const user = await prisma.users.findUnique({
       where: { id: userId }, // 使用管理员选中的 userId 查询
       select: { 
         id: true, 
@@ -67,14 +68,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      console.log(`[API] User not found with id: ${userId}`);
+
       return NextResponse.json(
         { success: false, error: "User not found" },
         { status: 404 }
       );
     }
-    
-    console.log(`[API] Found user: ${user.email}, Current balance: ${user.balance}`);
 
     // 5. 检查余额是否足够（如果是扣款）
     if (amount < 0 && user.balance + amount < 0) {
@@ -85,16 +84,14 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. 使用事务更新余额并创建交易记录（确保原子性）
-    console.log(`🔄 [Admin Balance API] Starting transaction to update balance for user: ${user.email}`);
+
     const result = await prisma.$transaction(async (tx) => {
       // 确保 amount 是浮点数格式
       const amountFloat = parseFloat(amount.toString());
       const oldBalance = user.balance;
-      
-      console.log(`🔄 [Admin Balance API] Transaction - User: ${user.email}, Old balance: ${oldBalance}, Adjustment: ${amountFloat}`);
-      
+
       // 更新用户余额（使用浮点数 increment，更新同一个 balance 字段）
-      const updatedUser = await tx.user.update({
+      const updatedUser = await tx.users.update({
         where: { id: userId }, // 使用管理员选中的 userId 更新
         data: {
           balance: {
@@ -110,11 +107,11 @@ export async function POST(request: NextRequest) {
       
       // 确保余额是浮点数格式
       const newBalance = parseFloat(updatedUser.balance.toString());
-      console.log(`🔄 [Admin Balance API] Transaction - Updated balance: ${newBalance}`);
-      
+
       // 创建交易记录（使用浮点数格式，确保数据库同步）
-      const transaction = await tx.transaction.create({
+      const transaction = await tx.transactions.create({
         data: {
+          id: randomUUID(),
           userId, // 使用相同的 userId
           amount: amountFloat, // 使用浮点数格式
           type: TransactionType.ADMIN_ADJUSTMENT,
@@ -122,19 +119,17 @@ export async function POST(request: NextRequest) {
           reason: reason.trim(),
         },
       });
-      
-      console.log(`🔄 [Admin Balance API] Transaction - Created transaction record: ${transaction.id}`);
 
       return { user: { ...updatedUser, balance: newBalance }, transaction };
     });
-    
-    console.log(`✅ [Admin Balance API] Transaction completed successfully for user: ${result.user.email}`);
 
     // 7. 记录管理员操作日志
     try {
-      await prisma.adminLog.create({
+      await prisma.admin_logs.create({
         data: {
-          adminId: session.user.id as string,
+            id: randomUUID(),
+            updatedAt: new Date(),
+            adminId: session.user.id as string,
           actionType: 'BALANCE_ADJUSTMENT',
           details: `调整用户 ${result.user.email} (${userId}) 余额: ${amount > 0 ? '+' : ''}${amount.toFixed(2)}，原因: ${reason.trim()}`,
         },
@@ -146,16 +141,6 @@ export async function POST(request: NextRequest) {
 
     // 确保返回的余额是浮点数格式
     const finalBalance = parseFloat(result.user.balance.toString());
-    
-    console.log(`[API] Found user: ${result.user.email}, Current balance: ${finalBalance}`);
-    console.log(`✅ [Admin Balance API] 余额调整成功:`, {
-      userId: result.user.id,
-      userEmail: result.user.email,
-      adjustment: amount,
-      oldBalance: user.balance,
-      newBalance: finalBalance,
-      transactionId: result.transaction.id,
-    });
 
     return NextResponse.json({
       success: true,

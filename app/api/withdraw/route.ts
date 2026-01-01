@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { TransactionType, TransactionStatus } from '@prisma/client';
 import { requireAuth } from '@/lib/auth/utils';
+import { randomUUID } from 'crypto';
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: Request) {
   try {
-    // 🔥 使用统一的 NextAuth 认证
+    // 🔥 使用统一的 NextAuth 认证（支持 Session 和 API Key）
     const authResult = await requireAuth();
     
     if (!authResult.success) {
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
     // ========== 第二重锁：余额对账（不信任前端传来的余额）==========
     // 必须从数据库重新查询该用户的最新 balance
     // 🔥 直接使用 userId 查询，不需要通过 email
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -102,9 +103,6 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
-
-    console.log(`[API] Found user: ${user.email}, Current balance: ${user.balance}`);
-    console.log(`[Withdraw API] 提现请求 - 用户: ${user.email}, 请求金额: $${withdrawAmount}, 当前余额: $${user.balance}`);
 
     // 严格校验：对比 withdrawAmount 与 user.balance
     // 如果 withdrawAmount > user.balance，立即中断操作
@@ -127,7 +125,7 @@ export async function POST(request: Request) {
     // b. 创建一条 Transaction 记录，类型为 WITHDRAWAL，状态为 PENDING 或 COMPLETED
     const result = await prisma.$transaction(async (tx) => {
       // 1. 再次查询用户（带锁，防止并发）
-      const lockedUser = await tx.user.findUnique({
+      const lockedUser = await tx.users.findUnique({
         where: { id: user.id },
       });
 
@@ -141,7 +139,7 @@ export async function POST(request: Request) {
       }
 
       // 3. 扣除用户余额（使用 decrement 确保原子性）
-      const updatedUser = await tx.user.update({
+      const updatedUser = await tx.users.update({
         where: { id: user.id },
         data: {
           balance: {
@@ -156,8 +154,9 @@ export async function POST(request: Request) {
       });
 
       // 4. 创建 Transaction 记录（类型为 WITHDRAWAL，状态为 PENDING）
-      const transaction = await tx.transaction.create({
+      const transaction = await tx.transactions.create({
         data: {
+          id: randomUUID(),
           userId: user.id,
           amount: -withdrawAmount, // 提现为负数
           type: TransactionType.WITHDRAW,
@@ -168,9 +167,10 @@ export async function POST(request: Request) {
 
       // 5. 创建 Withdrawal 记录（保持与现有系统兼容）
       const withdrawalId = `W-${Date.now()}-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
-      const withdrawal = await tx.withdrawal.create({
+      const withdrawal = await tx.withdrawals.create({
         data: {
           id: withdrawalId,
+          updatedAt: new Date(),
           userId: user.id,
           amount: withdrawAmount,
           targetAddress: targetAddress.trim(),
@@ -186,17 +186,6 @@ export async function POST(request: Request) {
     });
 
     // ========== 审计记录 ==========
-    console.log(`✅ [Withdraw API] ========== 提现成功 ==========`);
-    console.log(`✅ [Withdraw API] 用户ID: ${user.id}`);
-    console.log(`✅ [Withdraw API] 用户邮箱: ${user.email}`);
-    console.log(`✅ [Withdraw API] 提现金额: $${withdrawAmount}`);
-    console.log(`✅ [Withdraw API] 旧余额: $${oldBalance}`);
-    console.log(`✅ [Withdraw API] 新余额: $${result.user.balance}`);
-    console.log(`✅ [Withdraw API] Transaction 记录ID: ${result.transaction.id}`);
-    console.log(`✅ [Withdraw API] Withdrawal 记录ID: ${result.withdrawal.id}`);
-    console.log(`✅ [Withdraw API] 目标地址: ${targetAddress}`);
-    console.log(`✅ [Withdraw API] 时间戳: ${new Date().toISOString()}`);
-    console.log(`✅ [Withdraw API] ===============================`);
 
     // 返回提现请求的记录
     return NextResponse.json({

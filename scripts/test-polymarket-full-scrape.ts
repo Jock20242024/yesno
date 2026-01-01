@@ -21,7 +21,7 @@ async function main() {
     // 🔥 强制重置：在脚本开头物理删除所有同步记忆
     console.log('🧹 步骤 1: 强制重置所有同步标记...');
     try {
-      const resetResult = await prisma.dataSource.updateMany({
+      const resetResult = await prisma.data_sources.updateMany({
         where: { sourceName: 'Polymarket' },
         data: {
           lastSyncTime: null,
@@ -84,7 +84,7 @@ async function main() {
     console.log('');
 
     // 检查 DataSource 表的最终状态
-    const dataSource = await prisma.dataSource.findUnique({
+    const dataSource = await prisma.data_sources.findUnique({
       where: { sourceName: 'Polymarket' },
     });
     console.log('📋 DataSource 表最终状态:');

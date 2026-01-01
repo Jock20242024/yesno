@@ -5,7 +5,7 @@ async function main() {
   console.log('🔍 检查并创建/修复"热门"分类...\n');
 
   // 1. 检查是否已存在热门分类
-  const existingHot = await prisma.category.findFirst({
+  const existingHot = await prisma.categories.findFirst({
     where: {
       OR: [
         { slug: "-1" },
@@ -24,7 +24,7 @@ async function main() {
     // 确保 slug 是 "-1"
     if (existingHot.slug !== "-1") {
       console.log('\n🔄 更新 slug 为 "-1"...');
-      const updated = await prisma.category.update({
+      const updated = await prisma.categories.update({
         where: { id: existingHot.id },
         data: { slug: "-1" },
       });
@@ -39,7 +39,7 @@ async function main() {
     console.log('❌ 未找到"热门"分类，开始创建...');
     
     // 创建热门分类（使用 UUID 作为 ID，slug 为 "-1"）
-    const newHotCategory = await prisma.category.create({
+    const newHotCategory = await prisma.categories.create({
       data: {
         name: "热门",
         slug: "-1",

@@ -13,7 +13,7 @@ async function testCategoryCount() {
     console.log('🧪 [Test Category Count] 开始测试分类计数统计...\n');
     
     // 获取"热门"分类（用于测试）
-    const hotCategory = await prisma.category.findFirst({
+    const hotCategory = await prisma.categories.findFirst({
       where: {
         OR: [
           { slug: 'hot' },

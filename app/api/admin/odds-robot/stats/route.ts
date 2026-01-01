@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     // 🔥 从数据库获取机器人运行状态（从 scraper_tasks 表或缓存中读取）
     // 查找名为 'OddsRobot' 的 scraper task
-    const robotTask = await prisma.scraperTask.findUnique({
+    const robotTask = await prisma.scraper_tasks.findUnique({
       where: { name: 'OddsRobot' },
       select: {
         id: true,
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     // 🔥 修改：活跃池逻辑改为"实时同步成功的市场"（有 externalId 的市场）
     // 只统计能够成功同步赔率的市场，而不是所有需要同步的市场
     const [activePoolSize, factoryCount, manualCount] = await Promise.all([
-      prisma.market.count({
+      prisma.markets.count({
         where: {
           OR: [
             { source: 'POLYMARKET', isActive: true, status: 'OPEN', externalId: { not: null } },
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
           ],
         },
       }),
-      prisma.market.count({
+      prisma.markets.count({
         where: {
           isFactory: true,
           isActive: true,
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
           externalId: { not: null }, // 🔥 只统计有 externalId 的工厂市场（能够同步成功的）
         },
       }),
-      prisma.market.count({
+      prisma.markets.count({
         where: {
           source: 'POLYMARKET',
           isFactory: false, // 🔥 手动/其他市场（source='POLYMARKET' 且不是工厂生成的）
@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 获取最近的同步日志（从 admin_logs 或专门的日志表）
-    const recentLogs = await prisma.adminLog.findMany({
+    const recentLogs = await prisma.admin_logs.findMany({
       where: {
         actionType: {
           contains: 'ODDS',

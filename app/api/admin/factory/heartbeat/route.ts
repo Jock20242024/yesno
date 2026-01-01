@@ -37,10 +37,10 @@ export async function POST(request: NextRequest) {
 
     // 更新心跳
     const nowUtc = dayjs.utc().toISOString();
-    const result = await prisma.systemSettings.upsert({
+    const result = await prisma.system_settings.upsert({
       where: { key: 'lastFactoryRunAt' },
       update: { value: nowUtc },
-      create: { key: 'lastFactoryRunAt', value: nowUtc },
+      create: { key: 'lastFactoryRunAt', value: nowUtc, updatedAt: new Date() },
     });
 
     return NextResponse.json({

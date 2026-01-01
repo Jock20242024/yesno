@@ -12,8 +12,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // 1. 最基础的清理
   const clearUserData = useCallback(() => {
-    console.log("🧹 [AuthProvider] 执行清理...");
-    
+
     // 🔥 清除所有用户相关的 localStorage
     localStorage.removeItem('pm_user');
     localStorage.removeItem('pm_currentUser');
@@ -47,7 +46,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // 3. 定义 handleApiGuestResponse (现在它能找到 logout 了)
   const handleApiGuestResponse = useCallback((response: Response, data?: any) => {
     if (response.status === 401 || data?.isGuest) {
-      console.log("🔴 [AuthProvider] 身份过期，强制退出");
+
       logout();
       return true;
     }
@@ -91,7 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const result = await signIn('credentials', {
         ...credentials,
         redirect: false, // 防止页面被 NextAuth 强行刷新导致状态丢失
-      });
+      }) as { error?: string } | undefined;
 
       if (result?.error) throw new Error(result.error);
 

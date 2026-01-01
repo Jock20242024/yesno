@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMarketDetail } from "@/hooks/useAdminData";
+import { toast } from "sonner";
 
 export default function MarketEditPage() {
   const params = useParams();
@@ -66,7 +67,7 @@ export default function MarketEditPage() {
             }
           });
           setAllCategories(allCats);
-          console.log(`✅ [MarketEdit] 成功加载 ${allCats.length} 个分类（从 /api/categories）`);
+
         } else {
           console.error("❌ [MarketEdit] 分类 API 返回格式错误或无数据:", result);
         }
@@ -140,7 +141,7 @@ export default function MarketEditPage() {
 
     // 验证必填字段
     if (!formData.title.trim()) {
-      alert("请输入市场标题");
+      toast.error("请输入市场标题");
       return;
     }
 
@@ -174,14 +175,14 @@ export default function MarketEditPage() {
       const result = await response.json();
       if (result.success) {
         // 成功反馈：显示成功通知并刷新页面
-        alert("市场信息已成功更新");
+        toast.success("市场信息已成功更新");
         // 刷新页面以显示最新数据
         window.location.reload();
       } else {
         throw new Error(result.error || "更新失败");
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "更新失败");
+      toast.error(err instanceof Error ? err.message : "更新失败");
     } finally {
       setIsUpdating(false);
     }
@@ -191,7 +192,7 @@ export default function MarketEditPage() {
   const handleResolveMarket = async () => {
     // 验证是否选择了结算结果
     if (!resolutionOutcome) {
-      alert("请选择结算结果");
+      toast.error("请选择结算结果");
       return;
     }
 
@@ -223,13 +224,13 @@ export default function MarketEditPage() {
       const result = await response.json();
       if (result.success) {
         // 成功反馈：显示成功通知并重定向到市场列表页（使用 backTo 参数）
-        alert(`市场已成功结算为 "${resolutionOutcome}"`);
+        toast.success(`市场已成功结算为 "${resolutionOutcome}"`);
         router.push(backTo);
       } else {
         throw new Error(result.error || "结算失败");
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "结算失败");
+      toast.error(err instanceof Error ? err.message : "结算失败");
     } finally {
       setIsResolving(false);
     }
@@ -590,7 +591,7 @@ export default function MarketEditPage() {
                 <p className="text-sm font-medium text-[#637588] dark:text-[#9da8b9]">总交易量</p>
                 <span className="material-symbols-outlined text-primary">attach_money</span>
               </div>
-              <p className="text-2xl font-bold text-[#111418] dark:text-white">{formatCurrency(market.volume)}</p>
+              <p className="text-2xl font-bold text-[#111418] dark:text-white">{formatCurrency(market.volume ?? 0)}</p>
               <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">累计交易额</p>
             </div>
             </div>

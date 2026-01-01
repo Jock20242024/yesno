@@ -5,8 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { toast } from "sonner";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 export default function LoginPage() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { isLoggedIn, login } = useAuth();
@@ -50,7 +52,6 @@ export default function LoginPage() {
     }
   }, []);
 
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -59,17 +60,14 @@ export default function LoginPage() {
       const res = await login({ email, password });
       
       // 🛑 [DEBUG] 登录接口返回原始数据日志
-      console.log('🛑 [DEBUG] 登录接口返回原始数据:', res);
-      console.log('🛑 [DEBUG] 这里的 isAdmin 到底是什么:', res.user?.isAdmin);
-      console.log('🛑 [DEBUG] 当前 user 对象全貌:', JSON.stringify(res.user));
 
       if (!res.success) {
-        const errorMessage = res.error === 'CredentialsSignin' ? '邮箱或密码错误' : res.error || '登录失败';
+        const errorMessage = res.error === 'CredentialsSignin' ? t('auth.login.error_credentials') : res.error || t('auth.login.error');
         try {
           toast.error(errorMessage);
         } catch (e) {
           console.error("toast failed", e);
-          alert(errorMessage);
+          toast.error(errorMessage);
         }
         return;
       }
@@ -77,7 +75,7 @@ export default function LoginPage() {
       if (res.success && res.user) {
         // 显示成功提示
         try {
-          toast.success("登录成功");
+          toast.success(t('auth.login.success'));
         } catch (e) {
           console.error("toast failed", e);
         }
@@ -92,12 +90,12 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.error('Login error:', err);
-      const errorMessage = '网络错误，请稍后重试';
+      const errorMessage = t('auth.login.error_network');
       try {
         toast.error(errorMessage);
       } catch (e) {
         console.error("toast failed", e);
-        alert(errorMessage);
+        toast.error(errorMessage);
       }
     }
   };
@@ -107,9 +105,9 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-4 md:p-6 lg:p-8">
         <div className="w-full max-w-md">
           <div className="bg-pm-card rounded-xl border border-pm-border p-8 shadow-2xl">
-            <h1 className="text-2xl font-bold text-white mb-2">登录</h1>
+            <h1 className="text-2xl font-bold text-white mb-2">{t('auth.login.title')}</h1>
             <p className="text-pm-text-dim text-sm mb-6">
-              登录您的账户以开始交易
+              {t('auth.login.subtitle')}
             </p>
 
             <div className="space-y-3 mb-6">
@@ -127,12 +125,12 @@ export default function LoginPage() {
                       // 登录成功，物理硬跳转
                       window.location.href = '/admin/dashboard';
                     } else {
-                      toast.error("Google 登录失败，请稍后重试");
+                      toast.error(t('auth.register.error_google'));
                     }
                   } catch (error) {
                     console.error("Google sign in error:", error);
                     try {
-                      toast.error("Google 登录失败，请稍后重试");
+                      toast.error(t('auth.register.error_google'));
                     } catch (e) {
                       console.error("toast failed", e);
                     }
@@ -140,7 +138,7 @@ export default function LoginPage() {
                 }}
                 className="w-full bg-pm-bg border border-pm-border hover:bg-pm-card-hover text-white font-medium py-3 rounded-lg transition-all text-sm"
               >
-                使用 Google 登录
+                {t('auth.login.google_login')}
               </button>
             </div>
 
@@ -150,7 +148,7 @@ export default function LoginPage() {
                   htmlFor="email"
                   className="block text-sm font-medium text-pm-text-dim mb-2 pointer-events-auto"
                 >
-                  邮箱
+                  {t('auth.login.email_label')}
                 </label>
                 <input
                   id="email"
@@ -169,7 +167,7 @@ export default function LoginPage() {
                   }}
                   required
                   className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all select-text pointer-events-auto"
-                  placeholder="your@email.com"
+                  placeholder={t('auth.login.email_placeholder')}
                   style={{
                     userSelect: 'text',
                     WebkitUserSelect: 'text',
@@ -185,7 +183,7 @@ export default function LoginPage() {
                   htmlFor="password"
                   className="block text-sm font-medium text-pm-text-dim mb-2 pointer-events-auto"
                 >
-                  密码
+                  {t('auth.login.password_label')}
                 </label>
                 <input
                   id="password"
@@ -204,7 +202,7 @@ export default function LoginPage() {
                   }}
                   required
                   className="w-full bg-pm-bg border border-pm-border rounded-lg px-4 py-3 text-white placeholder-pm-text-dim focus:border-pm-green focus:ring-1 focus:ring-pm-green transition-all select-text pointer-events-auto"
-                  placeholder="••••••••"
+                  placeholder={t('auth.login.password_placeholder')}
                   style={{
                     userSelect: 'text',
                     WebkitUserSelect: 'text',
@@ -219,18 +217,18 @@ export default function LoginPage() {
                 type="submit"
                 className="w-full bg-pm-green hover:bg-green-400 text-pm-bg font-bold text-lg py-3.5 rounded-xl shadow-lg shadow-pm-green/20 transition-all active:scale-[0.98]"
               >
-                登录
+                {t('auth.login.submit')}
               </button>
             </form>
 
             <div className="mt-6 text-center">
               <p className="text-pm-text-dim text-sm">
-                还没有账户？{" "}
+                {t('auth.login.no_account')}{" "}
                 <a
                   href="/register"
                   className="text-pm-green hover:text-green-400 font-medium"
                 >
-                  立即注册
+                  {t('auth.login.sign_up_link')}
                 </a>
               </p>
             </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth/utils';
+import { randomUUID } from 'crypto';
 
 // 🔥 强制动态：确保每次请求都获取最新数据
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export async function GET() {
     }
 
     // 检查是否为管理员
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: authResult.userId },
       select: { isAdmin: true },
     });
@@ -45,7 +46,7 @@ export async function GET() {
 
     // 查询三个系统账户（使用 findFirst 避免找不到时抛出错误）
     const [feeAccount, ammAccount, liquidityAccount] = await Promise.all([
-      prisma.user.findFirst({
+      prisma.users.findFirst({
         where: { email: SYSTEM_ACCOUNT_EMAILS.FEE },
         select: {
           id: true,
@@ -54,7 +55,7 @@ export async function GET() {
           createdAt: true,
         },
       }).catch(() => null),
-      prisma.user.findFirst({
+      prisma.users.findFirst({
         where: { email: SYSTEM_ACCOUNT_EMAILS.AMM },
         select: {
           id: true,
@@ -63,7 +64,7 @@ export async function GET() {
           createdAt: true,
         },
       }).catch(() => null),
-      prisma.user.findFirst({
+      prisma.users.findFirst({
         where: { email: SYSTEM_ACCOUNT_EMAILS.LIQUIDITY },
         select: {
           id: true,
@@ -175,7 +176,7 @@ export async function POST(request: Request) {
     }
 
     // 检查是否为管理员
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: authResult.userId },
       select: { isAdmin: true },
     });
@@ -218,14 +219,16 @@ export async function POST(request: Request) {
     // 使用事务确保原子性
     const result = await prisma.$transaction(async (tx) => {
       // 查找或创建系统账户
-      let systemAccount = await tx.user.findUnique({
+      let systemAccount = await tx.users.findUnique({
         where: { email: accountEmail },
       });
 
       if (!systemAccount) {
         // 如果账户不存在，创建它
-        systemAccount = await tx.user.create({
+        systemAccount = await tx.users.create({
           data: {
+            id: randomUUID(),
+            updatedAt: new Date(),
             email: accountEmail,
             balance: 0,
             isAdmin: false,
@@ -250,14 +253,15 @@ export async function POST(request: Request) {
       }
 
       // 更新账户余额
-      const updatedAccount = await tx.user.update({
+      const updatedAccount = await tx.users.update({
         where: { id: systemAccount.id },
         data: { balance: newBalance },
       });
 
       // 记录交易流水
-      await tx.transaction.create({
+      await tx.transactions.create({
         data: {
+          id: randomUUID(),
           userId: systemAccount.id,
           amount: action === 'withdraw' ? -amount : amount,
           type: action === 'withdraw' ? 'ADMIN_ADJUSTMENT' : 'ADMIN_ADJUSTMENT',
