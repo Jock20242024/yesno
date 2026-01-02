@@ -288,11 +288,30 @@ export default function Navbar() {
                           }
                         }
                         
-                        // 🔥 调用 AuthProvider 的 logout
+                        // 🔥 调用 NextAuth 的 signOut，先清除 session
+                        // 使用 redirect: false 避免自动跳转，手动控制
+                        await signOut({ callbackUrl: '/', redirect: false });
+                        
+                        // 🔥 调用 AuthProvider 的 logout（清除本地状态）
                         await logout();
                         
-                        // 🔥 调用 NextAuth 的 signOut，使用 redirect: true 强制跳转
-                        await signOut({ callbackUrl: '/', redirect: true });
+                        // 🔥 强制清除所有 cookie（双重保险）
+                        // 通过调用登出 API 确保服务器端也清除
+                        try {
+                          await fetch('/api/auth/logout', {
+                            method: 'POST',
+                            credentials: 'include',
+                          });
+                        } catch (e) {
+                          console.error('❌ [Navbar] 登出 API 调用失败:', e);
+                        }
+                        
+                        // 🔥 等待一小段时间确保所有清除操作完成
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        
+                        // 🔥 使用 window.location.href 强制刷新页面并跳转
+                        // 这会清除所有缓存和状态
+                        window.location.href = '/';
                       } catch (error) {
                         console.error('❌ [Navbar] 登出失败:', error);
                         // 即使出错也强制清除存储并跳转到首页（保留语言设置）

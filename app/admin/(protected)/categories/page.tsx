@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { toast } from "sonner";
 import { X, Edit2, Trash2 } from "lucide-react";
 
@@ -276,71 +276,141 @@ export default function CategoriesManagementPage() {
                   </td>
                 </tr>
               ) : (
-                categories.map((category) => {
-                  const statusDisplay = getStatusDisplay(category.status);
-                  return (
-                    <tr
-                      key={category.id}
-                      className="hover:bg-[#f9fafb] dark:hover:bg-[#283545] transition-colors"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <div style={{ paddingLeft: `${getLevelIndent(category.level || 0)}px` }}>
-                            <div className="text-sm font-medium text-[#111418] dark:text-white">
-                              {category.name}
+                <>
+                  {categories.map((category) => {
+                    const statusDisplay = getStatusDisplay(category.status);
+                    return (
+                      <Fragment key={category.id}>
+                        {/* 父分类行 */}
+                        <tr
+                          className="hover:bg-[#f9fafb] dark:hover:bg-[#283545] transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <div style={{ paddingLeft: `${getLevelIndent(category.level || 0)}px` }}>
+                                <div className="text-sm font-medium text-[#111418] dark:text-white">
+                                  {category.name}
+                                </div>
+                                <div className="text-xs text-[#637588] dark:text-[#9da8b9] mt-0.5">
+                                  {category.slug}
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-xs text-[#637588] dark:text-[#9da8b9] mt-0.5">
-                              {category.slug}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-[#111418] dark:text-white">
+                              {category.parent?.name || "—"}
                             </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-[#111418] dark:text-white">
-                          {category.parent?.name || "—"}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-[#111418] dark:text-white">
-                          {category.level || 0} 级
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-[#111418] dark:text-white">
-                          {category.icon || "—"}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-[#111418] dark:text-white">
-                          {category.marketCount || 0}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusDisplay.className}`}
-                        >
-                          {statusDisplay.text}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => handleEditClick(category)}
-                          className="text-primary hover:text-blue-600 mr-4 flex items-center gap-1"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                          编辑
-                        </button>
-                        <button
-                          onClick={() => handleDelete(category.id)}
-                          className="text-red-600 hover:text-red-700 flex items-center gap-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          删除
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-[#111418] dark:text-white">
+                              {category.level || 0} 级
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-[#111418] dark:text-white">
+                              {category.icon || "—"}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-[#111418] dark:text-white">
+                              {category.marketCount || 0}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusDisplay.className}`}
+                            >
+                              {statusDisplay.text}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button
+                              onClick={() => handleEditClick(category)}
+                              className="text-primary hover:text-blue-600 mr-4 flex items-center gap-1"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                              编辑
+                            </button>
+                            <button
+                              onClick={() => handleDelete(category.id)}
+                              className="text-red-600 hover:text-red-700 flex items-center gap-1"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              删除
+                            </button>
+                          </td>
+                        </tr>
+                        {/* 子分类行 */}
+                        {category.children && category.children.length > 0 && category.children.map((child: any) => {
+                          const childStatusDisplay = getStatusDisplay(child.status || 'active');
+                          return (
+                            <tr
+                              key={child.id}
+                              className="hover:bg-[#f9fafb] dark:hover:bg-[#283545] transition-colors"
+                            >
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <div style={{ paddingLeft: `${getLevelIndent(child.level || 1)}px` }}>
+                                    <div className="text-sm font-medium text-[#111418] dark:text-white">
+                                      {child.name}
+                                    </div>
+                                    <div className="text-xs text-[#637588] dark:text-[#9da8b9] mt-0.5">
+                                      {child.slug}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-[#111418] dark:text-white">
+                                  {category.name}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-[#111418] dark:text-white">
+                                  {child.level || 1} 级
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-[#111418] dark:text-white">
+                                  —
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-[#111418] dark:text-white">
+                                  0
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${childStatusDisplay.className}`}
+                                >
+                                  {childStatusDisplay.text}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button
+                                  onClick={() => handleEditClick(child as Category)}
+                                  className="text-primary hover:text-blue-600 mr-4 flex items-center gap-1"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                  编辑
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(child.id)}
+                                  className="text-red-600 hover:text-red-700 flex items-center gap-1"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  删除
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    );
+                  })}
+                </>
               )}
             </tbody>
           </table>

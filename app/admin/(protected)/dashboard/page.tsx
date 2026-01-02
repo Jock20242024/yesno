@@ -224,7 +224,17 @@ export default function AdminDashboardPage() {
       });
 
       if (!response.ok) {
-        throw new Error('获取统计数据失败');
+        // 🔥 修复：检查是否是认证错误
+        if (response.status === 401 || response.status === 403) {
+          console.error('❌ [Dashboard] 认证失败，状态码:', response.status);
+          const errorData = await response.json().catch(() => ({ error: '认证失败' }));
+          setError(errorData.error || '认证失败，请重新登录');
+          // 不自动重定向，让用户看到错误信息
+          return;
+        }
+        const errorText = await response.text();
+        console.error('❌ [Dashboard] API 错误:', response.status, errorText);
+        throw new Error(`获取统计数据失败 (${response.status})`);
       }
 
       const result = await response.json();
@@ -242,7 +252,13 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => {
-    fetchStats();
+    // 🔥 修复：添加延迟确保 cookies 已经设置
+    // 因为页面刚加载时，cookies 可能还没完全生效
+    const timer = setTimeout(() => {
+      fetchStats();
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const handleTimeRangeChange = (range: TimeRange) => {

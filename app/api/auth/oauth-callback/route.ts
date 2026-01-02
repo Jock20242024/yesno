@@ -15,6 +15,8 @@ import { prisma } from "@/lib/prisma";
 import { createSession } from "@/lib/auth-core/sessionStore";
 import { cookies } from "next/headers";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // 等待一小段时间确保 NextAuth session 已创建

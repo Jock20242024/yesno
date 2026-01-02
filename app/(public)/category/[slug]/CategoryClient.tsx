@@ -9,13 +9,12 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { useSearchParams } from "next/navigation";
 import SubCategoryTabs from "./SubCategoryTabs";
-import TimeFilterTabs from "./TimeFilterTabs";
 
 interface CategoryClientProps {
   slug: string;
   categoryName: string;
   pageTitle: string;
-  hasFilters: boolean;
+  hasFilters: boolean; // 保留此字段以兼容，但不再使用
 }
 
 // 将 volume 字符串转换为数字用于排序
@@ -38,8 +37,37 @@ function parseVolume(volume?: string): number {
 export default function CategoryClient({ slug, categoryName, pageTitle, hasFilters }: CategoryClientProps) {
   // 架构加固：Page/ClientPage 级别读取 Context，通过 props 传给子组件
   const { isLoggedIn } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const searchParams = useSearchParams();
+  
+  // 🔥 翻译分类名称 - 使用 useMemo 确保语言切换时重新计算
+  const translatedCategoryName = useMemo(() => {
+    // 根据 slug 查找翻译键
+    const categoryTranslationMap: Record<string, string> = {
+      'crypto': 'home.categories.crypto',
+      'politics': 'home.categories.politics',
+      'sports': 'home.categories.sports',
+      'finance': 'home.categories.finance',
+      'tech': 'home.categories.tech',
+      'technology': 'home.categories.technology',
+      'hot': 'home.categories.hot',
+      'trending': 'home.categories.trending',
+      'data': 'home.categories.data',
+    };
+    
+    // 如果找到翻译键，使用翻译
+    const translationKey = categoryTranslationMap[slug];
+    if (translationKey) {
+      const translated = t(translationKey);
+      // 如果翻译函数返回了有效的翻译（不是键本身），使用翻译
+      if (translated && translated !== translationKey) {
+        return translated;
+      }
+    }
+    
+    // 如果没有找到翻译键，返回原名称（数据库中的名称）
+    return categoryName;
+  }, [slug, categoryName, t, language]);
   
   // activeFilter 用于子分类筛选："all" 表示显示全部，其他值表示子分类 slug
   const [activeFilter, setActiveFilter] = useState<string>("all");
@@ -54,20 +82,8 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
     setMounted(true);
   }, []);
 
-  // 🔥 数据硬隔离：严格映射表，只认 ID 对应的数字周期（排除 null，确保严格匹配）
-  const PERIOD_MAP: Record<string, number> = {
-    '15m': 15,
-    '1h': 60,
-    '4h': 240,
-    '1d': 1440, // 24 * 60
-    '1w': 10080, // 7 * 24 * 60
-    '1M': 43200, // 30 * 24 * 60（月度）
-  };
-
-  // 🔥 判断是否为时间筛选器 ID（本地定义）
-  const isTimeFilterId = (id: string): boolean => {
-    return ['15m', '1h', '4h', '1d', '1w', '1M', 'all'].includes(id);
-  };
+  // 🔥 恢复数据库子分类设计：移除硬编码的时间过滤器映射
+  // 所有子分类（包括15分钟、每日、每月等）都应该存储在数据库中，通过后台管理
 
   // 获取市场数据
   const fetchMarkets = async () => {
@@ -83,39 +99,17 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
         params.append("search", searchQuery);
       }
       
-      // 根据 activeFilter（子分类 slug 或时间筛选器ID）筛选
+      // 🔥 恢复数据库子分类设计：所有筛选都通过 category 参数（子分类的 slug）
       if (slug === "hot" || slug === "trending") {
         params.append("category", "hot");
       } else {
-        // 普通分类页面
-        // 🔥 修复：提取纯筛选器ID（去除可能的分类前缀）
-        let pureFilterId = activeFilter;
-        if (activeFilter.includes('-')) {
-          // 如果 activeFilter 包含 '-'，可能是 'crypto-15m' 这样的格式
-          // 提取最后一部分作为筛选器ID
-          const parts = activeFilter.split('-');
-          const lastPart = parts[parts.length - 1];
-          if (isTimeFilterId(lastPart)) {
-            pureFilterId = lastPart;
-          }
-        }
-        
-        // 🔥 修复：如果 activeFilter 是时间筛选器ID，使用当前分类的slug，不要用它作为category参数
-        if (pureFilterId !== "all" && pureFilterId !== slug && !isTimeFilterId(pureFilterId)) {
-          // 如果选择了子分类（非时间筛选器），使用子分类的 slug
-          params.append("category", pureFilterId);
+        // 普通分类页面：如果选择了子分类，使用子分类的 slug；否则使用父分类的 slug
+        if (activeFilter !== "all" && activeFilter !== slug) {
+          // 选择了子分类，使用子分类的 slug
+          params.append("category", activeFilter);
         } else {
-          // 🔥 关键修复：无论选择"全部"还是时间筛选器，都使用当前分类的 slug
-          // 这样可以确保 API 返回的数据都属于当前分类，前端过滤时就不需要再做分类检查
+          // 选择了"全部"或父分类本身，使用父分类的 slug
           params.append("category", slug);
-          
-          // 🔥 如果是时间筛选器，添加 period 参数
-          if (isTimeFilterId(pureFilterId) && pureFilterId !== 'all') {
-            const period = PERIOD_MAP[pureFilterId];
-            if (period !== undefined) {
-              params.append("period", String(period));
-            }
-          }
         }
       }
 
@@ -373,91 +367,25 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
     return `$${volumeNum.toLocaleString()}`;
   };
 
-  // 🚀 数据硬隔离：重写过滤机制，使用最严苛的物理条件拦截 XRP 等无关数据
+  // 🔥 恢复数据库子分类设计：所有过滤都通过 categorySlug 匹配
   const filteredEvents = useMemo(() => {
     // 🔥 防御性检查：如果 marketData 为空，直接返回空数组
     if (!marketData || marketData.length === 0) {
       return [];
     }
 
-    // 🔥 如果选的是 'all'，返回全部数据（但必须是有效的数据）
+    // 🔥 如果选的是 'all'，返回全部数据（API 已经按父分类过滤了）
     if (activeFilter === 'all') {
       return marketData.map(convertMarketToEvent);
     }
 
-    // 🔥 提取纯筛选器ID（处理 'crypto-15m' 这种情况）
-    let pureFilterId = activeFilter;
-    if (activeFilter.includes('-')) {
-      const parts = activeFilter.split('-');
-      const lastPart = parts[parts.length - 1];
-      if (isTimeFilterId(lastPart)) {
-        pureFilterId = lastPart;
-      }
-    }
-    
-    // 🔥 严格过滤逻辑：如果 activeFilter 是时间筛选器ID，进行严格数字匹配
-    if (isTimeFilterId(pureFilterId) && pureFilterId !== 'all') {
-      const targetPeriod = PERIOD_MAP[pureFilterId];
-      
-      // 🔥 防御性检查：如果 targetPeriod 不存在（undefined），返回空数组
-      if (targetPeriod === undefined) {
-        return [];
-      }
-      
-      // 🔥 数据硬隔离：使用最严苛的物理条件
-      // 必须满足三个条件：
-      // 1. period 字段存在且为有效数字
-      // 2. 数值严格相等
-      // 3. 市场的分类必须匹配当前分类（防止 XRP 等不相关市场出现）
-
-      const filteredMarkets = marketData.filter((market: any) => {
-        const marketPeriod = Number(market.period);
-        const periodMatches = !isNaN(marketPeriod) && marketPeriod === targetPeriod;
-        
-        // 🔥 防御性检查：确保市场的分类匹配当前分类
-        // 由于 API 已经按 category 过滤，理论上所有数据都应该匹配，但保留此检查作为防御
-        const categoryMatches = market.categorySlug === slug || market.category === slug || 
-                                 (market.categorySlug && market.categorySlug.toLowerCase() === slug.toLowerCase()) ||
-                                 (market.category && market.category.toLowerCase() === slug.toLowerCase());
-        
-        // 🔥 如果 period 匹配但 category 不匹配，打印警告
-        if (periodMatches && !categoryMatches) {
-          console.warn(`⚠️ [Filter_Warning] 市场 ${market.id} (${market.title?.substring(0, 50)}) period=${marketPeriod} 匹配但分类不匹配！`, {
-            marketCategorySlug: market.categorySlug,
-            marketCategory: market.category,
-            expectedSlug: slug,
-            reason: '该市场将被过滤掉'
-          });
-        }
-        
-        // 🔥 对于时间筛选器，只需要检查 period 是否匹配
-        // API 已经按 category 过滤了，所以理论上所有数据都应该属于当前分类
-        // 但如果 API 返回了错误的数据，我们仍然需要防御性检查
-        // 这里我们先只检查 period，看看是否能解决问题
-        // 如果问题仍然存在，再恢复 categoryMatches 检查
-        if (!periodMatches) {
-          return false;
-        }
-        
-        // 🔥 暂时只检查 period，不检查 category（因为 API 已经过滤了）
-        // 如果后端确实返回了错误分类的数据，我们再恢复 categoryMatches 检查
-        return true;
-        
-        // 🔥 原始逻辑（如果需要严格的分类检查，取消上面的 return true，恢复下面的代码）：
-        // return periodMatches && categoryMatches;
-      });
-
-      
-      return filteredMarkets.map(convertMarketToEvent);
-    }
-
-    // 🔥 分类过滤逻辑：保护原有分类逻辑（如果不是时间筛选器，按分类过滤）
+    // 🔥 分类过滤逻辑：通过 categorySlug 或 category 匹配子分类
     const filteredMarkets = marketData.filter((market: any) => {
       return market.categorySlug === activeFilter || market.category === activeFilter;
     });
 
     return filteredMarkets.map(convertMarketToEvent);
-  }, [marketData, activeFilter, convertMarketToEvent, slug]);
+  }, [marketData, activeFilter, convertMarketToEvent]);
 
 
   // STEP 3: 逐个恢复 UI 组件 - 测试 1: 基础布局
@@ -467,17 +395,13 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
         <main className="flex-1 min-w-0 flex flex-col">
           <div className="px-4 md:px-6 py-6 border-b border-border-dark">
             {/* 🔥 物理删除父级分类名称标题，直接显示子分类切换 Tab */}
-            {/* 子分类标签栏 - 显示当前分类的子分类 */}
+            {/* 子分类标签栏 - 显示当前分类的子分类（从数据库读取） */}
             <SubCategoryTabs 
               slug={slug} 
               onFilterChange={setActiveFilter} 
               activeFilter={activeFilter}
               onHasSubCategoriesChange={setHasSubCategories}
             />
-            {/* 时间筛选器标签栏 - 如果没有子分类但有筛选配置，显示时间筛选器 */}
-            {!hasSubCategories && hasFilters && (
-              <TimeFilterTabs slug={slug} onFilterChange={setActiveFilter} activeFilter={activeFilter} />
-            )}
           </div>
 
           <div className="px-4 md:px-6 py-6">
@@ -522,7 +446,7 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
                         {t('category.empty.title')}
                       </h3>
                       <p className="text-text-secondary text-sm mb-6">
-                        {t('category.empty.description', { category: categoryName })}
+                        {t('category.empty.description', { category: translatedCategoryName })}
                       </p>
                       <div className="flex gap-3">
                         <a

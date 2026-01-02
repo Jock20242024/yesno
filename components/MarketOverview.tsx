@@ -13,14 +13,15 @@ interface GlobalStat {
 }
 
 export default function MarketOverview() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [stats, setStats] = useState<GlobalStat[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('/api/stats', {
+        // 🔥 传递语言参数给 API
+        const response = await fetch(`/api/stats?lang=${language}`, {
           cache: 'no-store',
         });
         
@@ -31,7 +32,7 @@ export default function MarketOverview() {
           }
         }
       } catch (error) {
-        console.error('获取统计数据失败:', error);
+        console.error('❌ [MarketOverview] 获取统计数据失败:', error);
       } finally {
         setIsLoading(false);
       }
@@ -41,7 +42,9 @@ export default function MarketOverview() {
     // 每 60 秒自动刷新一次
     const interval = setInterval(fetchStats, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [language]); // 🔥 语言切换时重新获取数据
+
+  // 🔥 API 已经返回翻译后的 label，不需要再次翻译
 
   // 格式化数值显示
   const formatValue = (value: number, unit: string | null): string => {
@@ -70,26 +73,27 @@ export default function MarketOverview() {
             <div className="text-text-secondary text-sm">{t('home.sidebar.no_data')}</div>
           </div>
         ) : (
-          <div className="flex flex-col gap-0">
-            {stats.map((stat, index) => (
-              <div
-                key={stat.id}
-                className={`flex justify-between items-center py-4 ${
-                  index < stats.length - 1 ? 'border-b border-border-dark/50' : ''
-                }`}
-              >
-                <span className="text-text-secondary text-xs font-medium">{stat.label}</span>
-                <span className={`font-mono font-bold text-sm ${
-                  stat.label.includes('交易量') ? 'text-emerald-500 animate-pulse' : 'text-white'
-                }`}>
-                  {formatValue(stat.value, stat.unit)}
-                </span>
-              </div>
-            ))}
+          <div className="flex flex-col gap-0" key={`stats-container-${language}`}>
+            {stats.map((stat, index) => {
+              return (
+                <div
+                  key={`${stat.id}-${language}`}
+                  className={`flex justify-between items-center py-4 ${
+                    index < stats.length - 1 ? 'border-b border-border-dark/50' : ''
+                  }`}
+                >
+                  <span className="text-text-secondary text-xs font-medium">{stat.label}</span>
+                  <span className={`font-mono font-bold text-sm ${
+                    stat.label.includes('交易量') || stat.label.includes('Volume') ? 'text-emerald-500 animate-pulse' : 'text-white'
+                  }`}>
+                    {formatValue(stat.value, stat.unit)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
     </div>
   );
 }
-

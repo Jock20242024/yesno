@@ -66,9 +66,11 @@ const iconMap: Record<string, LucideIcon | string> = {
 
 export function DataClient() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [globalStats, setGlobalStats] = useState<GlobalStat[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
+  
+  // 🔥 API 已经返回翻译后的 label，不需要再次翻译
   
   // 🔥 核心修复：初始数据为 null (不要用 []，以便区分"加载中"和"无数据")
   const [markets, setMarkets] = useState<HotMarket[] | null>(null);
@@ -168,21 +170,32 @@ export function DataClient() {
     const fetchGlobalStats = async () => {
       try {
         setIsLoadingStats(true);
-        const response = await fetch("/api/stats");
-        const data = await response.json();
+        // 🔥 传递语言参数给 API
+        const response = await fetch(`/api/stats?lang=${language}`, {
+          cache: 'no-store',
+        });
         
-        if (data.success && data.data) {
-          setGlobalStats(data.data);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setGlobalStats(data.data);
+          } else {
+            setGlobalStats([]);
+          }
+        } else {
+          console.error("获取全局指标失败:", response.status, response.statusText);
+          setGlobalStats([]);
         }
       } catch (error) {
         console.error("获取全局指标失败:", error);
+        setGlobalStats([]);
       } finally {
         setIsLoadingStats(false);
       }
     };
 
     fetchGlobalStats();
-  }, []);
+  }, [language]); // 🔥 语言切换时重新获取数据
 
   // 🔥 核心：如果 markets 为 null，强制显示骨架屏 (Skeleton)
   // 这确保了在数据回来之前，用户看到的是占位符，而不是旧数据
@@ -360,14 +373,6 @@ export function DataClient() {
                 {t('home.market_list.title')}
               </h2>
 
-              {/* 空数据提示 */}
-              {isRealDataEmpty && (
-                <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                  <p className="text-yellow-400 text-sm">
-                    ⚠️ 当前显示的是占位数据。数据采集脚本正在运行，请稍后再试。
-                  </p>
-                </div>
-              )}
 
               {/* 紧凑表格布局 */}
               <div className="overflow-x-auto -mx-6 px-6">
@@ -509,64 +514,10 @@ export function DataClient() {
                     {t('home.sidebar.loading')}
                   </div>
                 ) : (globalStats.length === 0 ? (
-                  // 默认占位符数据（当 GlobalStat 表中没有数据时显示）
-                  <>
-                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-green-400/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-green-400/20">
-                          <DollarSign className="w-5 h-5 text-green-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-400 mb-1">24H 交易量</div>
-                          <div className="text-2xl font-black text-white leading-none">$142.5M</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-cyan-400/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-cyan-400/20">
-                          <Activity className="w-5 h-5 text-cyan-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-400 mb-1">全网持仓量</div>
-                          <div className="text-2xl font-black text-white leading-none">$892.3M</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-cyan-400/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-cyan-400/20">
-                          <BarChart className="w-5 h-5 text-cyan-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-400 mb-1">总锁仓量 (TVL)</div>
-                          <div className="text-2xl font-black text-white leading-none">$1.24B</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-purple-400/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-400/20">
-                          <Users className="w-5 h-5 text-purple-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-400 mb-1">24H 活跃交易者</div>
-                          <div className="text-2xl font-black text-white leading-none">12,548</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/20">
-                          <TrendingUp className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-400 mb-1">进行中事件</div>
-                          <div className="text-2xl font-black text-white leading-none">1,247</div>
-                        </div>
-                      </div>
-                    </div>
-                  </>
+                  // 🔥 移除硬编码占位符数据，显示空状态
+                  <div className="text-center py-8 text-zinc-400 text-sm">
+                    {t('home.sidebar.no_data')}
+                  </div>
                 ) : (
                   globalStats.map((stat) => {
                     // 获取图标：如果是 Lucide 组件则使用组件，否则使用默认组件
@@ -576,13 +527,15 @@ export function DataClient() {
                         ? (iconValue as LucideIcon)
                         : LineChart;
                     
-                    // 根据标签获取样式
+                    // 根据标签获取样式（使用原始 label 判断样式，因为 API 返回的 label 已经是翻译后的）
+                    // 注意：API 返回的 label 已经是翻译后的，但我们需要用原始 label 来判断样式
+                    // 所以这里仍然使用 stat.label（API 返回的翻译后的 label）
                     const cardStyle = getStatCardStyle(stat.label);
                     
                     // 格式化显示值（根据标签判断是否需要$符号）
                     // 去掉所有数值后面的 'USD' 字符串，仅保留前置的 '$' 符号
                     const labelLower = stat.label.toLowerCase();
-                    const needsDollar = labelLower.includes('交易量') || labelLower.includes('持仓') || labelLower.includes('tvl') || labelLower.includes('锁仓');
+                    const needsDollar = labelLower.includes('volume') || labelLower.includes('tvl') || labelLower.includes('trading') || labelLower.includes('交易量') || labelLower.includes('持仓') || labelLower.includes('锁仓');
                     const formattedNumber = formatNumber(stat.value);
                     // 如果 unit 是 'USD'，则不显示，否则显示 unit
                     const unitToShow = stat.unit && stat.unit.toUpperCase() !== 'USD' ? stat.unit : '';
@@ -592,7 +545,7 @@ export function DataClient() {
                     
                     return (
                       <div
-                        key={stat.id}
+                        key={`${stat.id}-${language}`}
                         className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 backdrop-blur-sm"
                       >
                         <div className="flex items-center gap-3">

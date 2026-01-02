@@ -4,6 +4,8 @@ import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
 import { prisma } from '@/lib/prisma';
 import { TransactionStatus } from '@/types/data';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * 管理后台 - 财务数据汇总 API
  * GET /api/admin/finance/summary

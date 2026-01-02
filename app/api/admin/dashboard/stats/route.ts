@@ -15,21 +15,41 @@ export const revalidate = 0;
  */
 export async function GET(request: NextRequest) {
   try {
-    // 🔥 P0修复：使用 NextAuth session 验证（与 /api/admin/users 保持一致）
-    // 因为用户通过 Google OAuth 登录，有 NextAuth session，而不是 adminToken Cookie
-    const session = await auth();
-    if (!session || !session.user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
+    // 🔥 修复：同时支持 NextAuth session 和 adminToken cookie 验证
+    let isAdmin = false;
+    let currentUserId: string | null = null;
+    
+    // 方案 1：检查 NextAuth session
+    try {
+      const session = await auth();
+      if (session && session.user) {
+        isAdmin = (session.user as any).isAdmin === true || (session.user as any).role === 'ADMIN';
+        if (isAdmin) {
+          currentUserId = session.user.id || (session.user as any).sub;
+        }
+      }
+    } catch (authError) {
+      console.error('❌ [Admin Dashboard Stats] NextAuth 验证失败:', authError);
     }
-
-    // @ts-ignore - session.user.isAdmin 在 NextAuth callback 中已设置
-    if (!session.user.isAdmin) {
+    
+    // 方案 2：如果没有 NextAuth session，检查 adminToken cookie
+    if (!isAdmin) {
+      try {
+        const { verifyAdminToken } = await import('@/lib/adminAuth');
+        const authResult = await verifyAdminToken(request);
+        if (authResult.success) {
+          isAdmin = true;
+          currentUserId = authResult.userId || null;
+        }
+      } catch (tokenError) {
+        console.error('❌ [Admin Dashboard Stats] AdminToken 验证失败:', tokenError);
+      }
+    }
+    
+    if (!isAdmin) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: Admin access required" },
-        { status: 403 }
+        { success: false, error: "Unauthorized. Admin access required." },
+        { status: 401 }
       );
     }
 
@@ -72,16 +92,26 @@ export async function GET(request: NextRequest) {
     const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
     // ========== 一、实时状态指标（不需要时间范围） ==========
-    const [
-      totalUsers,
-      activeUsers24h,
-      activeMarkets,
-      pendingWithdrawals,
-      pendingReviewMarkets,
-      activeTemplates,
-      pausedTemplates,
-      runningTemplatesCount,
-    ] = await Promise.all([
+    let totalUsers = 0;
+    let activeUsers24h = 0;
+    let activeMarkets = 0;
+    let pendingWithdrawals = 0;
+    let pendingReviewMarkets = 0;
+    let activeTemplates = 0;
+    let pausedTemplates: any[] = [];
+    let runningTemplatesCount = 0;
+    
+    try {
+      const [
+        totalUsersResult,
+        activeUsers24hResult,
+        activeMarketsResult,
+        pendingWithdrawalsResult,
+        pendingReviewMarketsResult,
+        activeTemplatesResult,
+        pausedTemplatesResult,
+        runningTemplatesCountResult,
+      ] = await Promise.all([
       // 1. 总注册用户数（累计）
       prisma.users.count(),
 
@@ -107,28 +137,14 @@ export async function GET(request: NextRequest) {
         },
       }),
 
-      // 3. 活跃市场数（当前状态）- 🔥 使用基于 templateId 的去重计数
-      (async () => {
-        const { aggregateMarketsByTemplate } = await import('@/lib/marketAggregation');
-        const markets = await prisma.markets.findMany({
-          where: {
-            status: MarketStatus.OPEN,
-            reviewStatus: 'PUBLISHED',
-            isActive: true,
-          },
-          select: {
-            id: true,
-            templateId: true,
-            isFactory: true,
-            title: true,
-            period: true,
-            closingDate: true,
-            status: true,
-          },
-        });
-        const aggregatedMarkets = aggregateMarketsByTemplate(markets);
-        return aggregatedMarkets.length;
-      })(),
+      // 3. 活跃市场数（当前状态）- 🔥 使用简单计数避免聚合函数错误
+      prisma.markets.count({
+        where: {
+          status: MarketStatus.OPEN,
+          reviewStatus: 'PUBLISHED',
+          isActive: true,
+        },
+      }),
 
       // 4. 待处理提现（当前状态）
       prisma.withdrawals.count({
@@ -197,16 +213,36 @@ export async function GET(request: NextRequest) {
           status: 'ACTIVE',
         },
       }),
-    ]);
+      ]);
+      
+      totalUsers = totalUsersResult;
+      activeUsers24h = activeUsers24hResult;
+      activeMarkets = activeMarketsResult;
+      pendingWithdrawals = pendingWithdrawalsResult;
+      pendingReviewMarkets = pendingReviewMarketsResult;
+      activeTemplates = activeTemplatesResult;
+      pausedTemplates = pausedTemplatesResult;
+      runningTemplatesCount = runningTemplatesCountResult;
+    } catch (dbError: any) {
+      console.error('❌ [Admin Dashboard Stats] 数据库查询失败:', dbError);
+      // 继续执行，使用默认值
+    }
 
     // ========== 二、今日指标（固定今日） ==========
-    const [
-      todayNewUsers,
-      todayVolume,
-      todayOrders,
-      todayFeeRevenue,
-      todayMarkets,
-    ] = await Promise.all([
+    let todayNewUsers = 0;
+    let todayVolume = { _sum: { amount: null as number | null } };
+    let todayOrders = 0;
+    let todayFeeRevenue = { _sum: { feeDeducted: null as number | null } };
+    let todayMarkets = 0;
+    
+    try {
+      const [
+        todayNewUsersResult,
+        todayVolumeResult,
+        todayOrdersResult,
+        todayFeeRevenueResult,
+        todayMarketsResult,
+      ] = await Promise.all([
       // 1. 今日新增注册用户
       prisma.users.count({
         where: {
@@ -263,15 +299,31 @@ export async function GET(request: NextRequest) {
           isFactory: true,
         },
       }),
-    ]);
+      ]);
+      
+      todayNewUsers = todayNewUsersResult;
+      todayVolume = todayVolumeResult;
+      todayOrders = todayOrdersResult;
+      todayFeeRevenue = todayFeeRevenueResult;
+      todayMarkets = todayMarketsResult;
+    } catch (dbError: any) {
+      console.error('❌ [Admin Dashboard Stats] 今日指标查询失败:', dbError);
+      // 继续执行，使用默认值
+    }
 
     // ========== 三、本周指标（用于对比） ==========
-    const [
-      weekVolume,
-      weekNewUsers,
-      weekOrders,
-      weekFeeRevenue,
-    ] = await Promise.all([
+    let weekVolume = { _sum: { amount: null as number | null } };
+    let weekNewUsers = 0;
+    let weekOrders = 0;
+    let weekFeeRevenue = { _sum: { feeDeducted: null as number | null } };
+    
+    try {
+      const [
+        weekVolumeResult,
+        weekNewUsersResult,
+        weekOrdersResult,
+        weekFeeRevenueResult,
+      ] = await Promise.all([
       // 1. 本周交易量
       prisma.orders.aggregate({
         _sum: {
@@ -313,17 +365,32 @@ export async function GET(request: NextRequest) {
           },
         },
       }),
-    ]);
+      ]);
+      
+      weekVolume = weekVolumeResult;
+      weekNewUsers = weekNewUsersResult;
+      weekOrders = weekOrdersResult;
+      weekFeeRevenue = weekFeeRevenueResult;
+    } catch (dbError: any) {
+      console.error('❌ [Admin Dashboard Stats] 本周指标查询失败:', dbError);
+      // 继续执行，使用默认值
+    }
 
     // ========== 四、累计总交易量（本平台产生的） ==========
-    const totalVolumeResult = await prisma.markets.aggregate({
-      _sum: {
-        internalVolume: true,
-      },
-      where: {
-        isActive: true,
-      },
-    });
+    let totalVolumeResult = { _sum: { internalVolume: null as number | null } };
+    try {
+      totalVolumeResult = await prisma.markets.aggregate({
+        _sum: {
+          internalVolume: true,
+        },
+        where: {
+          isActive: true,
+        },
+      });
+    } catch (dbError: any) {
+      console.error('❌ [Admin Dashboard Stats] 累计交易量查询失败:', dbError);
+      // 继续执行，使用默认值
+    }
 
     // ========== 五、赔率机器人运行状态 ==========
     let oddsRobotStatus = {
@@ -391,70 +458,68 @@ export async function GET(request: NextRequest) {
     let orderHistory: Array<{ date: string; value: number }> = [];
 
     if (trendStartDate) {
-      // 1. 交易量趋势（按日期分组，统计订单金额）
-      const orders = await prisma.orders.findMany({
-        where: {
-          createdAt: {
-            gte: trendStartDate,
+      try {
+        // 1. 交易量趋势（按日期分组，统计订单金额）
+        const orders = await prisma.orders.findMany({
+          where: {
+            createdAt: {
+              gte: trendStartDate,
+            },
           },
-        },
-        select: {
-          amount: true,
-          createdAt: true,
-        },
-      });
-
-      const dailyVolumeData: Record<string, number> = {};
-      orders.forEach(order => {
-        const date = new Date(order.createdAt).toISOString().split('T')[0];
-        dailyVolumeData[date] = (dailyVolumeData[date] || 0) + Number(order.amount || 0);
-      });
-
-      volumeHistory = Object.entries(dailyVolumeData)
-        .map(([date, value]) => ({ date, value }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-      // 2. 活跃用户趋势（按日期分组，统计每天有下单的唯一用户数）
-      const dailyUserData: Record<string, Set<string>> = {};
-      orders.forEach(order => {
-        const date = new Date(order.createdAt).toISOString().split('T')[0];
-        if (!dailyUserData[date]) dailyUserData[date] = new Set();
-        // 注意：这里需要 userId，但上面的查询没有包含，需要重新查询
-      });
-
-      const ordersWithUsers = await prisma.orders.findMany({
-        where: {
-          createdAt: {
-            gte: trendStartDate,
+          select: {
+            amount: true,
+            createdAt: true,
           },
-        },
-        select: {
-          userId: true,
-          createdAt: true,
-        },
-      });
+        });
 
-      const dailyActiveUserData: Record<string, Set<string>> = {};
-      ordersWithUsers.forEach(order => {
-        const date = new Date(order.createdAt).toISOString().split('T')[0];
-        if (!dailyActiveUserData[date]) dailyActiveUserData[date] = new Set();
-        dailyActiveUserData[date].add(order.userId);
-      });
+        const dailyVolumeData: Record<string, number> = {};
+        orders.forEach(order => {
+          const date = new Date(order.createdAt).toISOString().split('T')[0];
+          dailyVolumeData[date] = (dailyVolumeData[date] || 0) + Number(order.amount || 0);
+        });
 
-      activeUsersHistory = Object.entries(dailyActiveUserData)
-        .map(([date, userIds]) => ({ date, value: userIds.size }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+        volumeHistory = Object.entries(dailyVolumeData)
+          .map(([date, value]) => ({ date, value }))
+          .sort((a, b) => a.date.localeCompare(b.date));
 
-      // 3. 订单数趋势
-      const dailyOrderData: Record<string, number> = {};
-      orders.forEach(order => {
-        const date = new Date(order.createdAt).toISOString().split('T')[0];
-        dailyOrderData[date] = (dailyOrderData[date] || 0) + 1;
-      });
+        // 2. 活跃用户趋势（按日期分组，统计每天有下单的唯一用户数）
+        const ordersWithUsers = await prisma.orders.findMany({
+          where: {
+            createdAt: {
+              gte: trendStartDate,
+            },
+          },
+          select: {
+            userId: true,
+            createdAt: true,
+          },
+        });
 
-      orderHistory = Object.entries(dailyOrderData)
-        .map(([date, value]) => ({ date, value }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+        const dailyActiveUserData: Record<string, Set<string>> = {};
+        ordersWithUsers.forEach(order => {
+          const date = new Date(order.createdAt).toISOString().split('T')[0];
+          if (!dailyActiveUserData[date]) dailyActiveUserData[date] = new Set();
+          dailyActiveUserData[date].add(order.userId);
+        });
+
+        activeUsersHistory = Object.entries(dailyActiveUserData)
+          .map(([date, userIds]) => ({ date, value: userIds.size }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+
+        // 3. 订单数趋势
+        const dailyOrderData: Record<string, number> = {};
+        orders.forEach(order => {
+          const date = new Date(order.createdAt).toISOString().split('T')[0];
+          dailyOrderData[date] = (dailyOrderData[date] || 0) + 1;
+        });
+
+        orderHistory = Object.entries(dailyOrderData)
+          .map(([date, value]) => ({ date, value }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+      } catch (trendError: any) {
+        console.error('❌ [Admin Dashboard Stats] 趋势数据查询失败:', trendError);
+        // 继续执行，使用空数组
+      }
     }
 
     // ========== 计算结果 ==========

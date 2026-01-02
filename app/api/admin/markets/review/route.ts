@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { MarketStatus } from '@prisma/client';
 import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
+import { auth } from '@/lib/authExport';
 
 export const dynamic = "force-dynamic";
 
@@ -11,13 +12,31 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   try {
-    // 🔥 恢复权限检查：使用统一的 Admin Token 验证函数
-    const authResult = await verifyAdminToken(request);
-
-    if (!authResult.success) {
+    // 🔥 修复：同时支持 NextAuth session 和 adminToken cookie
+    let isAdmin = false;
+    
+    // 方案 1：检查 NextAuth session
+    const session = await auth();
+    if (session && session.user) {
+      isAdmin = (session.user as any).isAdmin === true || (session.user as any).role === 'ADMIN';
+    }
+    
+    // 方案 2：如果没有 NextAuth session，检查 adminToken
+    if (!isAdmin) {
+      const authResult = await verifyAdminToken(request);
+      if (!authResult.success) {
+        return createUnauthorizedResponse(
+          authResult.error || 'Unauthorized. Admin access required.',
+          authResult.statusCode || 401
+        );
+      }
+      isAdmin = true;
+    }
+    
+    if (!isAdmin) {
       return createUnauthorizedResponse(
-        authResult.error || 'Unauthorized. Admin access required.',
-        authResult.statusCode || 401
+        'Unauthorized. Admin access required.',
+        401
       );
     }
 

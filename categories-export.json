@@ -1,0 +1,74 @@
+=== 导出分类数据 ===
+
+[
+  {
+    "id": "b34995c7-b8b1-4260-83da-ec44518b714a",
+    "name": "加密货币",
+    "slug": "crypto",
+    "icon": "Bitcoin",
+    "displayOrder": 0,
+    "sortOrder": 0,
+    "level": 0,
+    "status": "active",
+    "parentId": null,
+    "parent": null,
+    "children": []
+  },
+  {
+    "id": "0ab6bf97-2184-497f-aa9a-3a23359fbe63",
+    "name": "政治",
+    "slug": "politics",
+    "icon": "Building2",
+    "displayOrder": 1,
+    "sortOrder": 1,
+    "level": 0,
+    "status": "active",
+    "parentId": null,
+    "parent": null,
+    "children": []
+  },
+  {
+    "id": "658d4161-b50b-402c-ac88-2e8e0c574f92",
+    "name": "体育",
+    "slug": "sports",
+    "icon": "Trophy",
+    "displayOrder": 2,
+    "sortOrder": 2,
+    "level": 0,
+    "status": "active",
+    "parentId": null,
+    "parent": null,
+    "children": []
+  },
+  {
+    "id": "6bc9561e-1e74-4898-956f-ee03d0c09037",
+    "name": "金融",
+    "slug": "finance",
+    "icon": "DollarSign",
+    "displayOrder": 3,
+    "sortOrder": 3,
+    "level": 0,
+    "status": "active",
+    "parentId": null,
+    "parent": null,
+    "children": []
+  },
+  {
+    "id": "211aa322-0192-4a46-8bbc-36751d2a51de",
+    "name": "科技",
+    "slug": "technology",
+    "icon": "Cpu",
+    "displayOrder": 4,
+    "sortOrder": 4,
+    "level": 0,
+    "status": "active",
+    "parentId": null,
+    "parent": null,
+    "children": []
+  }
+]
+
+✅ 导出完成：
+   顶级分类: 5 个
+   子分类: 0 个
+   总计: 5 个分类

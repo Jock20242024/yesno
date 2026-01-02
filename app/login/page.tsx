@@ -62,7 +62,15 @@ function LoginForm() {
       // 🛑 [DEBUG] 登录接口返回原始数据日志
 
       if (!res.success) {
-        const errorMessage = res.error === 'CredentialsSignin' ? t('auth.login.error_credentials') : res.error || t('auth.login.error');
+        // 🔥 修复：检查是否是 Google 用户尝试使用密码登录
+        let errorMessage = res.error || t('auth.login.error');
+        
+        if (res.error === 'GOOGLE_USER_MUST_USE_OAUTH' || res.error?.includes('GOOGLE_USER')) {
+          errorMessage = t('auth.login.error_google_user') || '此账号使用 Google 登录注册，请使用 Google 登录按钮登录';
+        } else if (res.error === 'CredentialsSignin') {
+          errorMessage = t('auth.login.error_credentials');
+        }
+        
         try {
           toast.error(errorMessage);
         } catch (e) {
@@ -115,46 +123,21 @@ function LoginForm() {
                 type="button"
                 onClick={async () => {
                   try {
-                    // 🔥 修复：前端登录页面不应该跳转到后台，应该根据用户角色决定
-                    const result = await signIn("google", {
-                      callbackUrl: redirect || '/', // 使用 redirect 参数或首页
-                      redirect: false, // 不自动跳转，手动控制
+                    // 🔥 修复：Google OAuth 必须使用 redirect: true 才能完成完整的 OAuth 流程
+                    // redirect: false 会阻止 OAuth 重定向到 Google，导致登录失败
+                    // 使用 callbackUrl 控制登录成功后的跳转目标
+                    const callbackUrl = redirect && redirect !== '/' ? redirect : '/';
+                    
+                    // 🔥 修复：Google 登录必须使用 redirect: true，让 NextAuth 处理完整的 OAuth 流程
+                    await signIn("google", {
+                      callbackUrl: callbackUrl,
+                      redirect: true, // 🔥 关键修复：必须为 true，否则 OAuth 流程无法完成
                     });
                     
-                    if (result?.ok && !result?.error) {
-                      // 🔥 修复：登录成功后，等待一小段时间让 session 建立
-                      await new Promise(resolve => setTimeout(resolve, 500));
-                      
-                      // 登录成功，需要检查用户是否是管理员
-                      // 先获取用户信息
-                      try {
-                        const userRes = await fetch('/api/auth/me', {
-                          credentials: 'include',
-                          cache: 'no-store',
-                        });
-                        if (userRes.ok) {
-                          const userData = await userRes.json();
-                          if (userData?.user?.isAdmin) {
-                            // 管理员跳转到后台
-                            window.location.href = '/admin/dashboard';
-                          } else {
-                            // 🔥 修复：普通用户跳转到首页或 redirect 参数，强制刷新页面
-                            window.location.href = redirect || '/';
-                          }
-                        } else {
-                          // 无法获取用户信息，默认跳转到首页
-                          window.location.href = redirect || '/';
-                        }
-                      } catch (e) {
-                        console.error("Failed to get user info:", e);
-                        // 出错时默认跳转到首页
-                        window.location.href = redirect || '/';
-                      }
-                    } else {
-                      toast.error(t('auth.register.error_google'));
-                    }
+                    // 注意：当 redirect: true 时，代码不会执行到这里
+                    // NextAuth 会自动处理重定向
                   } catch (error) {
-                    console.error("Google sign in error:", error);
+                    console.error("❌ [Login] Google sign in error:", error);
                     try {
                       toast.error(t('auth.register.error_google'));
                     } catch (e) {

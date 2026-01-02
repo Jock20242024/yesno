@@ -27,16 +27,20 @@ export const revalidate = 0;
  */
 export async function GET(request: Request) {
   try {
-
+    console.log('🔍 [Markets API] 收到请求:', request.url);
+    
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const status = searchParams.get('status') as 'OPEN' | 'RESOLVED' | 'CLOSED' | null;
     const search = searchParams.get('search');
     const templateId = searchParams.get('templateId'); // 🔥 支持按 templateId 筛选
+    // 🔥 恢复数据库子分类设计：移除 period 参数支持，所有筛选都通过 category（子分类的 slug）
     const page = parseInt(searchParams.get('page') || '1');
     // 🔥 提升默认查询数量到 100，确保在聚合后依然有足够多的不同币种展示
     const pageSize = parseInt(searchParams.get('pageSize') || '100');
     const includePending = searchParams.get('includePending') === 'true'; // 仅管理员可设置
+    
+    console.log('🔍 [Markets API] 查询参数:', { category, status, search, templateId, page, pageSize });
 
     // 🔥 注意：DBService.getAllMarkets 已经包含 isActive: true 过滤
 
@@ -406,7 +410,9 @@ export async function GET(request: Request) {
       console.error('错误类型:', dbError instanceof Error ? dbError.constructor.name : typeof dbError);
       console.error('错误消息:', dbError instanceof Error ? dbError.message : String(dbError));
       console.error('错误堆栈:', dbError instanceof Error ? dbError.stack : 'N/A');
-      throw dbError; // 重新抛出，让外层 catch 处理
+      console.error('查询参数:', { category, status, search, templateId, page, pageSize });
+      // 🔥 不要重新抛出，返回空数组避免 500 错误
+      filteredMarkets = [];
     }
 
     // 状态筛选

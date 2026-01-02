@@ -194,6 +194,9 @@ export class PolymarketAdapter extends ScraperEngine {
    * 使用 order=volume 和 ascending=false 确保抓回来的是全网最火的
    */
   protected async fetch(): Promise<PolymarketMarket[]> {
+    console.log(`🚀 [DEBUG] [fetch] 开始连接 Polymarket API...`);
+    const fetchStartTime = Date.now();
+    
     const url = new URL('https://gamma-api.polymarket.com/markets');
     
     // 🔥 强制全量拉取：只设置基本参数，绝对不包含任何时间过滤参数
@@ -205,17 +208,32 @@ export class PolymarketAdapter extends ScraperEngine {
     url.searchParams.set('ascending', 'false'); // 降序，最火的在前
 
     const apiUrl = url.toString();
+    console.log(`🔗 [DEBUG] [fetch] API URL: ${apiUrl}`);
+    console.log(`🔗 [DEBUG] [fetch] 请求参数: limit=${this.limit}, closed=false`);
 
     try {
+      // 🔥 容错降级：增加超时时间到 30 秒（适应国际网络延迟）
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.warn(`⏱️ [DEBUG] [fetch] API 请求超时（30秒），正在取消...`);
+        controller.abort();
+      }, 30000); // 30秒超时
+      
       const fetchOptions: RequestInit = {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
+        signal: controller.signal,
       };
 
+      console.log(`📡 [DEBUG] [fetch] 发送 HTTP 请求...`);
+      const requestStartTime = Date.now();
       const response = await fetch(apiUrl, fetchOptions);
+      clearTimeout(timeoutId);
+      const requestTime = Date.now() - requestStartTime;
+      console.log(`✅ [DEBUG] [fetch] HTTP 响应收到 (耗时: ${requestTime}ms, 状态码: ${response.status})`);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '无法读取错误响应');
@@ -228,11 +246,16 @@ export class PolymarketAdapter extends ScraperEngine {
         throw new Error(`Polymarket API error: ${response.status} ${response.statusText} - ${errorText.substring(0, 200)}`);
       }
 
+      console.log(`📥 [DEBUG] [fetch] 开始解析 JSON 响应...`);
+      const parseStartTime = Date.now();
       const data = await response.json();
+      const parseTime = Date.now() - parseStartTime;
+      console.log(`✅ [DEBUG] [fetch] JSON 解析完成 (耗时: ${parseTime}ms)`);
+      
       const dataLength = Array.isArray(data) ? data.length : 0;
+      console.log(`📊 [DEBUG] [fetch] 数据长度: ${dataLength} 条`);
       
       // 🔥 原始打印：立即使用 console.log 打印出 API 返回的原始数组长度和前 2 条数据的 ID
-
       if (Array.isArray(data) && dataLength > 0) {
         // 打印前 2 条数据的 ID
         const firstTwoIds = data.slice(0, 2).map((item: any, index: number) => ({
@@ -240,10 +263,13 @@ export class PolymarketAdapter extends ScraperEngine {
           id: item.id || 'N/A',
           title: item.title || item.question || 'N/A',
         }));
-
+        console.log(`📋 [DEBUG] [fetch] 前 2 条数据样本:`, JSON.stringify(firstTwoIds, null, 2));
       } else {
-        console.warn('⚠️ [Scraper Debug] API 返回数据为空或不是数组！');
+        console.warn('⚠️ [DEBUG] [fetch] API 返回数据为空或不是数组！');
       }
+      
+      const totalFetchTime = Date.now() - fetchStartTime;
+      console.log(`✅ [DEBUG] [fetch] fetch() 方法完成 (总耗时: ${totalFetchTime}ms)`);
 
       if (dataLength === 0) {
         console.warn(`⚠️ [PolymarketAdapter] ⚠️ 警告：API 返回长度为 0！`);
@@ -269,13 +295,22 @@ export class PolymarketAdapter extends ScraperEngine {
       
       return Array.isArray(data) ? data : [];
     } catch (error) {
+      const totalFetchTime = Date.now() - fetchStartTime;
+      console.error(`❌ [DEBUG] [fetch] fetch() 方法失败 (总耗时: ${totalFetchTime}ms)`);
       console.error(`❌ [PolymarketAdapter] fetch 失败详情:`, {
         errorType: error?.constructor?.name,
         errorMessage: error instanceof Error ? error.message : String(error),
         errorStack: error instanceof Error ? error.stack : undefined,
         url: apiUrl,
         timestamp: new Date().toISOString(),
+        isTimeout: error instanceof Error && error.name === 'AbortError',
       });
+      
+      // 🔥 容错降级：如果是超时错误，返回空数组而不是抛出异常
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.warn(`⚠️ [DEBUG] [fetch] API 请求超时，返回空数组（容错降级）`);
+        return [];
+      }
       
       throw error;
     }
@@ -286,17 +321,32 @@ export class PolymarketAdapter extends ScraperEngine {
    * 过滤掉无效数据（没有 outcomePrices 的）和已关闭的市场
    */
   protected normalize(rawData: PolymarketMarket[]): PolymarketMarket[] {
-    return rawData.filter(market => {
+    console.log(`🔍 [DEBUG] [normalize] 开始标准化数据，原始数据量: ${rawData.length} 条`);
+    const normalizeStartTime = Date.now();
+    
+    let filteredCount = 0;
+    let noIdCount = 0;
+    let noTitleCount = 0;
+    let closedCount = 0;
+    let noOutcomePricesCount = 0;
+    
+    const normalized = rawData.filter(market => {
       // 必须有 id
-      if (!market.id) return false;
+      if (!market.id) {
+        noIdCount++;
+        return false;
+      }
       
       // 必须有标题
-      if (!market.title && !market.question) return false;
+      if (!market.title && !market.question) {
+        noTitleCount++;
+        return false;
+      }
       
       // 状态检查：只采集 active 且未关闭的市场
       // 检查 closed 字段：如果 closed 为 true，跳过该市场
       if (market.closed === true) {
-
+        closedCount++;
         return false;
       }
       
@@ -320,11 +370,26 @@ export class PolymarketAdapter extends ScraperEngine {
       }
       
       if (!hasOutcomePrices) {
+        noOutcomePricesCount++;
         return false; // 跳过没有 outcomePrices 的事件
       }
       
       return true;
     });
+    
+    filteredCount = rawData.length - normalized.length;
+    const normalizeTime = Date.now() - normalizeStartTime;
+    console.log(`✅ [DEBUG] [normalize] 标准化完成 (耗时: ${normalizeTime}ms)`);
+    console.log(`📊 [DEBUG] [normalize] 过滤统计:`);
+    console.log(`   - 原始数据: ${rawData.length} 条`);
+    console.log(`   - 标准化后: ${normalized.length} 条`);
+    console.log(`   - 被过滤: ${filteredCount} 条`);
+    console.log(`   - 无 ID: ${noIdCount} 条`);
+    console.log(`   - 无标题: ${noTitleCount} 条`);
+    console.log(`   - 已关闭: ${closedCount} 条`);
+    console.log(`   - 无 outcomePrices: ${noOutcomePricesCount} 条`);
+    
+    return normalized;
   }
 
   /**
@@ -332,9 +397,14 @@ export class PolymarketAdapter extends ScraperEngine {
    * 🔥 强制全量更新：每次运行都处理所有数据，不做增量过滤
    */
   protected async save(normalizedData: PolymarketMarket[]): Promise<number> {
+    console.log(`🚀 [DEBUG] [save] ========== 开始批量处理数据 ==========`);
+    console.log(`🚀 [DEBUG] [save] 数据量: ${normalizedData.length} 条`);
+    const saveStartTime = Date.now();
 
     // 🔥 强制重置：物理删除所有同步记忆（DataSource 表的 lastSyncTime 和 itemsCount）
+    console.log(`🔍 [DEBUG] [save] 步骤 1: 重置同步标记...`);
     try {
+      const resetStartTime = Date.now();
       const result = await prisma.data_sources.updateMany({
         where: { sourceName: 'Polymarket' },
         data: {
@@ -342,78 +412,79 @@ export class PolymarketAdapter extends ScraperEngine {
           itemsCount: 0, // 强制重置计数
         },
       });
-
+      console.log(`✅ [DEBUG] [save] 同步标记已重置 (耗时: ${Date.now() - resetStartTime}ms, 影响行数: ${result.count})`);
     } catch (error) {
-      console.error(`❌ [PolymarketAdapter] 强制重置同步标记失败:`, error);
+      console.error(`❌ [DEBUG] [save] 强制重置同步标记失败（容错降级，继续执行）:`, error);
       // 即使失败也继续执行，不中断流程
     }
     
-    // 🚀 性能优化：批量预加载所有未同步的空壳市场（用于快速匹配）
-    // 🔥 关键优化：只加载未来市场（过去24小时的市场不需要同步）
-
-    const now = Date.now();
-    const unsyncedShells = await prisma.markets.findMany({
+    // 🔥 性能优化：批量查询所有现有市场和已拒绝的市场
+    console.log(`🔍 [DEBUG] [save] 步骤 2: 批量查询数据库...`);
+    const queryStartTime = Date.now();
+    
+    const externalIds = normalizedData.map(m => m.id).filter(Boolean);
+    console.log(`📊 [DEBUG] [save] 需要查询的 externalId 数量: ${externalIds.length}`);
+    
+    // 批量查询现有市场（按 externalId）
+    const existingMarketsQueryStart = Date.now();
+    const existingMarkets = await prisma.markets.findMany({
       where: {
-        isFactory: true,
-        externalId: null,
-        isActive: true,
-        closingDate: {
-          // 🔥 只加载未来市场到未来60天（过去24小时的市场不需要同步）
-          gte: new Date(now),
-          lte: new Date(now + 60 * 24 * 60 * 60 * 1000),
-        },
+        externalId: { in: externalIds },
+        externalSource: 'polymarket',
       },
       select: {
         id: true,
-        symbol: true,
-        period: true,
-        closingDate: true,
-        templateId: true,
-      },
-      orderBy: {
-        closingDate: 'asc',
+        externalId: true,
+        source: true,
+        isFactory: true,
+        internalVolume: true,
+        manualOffset: true,
+        status: true,
+        description: true, // 🔥 添加 description 字段
       },
     });
-
-    // 创建快速查找索引：按 symbol + period + 时间范围索引
-    const shellIndex = new Map<string, any[]>();
-    unsyncedShells.forEach(shell => {
-      // 🔥 为每个空壳市场创建多个索引键，支持多种查询方式
-      const symbol = shell.symbol || 'ANY';
-      const period = shell.period || 'ANY';
-      
-      // 主键：symbol-period
-      const mainKey = `${symbol}-${period}`;
-      if (!shellIndex.has(mainKey)) {
-        shellIndex.set(mainKey, []);
+    console.log(`✅ [DEBUG] [save] 现有市场查询完成 (耗时: ${Date.now() - existingMarketsQueryStart}ms, 找到: ${existingMarkets.length} 个)`);
+    
+    // 建立 Map 映射：externalId -> market
+    const existingMarketsMap = new Map<string, typeof existingMarkets[0]>();
+    existingMarkets.forEach(m => {
+      if (m.externalId) {
+        existingMarketsMap.set(m.externalId, m);
       }
-      shellIndex.get(mainKey)!.push(shell);
-      
-      // 辅助键：symbol-ANY（用于只匹配symbol的情况）
-      if (symbol !== 'ANY') {
-        const symbolKey = `${symbol}-ANY`;
-        if (!shellIndex.has(symbolKey)) {
-          shellIndex.set(symbolKey, []);
-        }
-        shellIndex.get(symbolKey)!.push(shell);
-      }
-      
-      // 辅助键：ANY-period（用于只匹配period的情况）
-      if (period !== 'ANY') {
-        const periodKey = `ANY-${period}`;
-        if (!shellIndex.has(periodKey)) {
-          shellIndex.set(periodKey, []);
-        }
-        shellIndex.get(periodKey)!.push(shell);
-      }
-      
-      // 通用键：ANY-ANY（用于完全不匹配的情况）
-      const anyKey = 'ANY-ANY';
-      if (!shellIndex.has(anyKey)) {
-        shellIndex.set(anyKey, []);
-      }
-      shellIndex.get(anyKey)!.push(shell);
     });
+    
+    // 批量查询已拒绝的市场
+    const rejectedMarketsQueryStart = Date.now();
+    const rejectedMarkets = await prisma.markets.findMany({
+      where: {
+        externalId: { in: externalIds },
+        externalSource: 'polymarket',
+        reviewStatus: 'REJECTED',
+      },
+      select: {
+        externalId: true,
+      },
+    });
+    console.log(`✅ [DEBUG] [save] 已拒绝市场查询完成 (耗时: ${Date.now() - rejectedMarketsQueryStart}ms, 找到: ${rejectedMarkets.length} 个)`);
+    
+    const rejectedExternalIds = new Set(rejectedMarkets.map(m => m.externalId).filter(Boolean));
+    
+    // 批量查询所有分类（用于后续匹配）
+    const categoriesQueryStart = Date.now();
+    const allCategories = await prisma.categories.findMany({
+      where: { status: 'active' },
+      select: { id: true, slug: true },
+    });
+    console.log(`✅ [DEBUG] [save] 分类查询完成 (耗时: ${Date.now() - categoriesQueryStart}ms, 找到: ${allCategories.length} 个)`);
+    
+    const categoryMap = new Map<string, string>();
+    allCategories.forEach(cat => {
+      categoryMap.set(cat.slug, cat.id);
+    });
+    
+    const totalQueryTime = Date.now() - queryStartTime;
+    console.log(`✅ [DEBUG] [save] 批量查询完成 (总耗时: ${totalQueryTime}ms)`);
+    console.log(`📊 [DEBUG] [save] 查询结果：现有市场 ${existingMarketsMap.size} 个，已拒绝市场 ${rejectedExternalIds.size} 个，分类 ${categoryMap.size} 个`);
     
     let savedCount = 0;
     let totalVolumeSum = 0; // 用于聚合计算交易量总和
@@ -658,19 +729,24 @@ export class PolymarketAdapter extends ScraperEngine {
         const title = marketData.title || marketData.question || '未命名市场';
         const description = marketData.description || '';
         
-        // 翻译服务：将英文标题和描述翻译成中文
-        // TODO: 在实际使用时，配置翻译 API Key，并取消注释以下代码
+        // 🔥 性能优化：暂时禁用翻译功能，减少API调用和处理时间
+        // 翻译服务会为每条数据调用外部API，导致采集变慢
+        // 如果需要翻译，可以在后台手动编辑或使用批量翻译功能
         let titleZh: string | null = null;
         let descriptionZh: string | null = null;
         
+        // 🔥 暂时禁用翻译以提升性能
+        // TODO: 如果需要翻译，可以：
+        // 1. 配置翻译 API Key
+        // 2. 使用批量翻译（在后台管理界面）
+        // 3. 或使用异步翻译（采集完成后后台翻译）
+        /*
         try {
-          // 调用翻译服务（目前返回空字符串，表示待翻译）
           const [translatedTitle, translatedDescription] = await Promise.all([
             translateText(title, 'zh'),
             description ? translateText(description, 'zh') : Promise.resolve(''),
           ]);
           
-          // 如果翻译结果不为空，则使用翻译结果
           if (translatedTitle && translatedTitle.trim()) {
             titleZh = translatedTitle.trim();
           }
@@ -679,10 +755,10 @@ export class PolymarketAdapter extends ScraperEngine {
           }
         } catch (error) {
           console.error(`❌ [PolymarketAdapter] 翻译失败 (ID: ${marketData.id}):`, error);
-          // 翻译失败不影响主流程，继续使用英文
         }
+        */
 
-        // 🔥 只读匹配：仅使用 findUnique 查找现有分类，禁止创建
+        // 🔥 性能优化：从批量查询的分类 Map 中获取
         let categoryId: string | null = null;
         const categorySlug = mapPolymarketCategory(
           marketData.tags || [],
@@ -690,510 +766,33 @@ export class PolymarketAdapter extends ScraperEngine {
         );
 
         if (categorySlug) {
-          // 🔥 物理切断：只使用 findUnique 查找，不创建
-          const category = await prisma.categories.findUnique({
-            where: { slug: categorySlug },
-          });
-          if (category) {
-            categoryId = category.id;
-
-          } else {
+          // 🔥 从 Map 中获取分类 ID
+          categoryId = categoryMap.get(categorySlug) || null;
+          if (!categoryId) {
             console.warn(`⚠️ [PolymarketAdapter] 未找到分类 '${categorySlug}'，将跳过分类关联（市场将出现在"所有市场"中）`);
           }
         }
 
+        // 🔥 性能优化：使用批量查询的结果
         // 检查是否已拒绝
-        const rejectedMarket = await prisma.markets.findFirst({
-          where: {
-            externalId: marketData.id,
-            externalSource: 'polymarket',
-            reviewStatus: 'REJECTED',
-          },
-        });
-
-        if (rejectedMarket) {
-
+        if (rejectedExternalIds.has(marketData.id)) {
           skipCount++;
           continue;
         }
 
-        // 🔥 重写 Upsert 逻辑：使用 externalId 作为唯一标识（支持手动市场和工厂市场）
-        // 先查找是否存在（优先使用 externalId + externalSource，如果没有则只使用 externalId）
-        let existingMarket = await prisma.markets.findFirst({
-          where: {
-            externalId: marketData.id,
-            externalSource: 'polymarket',
-          },
-        });
+        // 🔥 性能优化：从 Map 中获取现有市场
+        const existingMarket = existingMarketsMap.get(marketData.id);
 
-        // 🔥 修复：如果没找到，尝试只使用 externalId 查找（支持手动创建的市场）
-        // 手动市场可能有 externalId 但 externalSource 可能为 null 或其他值
-        if (!existingMarket) {
-          existingMarket = await prisma.markets.findFirst({
-            where: {
-              externalId: marketData.id,
-            },
-          });
-          
-          // 🔥 添加日志：记录找到的手动市场
-          if (existingMarket) {
+        // 🔥 移除工厂空壳市场匹配逻辑
+        // 原因：Polymarket 市场（外部市场）和工厂空壳市场（内部周期性市场）是两个完全不同的逻辑
+        // - Polymarket 市场：来自外部平台，有 externalId，用于展示外部市场的真实赔率
+        // - 工厂空壳市场：由内部系统自动生成，isFactory=true，用于内部交易
+        // 两个系统应该完全独立运行，互不干扰
+        // 如果通过 externalId 没找到，说明这是一个新的 Polymarket 市场，将创建新市场并进入审核中心（status = PENDING_REVIEW）
+        
 
-          }
-        }
-
-        // 🚀 核心修复：如果通过 externalId 没找到，尝试通过多策略匹配工厂空壳市场
-        if (!existingMarket) {
-          // 统一时间标准化：抹除毫秒差异，统一使用 UTC 时间
-          const normalizeTime = (date: Date): Date => {
-            const normalized = new Date(date);
-            // 抹除毫秒差异，只保留到秒级精度
-            normalized.setMilliseconds(0);
-            return normalized;
-          };
-
-          const normalizedEndDate = normalizeTime(endDate);
-          const normalizedEndTimeMs = normalizedEndDate.getTime();
-          const marketTitle = title || marketData.question || '';
-          
-          // 🔥 从 Polymarket 市场标题中提取 symbol 和 period
-          const extractedSymbol = extractSymbolFromTitle(marketTitle);
-          const extractedPeriod = extractPeriodFromTitle(marketTitle);
-
-          // 🚀 多策略匹配：使用预加载的索引进行快速匹配（优先使用数据库中的symbol和period，而不是从标题提取）
-          let existingShell = null;
-          let matchStrategy = '';
-
-          // 🔥 改进策略1：直接在所有空壳市场中查找最接近的匹配（不依赖标题提取）
-          // 这样可以匹配更多市场，因为不依赖于从Polymarket标题中提取symbol和period
-          let bestCandidate = null;
-          let minTimeDiff = Infinity;
-          let bestMatchType = '';
-
-          // 🔥 策略0：未来市场优先匹配 - 直接匹配最接近的空壳市场（不依赖标题提取）
-          // 🔥 关键优化：对于未来市场，使用更宽松的时间窗口
-          
-          // 0.1 优先匹配相同period和symbol的市场（严格时间窗口：±period分钟）
-          const commonPeriods = [15, 60, 1440]; // 15分钟、1小时、1天
-          if (extractedSymbol) {
-            for (const period of commonPeriods) {
-              for (const candidate of unsyncedShells) {
-                if (candidate.period === period && candidate.symbol === extractedSymbol) {
-                  const candidateTime = candidate.closingDate.getTime();
-                  const timeDiff = Math.abs(candidateTime - normalizedEndTimeMs);
-                  // 🔥 修复：对于15分钟市场，使用严格的时间窗口（±15分钟），避免匹配到错误的市场
-                  const allowedDiff = period * 60 * 1000; // period 分钟（例如15分钟周期只允许±15分钟）
-                  if (timeDiff <= allowedDiff && timeDiff < minTimeDiff) {
-                    minTimeDiff = timeDiff;
-                    bestCandidate = candidate;
-                    bestMatchType = `精准周期性匹配-${period}分钟（时间差${Math.round(timeDiff / 60000)}分钟）`;
-                  }
-                }
-              }
-            }
-          }
-          
-          // 0.2 匹配相同period的市场（严格时间窗口：±period分钟）
-          if (!bestCandidate) {
-            for (const period of commonPeriods) {
-              for (const candidate of unsyncedShells) {
-                if (candidate.period === period) {
-                  const candidateTime = candidate.closingDate.getTime();
-                  const timeDiff = Math.abs(candidateTime - normalizedEndTimeMs);
-                  // 🔥 修复：使用严格的时间窗口（±period分钟），避免匹配到错误的市场
-                  const allowedDiff = period * 60 * 1000; // period 分钟
-                  if (timeDiff <= allowedDiff && timeDiff < minTimeDiff) {
-                    minTimeDiff = timeDiff;
-                    bestCandidate = candidate;
-                    bestMatchType = `周期性匹配-${period}分钟（时间差${Math.round(timeDiff / 60000)}分钟）`;
-                  }
-                }
-              }
-            }
-          }
-          
-          // 0.3 匹配相同symbol的市场（±2小时的时间窗口）
-          if (!bestCandidate && extractedSymbol) {
-            for (const candidate of unsyncedShells) {
-              if (candidate.symbol === extractedSymbol) {
-                const candidateTime = candidate.closingDate.getTime();
-                const timeDiff = Math.abs(candidateTime - normalizedEndTimeMs);
-                // 相同symbol，允许±2小时的时间误差
-                if (timeDiff <= 120 * 60000 && timeDiff < minTimeDiff) {
-                  minTimeDiff = timeDiff;
-                  bestCandidate = candidate;
-                  bestMatchType = `symbol匹配（时间差${Math.round(timeDiff / 60000)}分钟）`;
-                }
-              }
-            }
-          }
-
-          // 1.1 如果有提取到symbol，优先匹配相同symbol（±1分钟）
-          if (!bestCandidate && extractedSymbol) {
-            for (const candidate of unsyncedShells) {
-              if (candidate.symbol === extractedSymbol) {
-                const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-                if (timeDiff <= 60000 && timeDiff < minTimeDiff) { // ±1分钟
-                  minTimeDiff = timeDiff;
-                  bestCandidate = candidate;
-                  bestMatchType = extractedPeriod && candidate.period === extractedPeriod 
-                    ? '精准匹配（symbol+period+time ±1分钟）'
-                    : 'symbol+时间匹配（±1分钟）';
-                }
-              }
-            }
-          }
-
-          // 1.2 如果有提取到period，在没有symbol匹配时，尝试匹配相同period（±1分钟）
-          if (!bestCandidate && extractedPeriod) {
-            for (const candidate of unsyncedShells) {
-              if (candidate.period === extractedPeriod) {
-                const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-                if (timeDiff <= 60000 && timeDiff < minTimeDiff) { // ±1分钟
-                  minTimeDiff = timeDiff;
-                  bestCandidate = candidate;
-                  bestMatchType = 'period+时间匹配（±1分钟）';
-                }
-              }
-            }
-          }
-
-          // 策略2：放宽时间窗口到±5分钟（优先匹配相同symbol）
-          if (!bestCandidate && extractedSymbol) {
-            for (const candidate of unsyncedShells) {
-              if (candidate.symbol === extractedSymbol) {
-                const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-                if (timeDiff <= 5 * 60000 && timeDiff < minTimeDiff) { // ±5分钟
-                  minTimeDiff = timeDiff;
-                  bestCandidate = candidate;
-                  bestMatchType = 'symbol+时间匹配（±5分钟）';
-                }
-              }
-            }
-          }
-
-          // 策略3：仅时间匹配（±15分钟）- 适用于15分钟周期市场，优先匹配相同symbol
-          if (!bestCandidate) {
-            for (const candidate of unsyncedShells) {
-              const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-              // 相同symbol的候选，时间差权重减半（更优先）
-              const weightedDiff = extractedSymbol && candidate.symbol === extractedSymbol ? timeDiff * 0.5 : timeDiff;
-              if (timeDiff <= 15 * 60000 && weightedDiff < minTimeDiff) { // ±15分钟
-                minTimeDiff = weightedDiff;
-                bestCandidate = candidate;
-                bestMatchType = candidate.symbol === extractedSymbol 
-                  ? 'symbol+时间匹配（±15分钟）'
-                  : '时间匹配（±15分钟）';
-              }
-            }
-          }
-          
-          if (bestCandidate) {
-            existingShell = await prisma.markets.findUnique({ where: { id: bestCandidate.id } });
-          if (existingShell) {
-              matchStrategy = bestMatchType;
-            }
-          }
-
-          // 策略4：智能时间匹配 - 查找最接近的空壳市场（±30分钟，选择时间差最小的）
-          if (!existingShell) {
-            minTimeDiff = Infinity; // 重置
-            bestCandidate = null;
-            
-            for (const candidate of unsyncedShells) {
-              const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-              // 相同symbol的候选，时间差权重减半（更优先）
-              const weightedDiff = extractedSymbol && candidate.symbol === extractedSymbol ? timeDiff * 0.5 : timeDiff;
-              if (timeDiff <= 30 * 60000 && weightedDiff < minTimeDiff) { // ±30分钟
-                minTimeDiff = weightedDiff;
-                bestCandidate = candidate;
-                bestMatchType = candidate.symbol === extractedSymbol 
-                  ? '智能匹配-symbol（±30分钟）'
-                  : '智能匹配（±30分钟）';
-              }
-            }
-            
-            if (bestCandidate && minTimeDiff <= 30 * 60000) {
-              existingShell = await prisma.markets.findUnique({ where: { id: bestCandidate.id } });
-              if (existingShell) {
-                matchStrategy = bestMatchType.replace('±30分钟', `${Math.round(minTimeDiff / 60000)}分钟`);
-              }
-            }
-          }
-          
-          // 策略5：扩大时间窗口到±2小时（120分钟）- 适用于周期性市场
-          if (!existingShell) {
-            minTimeDiff = Infinity; // 重置
-            bestCandidate = null;
-            
-            // 优先匹配相同symbol
-            if (extractedSymbol) {
-              for (const candidate of unsyncedShells) {
-                if (candidate.symbol === extractedSymbol) {
-                  const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-                  // 相同period的候选，时间差权重减半（更优先）
-                  const weightedDiff = extractedPeriod && candidate.period === extractedPeriod ? timeDiff * 0.3 : timeDiff;
-                  if (timeDiff <= 120 * 60000 && weightedDiff < minTimeDiff) { // ±2小时
-                    minTimeDiff = weightedDiff;
-                    bestCandidate = candidate;
-                  }
-                }
-              }
-            }
-            
-            // 如果没有找到相同symbol的，尝试所有候选
-            if (!bestCandidate) {
-              for (const candidate of unsyncedShells) {
-                const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-                // 相同period的候选，时间差权重减半（更优先）
-                const weightedDiff = extractedPeriod && candidate.period === extractedPeriod ? timeDiff * 0.3 : timeDiff;
-                if (timeDiff <= 120 * 60000 && weightedDiff < minTimeDiff) { // ±2小时
-                  minTimeDiff = weightedDiff;
-                  bestCandidate = candidate;
-                }
-              }
-            }
-            
-            if (bestCandidate && minTimeDiff <= 120 * 60000) {
-              existingShell = await prisma.markets.findUnique({ where: { id: bestCandidate.id } });
-              if (existingShell) {
-                matchStrategy = `扩大窗口匹配（时间差${Math.round(minTimeDiff / 60000)}分钟）`;
-              }
-            }
-          }
-          
-          // 策略6：最后尝试 - 完全基于时间匹配，优先匹配相同symbol和period，时间窗口扩大到±24小时
-          // 🔥 关键优化：对于15分钟周期市场，Polymarket的时间可能不完全对齐，需要更大的时间窗口
-          if (!existingShell) {
-            minTimeDiff = Infinity; // 重置
-            bestCandidate = null;
-            
-            // 优先匹配相同symbol和period（±24小时）
-            if (extractedSymbol && extractedPeriod) {
-              for (const candidate of unsyncedShells) {
-                if (candidate.symbol === extractedSymbol && candidate.period === extractedPeriod) {
-                  const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-                  if (timeDiff <= 1440 * 60000 && timeDiff < minTimeDiff) { // ±24小时
-                    minTimeDiff = timeDiff;
-                    bestCandidate = candidate;
-                  }
-                }
-              }
-            }
-            
-            // 其次匹配相同symbol（±24小时）
-            if (!bestCandidate && extractedSymbol) {
-              for (const candidate of unsyncedShells) {
-                if (candidate.symbol === extractedSymbol) {
-                  const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-                  if (timeDiff <= 1440 * 60000 && timeDiff < minTimeDiff) { // ±24小时
-                    minTimeDiff = timeDiff;
-                    bestCandidate = candidate;
-                  }
-                }
-              }
-            }
-            
-            // 🔥 关键优化：如果没有提取到symbol，直接基于period匹配（适用于BTC 15分钟周期市场）
-            if (!bestCandidate && extractedPeriod) {
-              for (const candidate of unsyncedShells) {
-                if (candidate.period === extractedPeriod) {
-                  const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-                  if (timeDiff <= 1440 * 60000 && timeDiff < minTimeDiff) { // ±24小时
-                    minTimeDiff = timeDiff;
-                    bestCandidate = candidate;
-                  }
-                }
-              }
-            }
-            
-            // 最后尝试所有候选（±24小时）
-            if (!bestCandidate) {
-              for (const candidate of unsyncedShells) {
-                const timeDiff = Math.abs(candidate.closingDate.getTime() - normalizedEndTimeMs);
-                if (timeDiff <= 1440 * 60000 && timeDiff < minTimeDiff) { // ±24小时
-                  minTimeDiff = timeDiff;
-                  bestCandidate = candidate;
-                }
-              }
-            }
-            
-            if (bestCandidate && minTimeDiff <= 1440 * 60000) {
-              existingShell = await prisma.markets.findUnique({ where: { id: bestCandidate.id } });
-              if (existingShell) {
-                matchStrategy = `最后尝试匹配（时间差${Math.round(minTimeDiff / 60000)}分钟）`;
-              }
-            }
-          }
-          
-          // 策略7：终极匹配 - 对于未来市场，直接匹配最接近的空壳市场（±7天，仅未来市场）
-          // 🔥 这是最后的保险措施，确保未来市场能够匹配
-          // 🔥 关键优化：只匹配未来的市场，过去24小时的市场不需要同步
-          // 🔥 进一步扩大时间窗口到±7天，确保能匹配更多市场
-          if (!existingShell) {
-            minTimeDiff = Infinity; // 重置
-            bestCandidate = null;
-            
-            // 优先匹配相同period的市场（±7天）
-            if (extractedPeriod) {
-              for (const candidate of unsyncedShells) {
-                if (candidate.period === extractedPeriod) {
-                  const candidateTime = candidate.closingDate.getTime();
-                  const timeDiff = Math.abs(candidateTime - normalizedEndTimeMs);
-                  // 🔥 对于未来市场，允许±7天的时间窗口
-                  if (timeDiff <= 7 * 24 * 60 * 60000 && timeDiff < minTimeDiff) { // ±7天
-                    minTimeDiff = timeDiff;
-                    bestCandidate = candidate;
-                  }
-                }
-              }
-            }
-            
-            // 如果没有匹配到相同period的，优先匹配相同symbol（±7天）
-            if (!bestCandidate && extractedSymbol) {
-              for (const candidate of unsyncedShells) {
-                if (candidate.symbol === extractedSymbol) {
-                  const candidateTime = candidate.closingDate.getTime();
-                  const timeDiff = Math.abs(candidateTime - normalizedEndTimeMs);
-                  if (timeDiff <= 7 * 24 * 60 * 60000 && timeDiff < minTimeDiff) { // ±7天
-                    minTimeDiff = timeDiff;
-                    bestCandidate = candidate;
-                  }
-                }
-              }
-            }
-            
-            // 最后尝试所有未来市场（±7天）
-            if (!bestCandidate) {
-              for (const candidate of unsyncedShells) {
-                const candidateTime = candidate.closingDate.getTime();
-                const timeDiff = Math.abs(candidateTime - normalizedEndTimeMs);
-                // 🔥 对于未来市场，允许±7天的时间窗口
-                if (timeDiff <= 7 * 24 * 60 * 60000 && timeDiff < minTimeDiff) { // ±7天
-                  minTimeDiff = timeDiff;
-                  bestCandidate = candidate;
-                }
-              }
-            }
-            
-            if (bestCandidate && minTimeDiff <= 7 * 24 * 60 * 60000) {
-              existingShell = await prisma.markets.findUnique({ where: { id: bestCandidate.id } });
-              if (existingShell) {
-                matchStrategy = `终极匹配-未来市场（时间差${Math.round(minTimeDiff / 60000)}分钟）`;
-              }
-            }
-          }
-
-          if (existingShell) {
-            const matchInfo = [
-              extractedSymbol ? `symbol=${extractedSymbol}` : 'symbol=未提取',
-              extractedPeriod ? `period=${extractedPeriod}分钟` : 'period=未提取',
-              `endTime=${normalizedEndDate.toISOString()}`,
-              `策略=${matchStrategy}`,
-            ].join(', ');
-
-            existingMarket = existingShell;
-            matchedCount++; // 🔥 更新匹配计数
-            
-            // 🔥 一对多匹配优化：如果匹配成功，尝试匹配更多相同symbol的空壳市场
-            // ⚠️ 修复：对于15分钟市场，一对多匹配必须使用严格的时间窗口，避免将已结算市场的赔率更新到未结束的市场
-            if (extractedSymbol && existingShell.symbol === extractedSymbol && extractedPeriod) {
-              // 查找更多未匹配的空壳市场（相同symbol和period，严格时间窗口）
-              const additionalShells = unsyncedShells.filter(candidate => {
-                if (candidate.id === existingShell.id) return false; // 排除已匹配的
-                if (candidate.symbol !== extractedSymbol) return false; // 必须相同symbol
-                if (candidate.period !== extractedPeriod) return false; // 🔥 修复：必须相同period
-                // 🔥 修复：使用严格的时间窗口（±period分钟），避免匹配到错误的时间段
-                const candidateTime = candidate.closingDate.getTime();
-                const timeDiff = Math.abs(candidateTime - normalizedEndTimeMs);
-                const allowedDiff = extractedPeriod * 60 * 1000; // period 分钟（例如15分钟周期只允许±15分钟）
-                return timeDiff <= allowedDiff;
-              });
-              
-              // 最多匹配10个额外的空壳市场（避免过度匹配）
-              const maxAdditionalMatches = 10;
-              let additionalMatched = 0;
-              
-              for (const additionalShell of additionalShells.slice(0, maxAdditionalMatches)) {
-                try {
-                  // 检查是否已经被其他Polymarket市场匹配
-                  const checkShell = await prisma.markets.findUnique({
-                    where: { id: additionalShell.id },
-                    select: { externalId: true },
-                  });
-                  
-                  // 如果仍然是空壳市场（externalId为null），则匹配
-                  if (checkShell && !checkShell.externalId) {
-                    // 🔥 关键修复：一对多匹配时也需要更新outcomePrices和其他赔率相关字段
-                    // 这样前端才能实时显示赔率
-                    const updateData: any = {
-                      externalId: marketData.id,
-                      externalSource: 'polymarket',
-                      // 🔥 更新赔率相关字段
-                      outcomePrices: outcomePricesJson || null,
-                      yesProbability: yesProbability || null,
-                      noProbability: noProbability || null,
-                      initialPrice: initialPriceValue || null,
-                      // 更新外部交易量（如果有）
-                      ...(totalVolume && { 
-                        externalVolume: typeof totalVolume === 'number' 
-                          ? totalVolume 
-                          : parseFloat(String(totalVolume || 0))
-                      }),
-                      updatedAt: new Date(),
-                    };
-                    
-                    await prisma.markets.update({
-                      where: { id: additionalShell.id },
-                      data: updateData,
-                    });
-                    
-                    matchedCount++;
-                    additionalMatched++;
-
-                  }
-                } catch (error: any) {
-                  console.error(`❌ [PolymarketAdapter] 一对多匹配失败 (数据库ID: ${additionalShell.id}):`, error.message);
-                }
-              }
-              
-              if (additionalMatched > 0) {
-
-              }
-            }
-          } else {
-            // 🔥 如果所有策略都失败，记录详细信息用于调试
-            const debugInfo = {
-              extractedSymbol: extractedSymbol || '未提取',
-              extractedPeriod: extractedPeriod || '未提取',
-              normalizedEndDate: normalizedEndDate.toISOString(),
-              marketTitle: marketTitle.substring(0, 80),
-            };
-            // 🔥 减少日志频率，避免刷屏（只记录10%的失败案例）
-            if (Math.random() < 0.1) {
-              // 🔥 减少日志频率，避免刷屏（只记录10%的失败案例）
-              if (Math.random() < 0.1) {
-
-              }
-            }
-          }
-        }
-
-        // 🔥 红蓝双轨制：如果市场已由工厂生成（isFactory=true）且已有 externalId，采集源必须跳过
-        // 🔥 例外：如果工厂市场有externalId但没有outcomePrices，允许更新赔率数据（修复一对多匹配的遗留问题）
-        if (existingMarket && (existingMarket as any).isFactory === true && existingMarket.externalId) {
-          // 检查是否有outcomePrices
-          const hasOutcomePrices = !!(existingMarket.outcomePrices || (existingMarket as any).outcomePrices);
-          if (hasOutcomePrices) {
-            // 如果已有赔率数据，跳过更新（避免覆盖）
-
-          skipCount++;
-          continue;
-          } else {
-            // 🔥 关键修复：如果工厂市场有externalId但没有outcomePrices，允许更新赔率数据
-
-            // 继续执行，不跳过
-          }
-        }
+        // 🔥 禁止更新工厂市场：工厂市场由内部系统管理，不应该被 Polymarket 采集源更新
+        // 这个检查已经在上面（第1217行）执行，这里保留注释作为说明
 
         // 🔥 状态锁定逻辑：更新数据时绝对禁止修改 status 字段
         // 只有新创建的市场才设置 status，已存在的市场保持原有 status
@@ -1216,7 +815,14 @@ export class PolymarketAdapter extends ScraperEngine {
           
           const isManualMarket = (existingMarket.source === 'INTERNAL' || !existingMarket.source) && 
                                  !(existingMarket as any).isFactory;
-
+          
+          // 🔥 禁止更新工厂市场：工厂市场由内部系统管理，不应该被 Polymarket 采集源更新
+          if ((existingMarket as any).isFactory === true) {
+            console.warn(`⚠️ [PolymarketAdapter] 跳过工厂市场更新：工厂市场应该由内部系统管理，不应该被外部采集源更新 (ID: ${existingMarket.id})`);
+            skipCount++;
+            continue;
+          }
+          
           const { calculateDisplayVolume } = await import('@/lib/marketUtils');
           const newDisplayVolume = calculateDisplayVolume({
             source: existingMarket.source || 'POLYMARKET',
@@ -1225,30 +831,20 @@ export class PolymarketAdapter extends ScraperEngine {
             manualOffset: existingMarket.manualOffset || 0, // 🔥 保留手动偏移量（不覆盖）
           });
           
-          // 🔥 使用之前已声明的 isManualMarket 变量（第659行）
-          
-          // 🚀 核心修复：如果是工厂空壳市场（externalId=null），需要填充 externalId 和 externalSource
-          const isFactoryShell = (existingMarket as any).isFactory === true && !existingMarket.externalId;
-          
           // 🔥 构建更新数据：仅更新数值字段，绝对禁止修改 status
           // 🔥 核心修复：确保每个字段都是独立赋值的，没有任何条件包装
           const updateData: any = {
             // 更新基本信息
             title: title,
-            description: description ?? existingMarket.description,
-            // 更新翻译字段
-            ...(titleZh && { titleZh }),
-            ...(descriptionZh && { descriptionZh }),
+            description: description || existingMarket.description || '',
+            // 更新翻译字段（如果存在）
+            ...(titleZh ? { titleZh } : {}),
+            ...(descriptionZh ? { descriptionZh } : {}),
             closingDate: endDate,
-            // 🔥 修复：手动市场保持 source='INTERNAL'，工厂空壳市场保持 'INTERNAL'，只有 POLYMARKET 市场才设置为 'POLYMARKET'
-            source: (isManualMarket || isFactoryShell) ? existingMarket.source || 'INTERNAL' : 'POLYMARKET',
-            // 🚀 核心修复：如果是工厂空壳市场，填充 externalId 和 externalSource
-            ...(isFactoryShell && {
-              externalId: marketData.id, // 填充 externalId
-              externalSource: 'polymarket', // 设置 externalSource
-            }),
+            // 🔥 修复：手动市场保持 source='INTERNAL'，只有 POLYMARKET 市场才设置为 'POLYMARKET'
+            source: isManualMarket ? existingMarket.source || 'INTERNAL' : 'POLYMARKET',
             // 🔥 修复：手动市场也要设置 externalSource，确保下次采集时能快速匹配
-            ...(!isFactoryShell && { externalSource: 'polymarket' }),
+            externalSource: 'polymarket',
             // 🔥 仅更新数值字段：volume、价格等
             externalVolume: externalVolumeValue, // 外部交易量
             totalVolume: newDisplayVolume, // 展示交易量
@@ -1274,12 +870,8 @@ export class PolymarketAdapter extends ScraperEngine {
             data: updateData,
           });
           
-          // 🚀 核心修复：记录更新类型（手动市场、工厂空壳市场、或 POLYMARKET 市场）
-          const marketType = isFactoryShell ? '工厂空壳市场（已填充 externalId）' : (isManualMarket ? '手动市场' : 'POLYMARKET市场');
-
-          if (isFactoryShell) {
-
-          }
+          // 🚀 核心修复：记录更新类型（手动市场或 POLYMARKET 市场）
+          const marketType = isManualMarket ? '手动市场' : 'POLYMARKET市场';
           // 🔥 注意：savedCount++ 在后面的代码中统一增加（避免重复计数）
         } else {
           // 🔥 新事件：创建新记录，status 强制设为 PENDING_REVIEW（进入审核中心）
@@ -1288,24 +880,16 @@ export class PolymarketAdapter extends ScraperEngine {
             ? totalVolume 
             : parseFloat(String(totalVolume || 0));
           
-          // 🔥 物理锁死：Polymarket 爬虫适配器不再允许创建市场
-          // 所有市场必须通过工厂预生成系统创建
-          // 但如果手动市场已有 externalId，说明管理员已经手动创建并设置了外部链接，应该允许更新
-          console.warn(`⚠️ [PolymarketAdapter] 创建市场请求被拒绝：系统已进入"严格列表制"，无法创建新市场: ${title.substring(0, 50)}`);
-          console.warn(`⚠️ [PolymarketAdapter] 提示：如果这是手动创建的市场，请先在后台编辑页面设置 externalId，然后采集源会自动更新该市场的数据`);
-          // 🔥 修复：不抛出错误，而是跳过（避免中断整个采集流程）
-          skipCount++;
-          continue;
-          
-          // 🔥 以下代码已被禁用（保留用于参考）
-          /*
+          // 🔥 恢复创建市场功能：允许创建新市场，状态设为 PENDING_REVIEW（进入审核中心）
           market = await prisma.markets.create({
             data: {
+              id: randomUUID(), // 🔥 必需：生成唯一 ID
               title: title,
               titleZh: titleZh || null,
               description: description || '',
               descriptionZh: descriptionZh || null,
               closingDate: endDate,
+              updatedAt: new Date(), // 🔥 必需：updatedAt 字段
               source: 'POLYMARKET',
               externalVolume: externalVolumeValue,
               internalVolume: 0,
@@ -1319,8 +903,6 @@ export class PolymarketAdapter extends ScraperEngine {
               externalSource: 'polymarket', // 🔥 使用 externalSource 配合 externalId 作为唯一标识
               status: marketStatusForCreate!, // 🔥 新创建的市场强制设置为 PENDING_REVIEW（除非已关闭）
               reviewStatus: 'PENDING', // 新创建的默认为 PENDING
-              category: categorySlug || null,
-              categorySlug: categorySlug || null,
               // 🔥 保存原始数据字段 - 每个字段独立赋值，互不依赖
               outcomePrices: outcomePricesJson || null, // 原始赔率 JSON 字符串，即使为空也保存 null
               image: imageUrl || null, // 头像 URL，即使为空也保存 null（不影响后续字段）
@@ -1329,8 +911,6 @@ export class PolymarketAdapter extends ScraperEngine {
               volume24h: volume24hValue || null, // 24小时交易量，即使为空也保存 null
             },
           });
-
-          */
         }
 
         // 更新或创建分类关联
@@ -1393,18 +973,31 @@ export class PolymarketAdapter extends ScraperEngine {
         totalVolumeSum += volumeForSum;
         totalLiquiditySum += liquidity; // 🔥 累加所有市场的流动性作为 TVL
         updatedMarketIds.add(market.id); // 记录已更新的市场 ID
+        
+        // 🔥 进度日志：每处理 50 条数据输出一次进度
+        if (savedCount % 50 === 0) {
+          console.log(`📊 [PolymarketAdapter] 处理进度: ${savedCount}/${normalizedData.length} (跳过: ${skipCount}, 错误: ${errorCount})`);
+        }
 
       } catch (error) {
         errorCount++;
-        console.error(`❌ [PolymarketAdapter] 保存市场失败 (ID: ${marketData.id}):`, error);
-        console.error(`❌ [PolymarketAdapter] 错误详情:`, {
-          errorType: error instanceof Error ? error.constructor.name : typeof error,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          errorStack: error instanceof Error ? error.stack : 'N/A',
-        });
+        // 🔥 性能优化：减少错误日志输出，避免日志过多
+        if (errorCount <= 10) {
+          console.error(`❌ [PolymarketAdapter] 保存市场失败 (ID: ${marketData.id}):`, error);
+          console.error(`❌ [PolymarketAdapter] 错误详情:`, {
+            errorType: error instanceof Error ? error.constructor.name : typeof error,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+        }
         // 继续处理下一个
       }
     }
+    
+    const totalSaveTime = Date.now() - saveStartTime;
+    console.log(`✅ [DEBUG] [save] ========== 批量处理完成 ==========`);
+    console.log(`📊 [DEBUG] [save] 统计：保存 ${savedCount} 条，跳过 ${skipCount} 条，错误 ${errorCount} 条`);
+    console.log(`⏱️ [DEBUG] [save] 总耗时: ${totalSaveTime}ms (${(totalSaveTime / 1000).toFixed(2)}秒)`);
+    console.log(`📊 [DEBUG] [save] 平均每条耗时: ${savedCount > 0 ? (totalSaveTime / savedCount).toFixed(2) : 0}ms`);
 
     // 自动清理过期 PENDING_REVIEW 事件：删除那些在本次采集中没有被更新的 PENDING_REVIEW 事件
     try {
@@ -1447,10 +1040,11 @@ export class PolymarketAdapter extends ScraperEngine {
       // 不影响主流程，只记录错误
     }
 
-    // 🔥 额外处理：手动市场的单独更新
+    // 🔥 性能优化：手动市场的单独更新（简化处理，减少 API 调用）
     // 查询所有有 externalId 但 source 为 INTERNAL 且 isFactory 为 false 的市场（手动市场）
     try {
-
+      console.log(`🔍 [PolymarketAdapter] 开始处理手动市场更新`);
+      
       const manualMarketsWithExternalId = await prisma.markets.findMany({
         where: {
           externalId: { not: null },
@@ -1462,129 +1056,155 @@ export class PolymarketAdapter extends ScraperEngine {
           id: true,
           externalId: true,
           title: true,
+          source: true,
+          internalVolume: true,
+          manualOffset: true,
         },
       });
 
+      // 🔥 性能优化：过滤掉已经在本次采集中更新过的市场
+      const manualMarketsToUpdate = manualMarketsWithExternalId.filter(
+        m => !updatedMarketIds.has(m.id)
+      );
+
+      console.log(`📊 [PolymarketAdapter] 找到 ${manualMarketsToUpdate.length} 个需要更新的手动市场`);
+
+      // 🔥 性能优化：限制手动市场的处理数量，避免超时
+      // 只处理前 50 个手动市场，其余的可以在下次采集时处理
+      const manualMarketsToProcess = manualMarketsToUpdate.slice(0, 50);
+      
+      if (manualMarketsToUpdate.length > 50) {
+        console.warn(`⚠️ [PolymarketAdapter] 手动市场数量过多 (${manualMarketsToUpdate.length})，本次只处理前 50 个`);
+      }
+
       let manualMarketUpdatedCount = 0;
       
-      for (const manualMarket of manualMarketsWithExternalId) {
-        try {
-          const externalId = (manualMarket as any).externalId;
-          if (!externalId) continue;
+      // 🔥 性能优化：并行处理手动市场（限制并发数为 5）
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < manualMarketsToProcess.length; i += BATCH_SIZE) {
+        const batch = manualMarketsToProcess.slice(i, i + BATCH_SIZE);
+        
+        await Promise.all(batch.map(async (manualMarket) => {
+          try {
+            const externalId = (manualMarket as any).externalId;
+            if (!externalId) return;
 
-          // 🔥 检查该市场是否已经在本次采集中被更新过
-          if (updatedMarketIds.has(manualMarket.id)) {
-
-            continue;
-          }
-
-          // 🔥 单独从 Polymarket API 获取该市场的数据
-
-          const singleMarketUrl = `https://gamma-api.polymarket.com/markets/${externalId}`;
-          const response = await fetch(singleMarketUrl, {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-          });
-
-          if (!response.ok) {
-            console.warn(`⚠️ [PolymarketAdapter] 手动市场 ${externalId} 的 API 请求失败: ${response.status}`);
-            continue;
-          }
-
-          const singleMarketData: PolymarketMarket = await response.json();
-          
-          if (!singleMarketData || !singleMarketData.id) {
-            console.warn(`⚠️ [PolymarketAdapter] 手动市场 ${externalId} 的 API 返回数据无效`);
-            continue;
-          }
-
-          // 🔥 使用相同的保存逻辑更新手动市场
-          // 这里需要调用 save 方法中的更新逻辑，但为了避免重复代码，我们直接在这里实现更新逻辑
-          // 由于代码较长，我们简化处理：只更新关键字段
-          const existingMarket = await prisma.markets.findUnique({
-            where: { id: manualMarket.id },
-          });
-
-          if (!existingMarket) continue;
-
-          // 提取数据（复用 save 方法中的逻辑）
-          const title = singleMarketData.title || singleMarketData.question || '';
-          const description = singleMarketData.description || '';
-          const endDateStr = singleMarketData.endDateIso || singleMarketData.endDate;
-          const endDate = endDateStr ? new Date(endDateStr) : existingMarket.closingDate;
-          
-          // 提取 outcomePrices
-          let outcomePricesJson: string | null = null;
-          let yesProbability = 0.5;
-          let noProbability = 0.5;
-          let initialPriceValue: number | null = null;
-
-          if (singleMarketData.outcomePrices) {
+            // 🔥 单独从 Polymarket API 获取该市场的数据（添加超时）
+            const singleMarketUrl = `https://gamma-api.polymarket.com/markets/${externalId}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 🔥 容错降级：30秒超时（适应国际网络延迟）
+            
             try {
-              const parsed = Array.isArray(singleMarketData.outcomePrices)
-                ? singleMarketData.outcomePrices
-                : JSON.parse(singleMarketData.outcomePrices);
-              
-              if (Array.isArray(parsed) && parsed.length >= 2) {
-                yesProbability = parseFloat(String(parsed[0])) || 0.5;
-                noProbability = parseFloat(String(parsed[1])) || 0.5;
-                initialPriceValue = yesProbability;
-                outcomePricesJson = JSON.stringify([yesProbability, noProbability]);
+              const response = await fetch(singleMarketUrl, {
+                method: 'GET',
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                },
+                signal: controller.signal,
+              });
+
+              clearTimeout(timeoutId);
+
+              if (!response.ok) {
+                console.warn(`⚠️ [PolymarketAdapter] 手动市场 ${externalId} 的 API 请求失败: ${response.status}`);
+                return;
               }
-            } catch (e) {
-              console.warn(`⚠️ [PolymarketAdapter] 解析手动市场 ${externalId} 的 outcomePrices 失败:`, e);
+
+              const singleMarketData: PolymarketMarket = await response.json();
+              
+              if (!singleMarketData || !singleMarketData.id) {
+                console.warn(`⚠️ [PolymarketAdapter] 手动市场 ${externalId} 的 API 返回数据无效`);
+                return;
+              }
+
+              // 🔥 简化处理：只更新关键字段，减少数据库操作
+              // 提取数据（复用 save 方法中的逻辑）
+              const title = singleMarketData.title || singleMarketData.question || '';
+              const description = singleMarketData.description || '';
+              const endDateStr = singleMarketData.endDateIso || singleMarketData.endDate;
+              const endDate = endDateStr ? new Date(endDateStr) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+          
+              // 提取 outcomePrices
+              let outcomePricesJson: string | null = null;
+              let yesProbability = 0.5;
+              let noProbability = 0.5;
+              let initialPriceValue: number | null = null;
+
+              if (singleMarketData.outcomePrices) {
+                try {
+                  const parsed = Array.isArray(singleMarketData.outcomePrices)
+                    ? singleMarketData.outcomePrices
+                    : JSON.parse(singleMarketData.outcomePrices);
+                  
+                  if (Array.isArray(parsed) && parsed.length >= 2) {
+                    yesProbability = parseFloat(String(parsed[0])) || 0.5;
+                    noProbability = parseFloat(String(parsed[1])) || 0.5;
+                    initialPriceValue = yesProbability;
+                    outcomePricesJson = JSON.stringify([yesProbability, noProbability]);
+                  }
+                } catch (e) {
+                  console.warn(`⚠️ [PolymarketAdapter] 解析手动市场 ${externalId} 的 outcomePrices 失败:`, e);
+                }
+              }
+
+              // 提取交易量
+              let totalVolume = 0;
+              if (singleMarketData.volumeNum !== undefined && singleMarketData.volumeNum > 0) {
+                totalVolume = singleMarketData.volumeNum;
+              } else if (singleMarketData.volume) {
+                totalVolume = parseFloat(singleMarketData.volume) || 0;
+              }
+
+              const externalVolumeValue = totalVolume;
+              const { calculateDisplayVolume } = await import('@/lib/marketUtils');
+              const newDisplayVolume = calculateDisplayVolume({
+                source: manualMarket.source || 'INTERNAL',
+                externalVolume: externalVolumeValue,
+                internalVolume: manualMarket.internalVolume || 0,
+                manualOffset: manualMarket.manualOffset || 0,
+              });
+
+              // 更新市场
+              await prisma.markets.update({
+                where: { id: manualMarket.id },
+                data: {
+                  title: title || manualMarket.title,
+                  description: description || '',
+                  closingDate: endDate,
+                  externalVolume: externalVolumeValue,
+                  totalVolume: newDisplayVolume,
+                  yesProbability,
+                  noProbability,
+                  outcomePrices: outcomePricesJson || null,
+                  image: singleMarketData.image || null,
+                  iconUrl: singleMarketData.icon || null,
+                  initialPrice: initialPriceValue,
+                  externalSource: 'polymarket', // 确保设置 externalSource
+                  updatedAt: new Date(),
+                },
+              });
+
+              updatedMarketIds.add(manualMarket.id);
+              manualMarketUpdatedCount++;
+              savedCount++;
+
+            } catch (fetchError) {
+              if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+                console.warn(`⏱️ [PolymarketAdapter] 手动市场 ${externalId} 的 API 请求超时`);
+              } else {
+                console.error(`❌ [PolymarketAdapter] 更新手动市场失败 (ID: ${manualMarket.id}):`, fetchError);
+                errorCount++;
+              }
             }
+          } catch (error) {
+            console.error(`❌ [PolymarketAdapter] 处理手动市场失败 (ID: ${manualMarket.id}):`, error);
+            errorCount++;
           }
-
-          // 提取交易量
-          let totalVolume = 0;
-          if (singleMarketData.volumeNum !== undefined && singleMarketData.volumeNum > 0) {
-            totalVolume = singleMarketData.volumeNum;
-          } else if (singleMarketData.volume) {
-            totalVolume = parseFloat(singleMarketData.volume) || 0;
-          }
-
-          const externalVolumeValue = totalVolume;
-          const { calculateDisplayVolume } = await import('@/lib/marketUtils');
-          const newDisplayVolume = calculateDisplayVolume({
-            source: existingMarket.source || 'INTERNAL',
-            externalVolume: externalVolumeValue,
-            internalVolume: existingMarket.internalVolume || 0,
-            manualOffset: existingMarket.manualOffset || 0,
-          });
-
-          // 更新市场
-          await prisma.markets.update({
-            where: { id: manualMarket.id },
-            data: {
-              title: title || existingMarket.title,
-              description: description || existingMarket.description,
-              closingDate: endDate,
-              externalVolume: externalVolumeValue,
-              totalVolume: newDisplayVolume,
-              yesProbability,
-              noProbability,
-              outcomePrices: outcomePricesJson || null,
-              image: singleMarketData.image || existingMarket.image || null,
-              iconUrl: singleMarketData.icon || existingMarket.iconUrl || null,
-              initialPrice: initialPriceValue,
-              externalSource: 'polymarket', // 确保设置 externalSource
-              updatedAt: new Date(),
-            },
-          });
-
-          updatedMarketIds.add(manualMarket.id);
-          manualMarketUpdatedCount++;
-          savedCount++;
-
-        } catch (error) {
-          console.error(`❌ [PolymarketAdapter] 更新手动市场失败 (ID: ${manualMarket.id}):`, error);
-          errorCount++;
+        }));
+          
+          console.log(`✅ [PolymarketAdapter] 已处理 ${Math.min(i + BATCH_SIZE, manualMarketsToProcess.length)}/${manualMarketsToProcess.length} 个手动市场`);
         }
-      }
 
     } catch (error) {
       console.error(`❌ [PolymarketAdapter] 处理手动市场更新失败:`, error);

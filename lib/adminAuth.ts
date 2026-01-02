@@ -8,6 +8,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from './prisma';
+import { auth } from './authExport';
 
 /**
  * Admin Token 验证结果
@@ -26,14 +27,25 @@ interface AdminAuthResult {
  */
 export async function verifyAdminToken(request?: Request | NextRequest): Promise<AdminAuthResult> {
   try {
-    // 🔥 P0修复：从 Cookie 读取 adminToken（与admin登录API设置的Cookie名称一致）
+    // 🔥 修复：同时支持 NextAuth session 和 adminToken cookie
+    // 方案 1：检查 NextAuth session
+    const session = await auth();
+    if (session && session.user) {
+      const isAdmin = (session.user as any).isAdmin === true || (session.user as any).role === 'ADMIN';
+      if (isAdmin) {
+        return {
+          success: true,
+          userId: session.user.id || (session.user as any).sub,
+        };
+      }
+    }
+    
+    // 方案 2：如果没有 NextAuth session，检查 adminToken cookie
     const cookieStore = await cookies();
     const adminToken = cookieStore.get('adminToken')?.value;
 
     // 检查 adminToken 是否存在
     if (!adminToken) {
-      // 🔥 性能优化：删除高频认证检查的日志（仅在开发环境输出）
-      // console.log('❌ [AdminAuth] adminToken Cookie 不存在');
       return {
         success: false,
         error: 'Unauthorized. Admin access required.',

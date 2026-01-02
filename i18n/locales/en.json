@@ -64,7 +64,13 @@
       "active_events": "Active Events",
       "total_rewards": "Total Rewards Distributed",
       "loading": "Loading...",
-      "no_data": "No Data"
+      "no_data": "No Data",
+      "stats": {
+        "active_events": "Active Events",
+        "volume_24h": "24H Trading Volume",
+        "tvl": "Total Value Locked (TVL)",
+        "active_traders_24h": "24H Active Traders"
+      }
     },
     "status": {
       "ending_soon": "Ending Soon",
@@ -326,7 +332,8 @@
       "success": "Login successful",
       "error": "Login failed",
       "error_credentials": "Invalid email or password",
-      "error_network": "Network error, please try again later"
+      "error_network": "Network error, please try again later",
+      "error_google_user": "This account was registered with Google. Please use the Google login button to sign in"
     },
     "register": {
       "title": "Sign Up",
@@ -356,6 +363,7 @@
     "time": {
       "all": "All",
       "15m": "15 Mins",
+      "30m": "30 Mins",
       "1h": "1 Hour",
       "4h": "4 Hours",
       "daily": "Daily",

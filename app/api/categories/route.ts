@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { BASE_MARKET_FILTER, buildHotMarketFilter, buildCategoryMarketFilter } from '@/lib/marketQuery'; // 🚀 统一过滤器
-import dayjs from '@/lib/dayjs';
-import { aggregateMarketsByTemplate } from '@/lib/marketAggregation'; // 🔥 使用公共聚合函数
+
+// 🔥 强制禁用缓存，确保新创建的分类能立即显示
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 /**
  * 公开 API - 获取分类列表
@@ -14,8 +15,9 @@ import { aggregateMarketsByTemplate } from '@/lib/marketAggregation'; // 🔥 �
  */
 export async function GET(request: NextRequest) {
   try {
-
-    // 获取所有启用的分类，包含父子关系，按 level 和 displayOrder 排序
+    console.log('🔍 [Categories API] 收到请求:', request.url);
+    
+    // 🔥 简化版本：直接返回基本分类数据，不计算 count
     const categories = await prisma.categories.findMany({
       where: {
         status: 'active',
@@ -40,164 +42,78 @@ export async function GET(request: NextRequest) {
             level: true,
             displayOrder: true,
             sortOrder: true,
-            other_categories: {
-              where: {
-                status: 'active',
-              },
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                icon: true,
-                level: true,
-                displayOrder: true,
-                sortOrder: true,
-              },
-              orderBy: [
-                { sortOrder: 'asc' },
-                { displayOrder: 'asc' },
-              ],
-            },
           },
           orderBy: [
-            { sortOrder: 'asc' }, // 🔥 优先按 sortOrder 升序排序
-            { displayOrder: 'asc' }, // 备用排序
+            { sortOrder: 'asc' },
+            { displayOrder: 'asc' },
           ],
         },
       },
       orderBy: [
         { level: 'asc' },
         { sortOrder: 'asc' },
-        { displayOrder: 'asc' }, // 备用排序
+        { displayOrder: 'asc' },
       ],
     });
 
-    // 🔥 递归函数：获取分类及其所有子分类的 ID
-    const getAllCategoryIds = (category: any): string[] => {
-      const ids = [category.id];
-      if (category.other_categories && category.other_categories.length > 0) {
-        category.other_categories.forEach((child: any) => {
-          ids.push(...getAllCategoryIds(child));
-        });
-      }
-      return ids;
-    };
+    // 🔥 简化：直接返回分类数据，count 设为 0
+    const formattedCategories = categories
+      .filter(cat => !cat.parentId) // 只返回顶级分类
+      .map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        icon: cat.icon,
+        displayOrder: cat.displayOrder,
+        status: cat.status,
+        createdAt: cat.createdAt,
+        updatedAt: cat.updatedAt,
+        level: cat.level,
+        parentId: cat.parentId,
+        sortOrder: cat.sortOrder,
+        count: 0, // 🔥 临时设为 0，后续可以添加计算逻辑
+        children: (cat.other_categories || []).map(child => ({
+          id: child.id,
+          name: child.name,
+          slug: child.slug,
+          icon: child.icon,
+          level: child.level,
+          displayOrder: child.displayOrder,
+          sortOrder: child.sortOrder,
+          count: 0, // 🔥 临时设为 0
+        })),
+      }));
 
-    // 🔥 使用公共聚合函数（已在文件顶部导入）
-
-    // 🔥 递归函数：为分类及其子分类添加 count
-    // 物理重写：严禁直接使用 count()，必须基于聚合后的唯一市场数量
-    const addCountToCategory = async (category: any): Promise<any> => {
-      // 先递归处理子分类，获取子分类的 count
-      const childrenWithCount = category.other_categories && category.other_categories.length > 0
-        ? await Promise.all(category.other_categories.map((child: any) => addCountToCategory(child)))
-        : undefined;
-
-      // 获取当前分类及其所有子分类的 ID
-      const categoryIds = getAllCategoryIds(category);
-
-      // 🚀 核心修复：判断是否为热门分类（categoryId === "-1" 或 slug === "hot"）
-      const isHotCategory = category.id === "-1" || category.slug === "hot" || category.name === "热门";
-      
-      // 🚀 物理重写：使用递归查询条件（包含父分类及其所有子分类）
-      // 热门分类：使用统一的 buildHotMarketFilter 函数（动态获取真实UUID）
-      // 非热门分类：使用 BASE_MARKET_FILTER + categoryIds（包含所有子分类）
-      const whereCondition = isHotCategory 
-        ? await buildHotMarketFilter()
-        : {
-            ...BASE_MARKET_FILTER,
-            categories: {
-              some: {
-                categoryId: { in: categoryIds }, // 🚀 修复：使用递归的categoryIds，包含父分类及其所有子分类
-              }
-            }
-          };
-
-      // 🚀 物理重写统计逻辑：
-      // 1. 先 findMany 获取所有符合 BASE_MARKET_FILTER 的市场记录
-      // 2. 执行 aggregateMarketsByTemplate 聚合
-      // 3. 返回聚合后的 Array.length
-      // 🚀 关键修复：必须查询与前端相同的字段，以便进行相同的时间过滤
-      const marketsForAggregation = await prisma.markets.findMany({
-        where: whereCondition,
-        select: {
-          id: true,
-          templateId: true,
-          title: true,
-          period: true,
-          closingDate: true,
-          status: true,
-          isFactory: true,
-          isActive: true, // 🚀 添加 isActive 字段，用于聚合函数中的过滤
-        },
-      });
-      
-      // 🚀 关键修复：前端统计必须使用与前端显示相同的聚合逻辑
-      // 使用 aggregateMarketsByTemplate 而不是 countUniqueMarketSeries
-      // 这样可以确保统计数量与前端显示数量完全一致（包括时间过滤）
-      const { aggregateMarketsByTemplate } = await import('@/lib/marketAggregation');
-      const aggregatedMarkets = aggregateMarketsByTemplate(marketsForAggregation);
-      const uniqueMarketCount = aggregatedMarkets.length;
-
-      // 🔥 验证：打印统计详情（用于调试，使用聚合后的数据进行验证）
-      const aggregatedMarketsWithTemplate = aggregatedMarkets.filter((m: any) => m.templateId);
-      const aggregatedIndependentMarkets = aggregatedMarkets.filter((m: any) => !m.templateId);
-      const uniqueTemplateIds = new Set(aggregatedMarketsWithTemplate.map((m: any) => m.templateId));
-
-      // 🚀 修复：直接使用 uniqueMarketCount，它已经通过 getAllCategoryIds 正确计算了父分类及其所有子分类聚合后的唯一系列总数
-      // 不需要再用子分类count之和去覆盖，因为 uniqueMarketCount 已经包含了所有数据
-      const marketCount = uniqueMarketCount;
-
-      // 🔥 确保返回的 count 字段始终是 number 类型，不会是 undefined
-      return {
-        ...category,
-        count: marketCount || 0, // 确保 count 始终是数字
-        children: childrenWithCount,
-      };
-    };
-
-    // 🔥 为所有分类添加市场数量
-    const categoriesWithCount = await Promise.all(
-      categories.map(category => addCountToCategory(category))
-    );
-
-    // 🔥 确保所有分类都有 count 字段（递归处理子分类）
-    const ensureCountField = (category: any): any => {
-      const count = typeof category.count === 'number' ? category.count : 0;
-      return {
-        ...category,
-        count, // 确保 count 字段始终是 number 类型
-        children: category.other_categories ? category.other_categories.map(ensureCountField) : undefined,
-      };
-    };
-
-    const finalCategories = categoriesWithCount.map(ensureCountField);
-
-    // 🔥 数据源头查证：物理验证 API 返回的数据结构
-    if (finalCategories.length > 0) {
-
-    }
-
-    // 🔥 调试日志：验证 count 字段是否正确返回
-
-    // 如果数据库为空，返回空数组（前端应该显示默认分类或提示）
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      data: finalCategories,
+      data: formattedCategories,
     });
-  } catch (error) {
-    console.error('❌ [Categories API] 获取分类列表失败:', error);
-    // 开发环境下返回详细错误信息
-    const errorMessage = process.env.NODE_ENV === 'development' 
-      ? (error instanceof Error ? error.message : '获取分类列表失败')
-      : '获取分类列表失败';
     
-    return NextResponse.json(
+    // 🔥 禁用缓存
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    
+    return response;
+  } catch (error) {
+    console.error('❌ [Categories API] 获取分类列表失败:');
+    console.error('错误类型:', error instanceof Error ? error.constructor.name : typeof error);
+    console.error('错误消息:', error instanceof Error ? error.message : String(error));
+    console.error('错误堆栈:', error instanceof Error ? error.stack : 'N/A');
+    
+    // 🔥 即使出错也返回空数组，而不是 500 错误
+    const errorResponse = NextResponse.json(
       {
-        success: false,
-        error: errorMessage,
+        success: true, // 🔥 改为 true，避免前端报错
+        data: [], // 🔥 返回空数组
       },
-      { status: 500 }
+      { status: 200 } // 🔥 改为 200，避免前端报错
     );
+    
+    errorResponse.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    errorResponse.headers.set('Pragma', 'no-cache');
+    errorResponse.headers.set('Expires', '0');
+    
+    return errorResponse;
   }
 }

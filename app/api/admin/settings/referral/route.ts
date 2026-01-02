@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/authExport';
 import { randomUUID } from 'crypto';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Admin 返佣设置 API
  * GET /api/admin/settings/referral - 获取返佣比例

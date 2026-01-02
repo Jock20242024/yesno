@@ -130,7 +130,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         redirect: false, // 防止页面被 NextAuth 强行刷新导致状态丢失
       }) as { error?: string } | undefined;
 
-      if (result?.error) throw new Error(result.error);
+      // 🔥 修复：检查是否是 Google 用户的特殊错误
+      if (result?.error) {
+        // 如果是 Google 用户的错误，需要特殊处理
+        if (result.error.includes('GOOGLE_USER') || result.error === 'GOOGLE_USER_MUST_USE_OAUTH') {
+          throw new Error('GOOGLE_USER_MUST_USE_OAUTH');
+        }
+        throw new Error(result.error);
+      }
 
       // 登录成功后手动刷新状态
       await refreshUserState();
@@ -143,7 +150,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return { success: true, user: userData };
     } catch (error: any) {
       console.error("❌ [AuthProvider] Login failed:", error);
-      return { success: false, error: error.message };
+      // 🔥 修复：保留原始错误信息，特别是 Google 用户的错误
+      return { success: false, error: error.message || 'Login failed' };
     }
   }, [refreshUserState]);
 

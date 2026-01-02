@@ -156,7 +156,8 @@ function calculateGlobalStats(markets: PolymarketMarket[]): {
  */
 async function updateGlobalStat(label: string, value: number): Promise<boolean> {
   try {
-    const stat = await prisma.globalStat.findFirst({
+    // 🔥 修复：使用 global_stats 表（不是 globalStat）
+    const stat = await prisma.global_stats.findFirst({
       where: {
         label: label, // 🔥 精确匹配
       },
@@ -164,7 +165,7 @@ async function updateGlobalStat(label: string, value: number): Promise<boolean> 
 
     if (stat && stat.isActive) {
       // ✅ 只有在指标存在且处于"启用"状态时，才更新数值
-      await prisma.globalStat.update({
+      await prisma.global_stats.update({
         where: { id: stat.id },
         data: { value: value }, // 🔥 只更新 value 字段
       });
@@ -173,6 +174,7 @@ async function updateGlobalStat(label: string, value: number): Promise<boolean> 
     } else if (!stat) {
       // 🔥 防破坏逻辑：如果数据库里没有这个指标（用户删除了），脚本禁止创建，跳过更新
       console.log(`⚠️ [Global Stats Calc] ${label} 指标不存在，跳过更新（禁止自动创建）`);
+      console.log(`💡 [Global Stats Calc] 提示：请在后台管理界面创建该指标，或运行初始化脚本`);
       return false;
     } else {
       // 🔥 防破坏逻辑：指标存在但被禁用，脚本禁止更新

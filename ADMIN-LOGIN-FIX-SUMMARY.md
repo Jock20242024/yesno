@@ -1,194 +1,144 @@
-# Admin 登录凭证验证修复总结
+# 后台登录重定向死循环 - 彻底修复总结
 
-**执行时间：** 2024-12-16
+## 问题描述
+后台登录后出现重定向死循环，无法正常访问管理后台。
 
----
+## 根本原因
+1. **双重认证机制混乱**：同时使用 `adminToken` cookie 和 NextAuth session，导致逻辑冲突
+2. **Middleware 检查逻辑复杂**：同时检查 `adminToken` cookie 和 NextAuth session，容易出错
+3. **登录流程不一致**：Google 登录使用 NextAuth，邮箱密码登录使用手动设置的 cookie
 
-## ✅ 修复完成
+## 修复方案
 
-### 修复一：prisma/seed.ts 增强
+### 1. 简化 Middleware（middleware.ts）
+**修改前**：
+- 同时检查 `adminToken` cookie 和 NextAuth session
+- 逻辑复杂，容易出错
 
-**主要改进：**
+**修改后**：
+- ✅ **完全信任 NextAuth Session**
+- ✅ 只检查 `user.role === 'ADMIN'`
+- ✅ 不再检查 `adminToken` cookie（已废弃）
 
-1. **✅ 强制验证哈希调用**
-   - 确保 `await hashPassword(adminPassword)` 明确等待
-   - 添加哈希验证：检查生成的哈希是否为空
-
-2. **✅ 添加哈希验证日志**
-   ```typescript
-   if (!passwordHash || passwordHash.length === 0) {
-     throw new Error('密码哈希失败：生成的哈希为空');
-   }
-   console.log(`✅ 密码哈希生成成功（长度: ${passwordHash.length}）`);
-   ```
-
-3. **✅ 添加密码验证测试**
-   - 在 seeding 完成后，自动测试密码是否正确哈希
-   - 使用 `comparePassword` 验证密码匹配
-   - 如果验证失败，抛出错误
-
-4. **✅ 增强日志输出**
-   - 显示密码哈希的前20个字符（用于调试）
-   - 显示验证测试结果
-
-### 修复二：app/api/admin/auth/login/route.ts 调试增强
-
-**主要改进：**
-
-1. **✅ 添加详细的调试日志**
-   ```typescript
-   console.log('🔍 [Admin Login] 开始密码验证:');
-   console.log(`   Email: ${user.email}`);
-   console.log(`   User ID: ${user.id}`);
-   console.log(`   isAdmin: ${user.isAdmin}`);
-   console.log(`   Password Hash (前30字符): ${user.passwordHash?.substring(0, 30)}...`);
-   console.log(`   Password Hash 长度: ${user.passwordHash?.length || 0}`);
-   ```
-
-2. **✅ 记录密码验证结果**
-   ```typescript
-   const isPasswordValid = await comparePassword(adminPassword, user.passwordHash);
-   console.log(`🔍 [Admin Login] 密码验证结果: ${isPasswordValid}`);
-   ```
-
-3. **✅ 明确的错误日志**
-   - 密码验证失败时记录错误
-   - 密码验证成功时记录成功
-
----
-
-## 📋 Seeding 执行结果
-
-**执行命令：** `npx prisma db seed`
-
-**执行结果：**
-```
-🌱 开始 Seeding...
-🔐 正在哈希管理员密码...
-✅ 密码哈希生成成功（长度: 60）
-👤 正在创建/更新管理员账户...
-✅ 管理员账户已创建/更新:
-   Email: yesno@yesno.com
-   ID: 16737f1c-4bf9-4b33-895c-841274bf8051
-   isAdmin: true
-   passwordHash: $2b$10$Zf06RLCaPt80J...
-
-🔍 验证密码哈希...
-✅ 密码验证测试通过！
-
-🎉 Seeding 完成！
-```
-
-**关键信息：**
-- ✅ 密码哈希成功生成（长度: 60 字符）
-- ✅ 管理员账户已创建/更新
-- ✅ 密码验证测试通过
-
----
-
-## 🔍 问题诊断
-
-### 之前可能的问题：
-
-1. **密码哈希未正确生成**
-   - 可能原因：`hashPassword` 调用时未正确等待
-   - 修复：强制 `await` 并验证哈希长度
-
-2. **密码验证逻辑问题**
-   - 可能原因：密码比较时未正确等待或哈希格式不匹配
-   - 修复：添加调试日志，明确记录验证过程
-
-3. **数据库中的哈希格式问题**
-   - 可能原因：之前的 seeding 可能存储了错误的哈希
-   - 修复：重新运行 seeding，覆盖旧的记录
-
-### 现在的保障：
-
-1. ✅ Seeding 时会验证密码哈希是否正确生成
-2. ✅ Seeding 完成后会自动测试密码验证
-3. ✅ 登录 API 会记录详细的调试信息
-4. ✅ 密码哈希使用 bcrypt（长度 60 字符，以 `$2b$10$` 开头）
-
----
-
-## 🧪 测试步骤
-
-### 1. 验证 Seeding 结果
-
-管理员账户信息：
-- **Email:** `yesno@yesno.com`
-- **Password:** `yesno2025`
-- **Password Hash:** `$2b$10$...` (bcrypt 格式，60 字符)
-- **isAdmin:** `true`
-
-### 2. 测试 Admin 登录
-
-访问：http://localhost:3000/admin/login
-
-使用凭证：
-- Email: `yesno@yesno.com`
-- Password: `yesno2025`
-
-**预期结果：**
-- ✅ 成功验证密码
-- ✅ 设置 `adminToken` Cookie
-- ✅ 跳转到 `/admin/dashboard`
-
-### 3. 查看调试日志
-
-如果登录失败，检查服务器日志：
-- 查看 `[Admin Login]` 开头的日志
-- 检查密码哈希是否正确读取
-- 检查密码验证结果
-
----
-
-## 📝 代码变更摘要
-
-### `prisma/seed.ts`
-
-**添加验证：**
 ```typescript
-// 验证密码哈希是否生成成功
-if (!passwordHash || passwordHash.length === 0) {
-  throw new Error('密码哈希失败：生成的哈希为空');
-}
+// 关键代码
+const userRole = (session?.user as any)?.role;
+const isAdmin = userRole === 'ADMIN';
 
-// 验证：测试密码是否正确哈希
-const passwordMatch = await comparePassword(adminPassword, adminUser.passwordHash);
-if (!passwordMatch) {
-  throw new Error('密码哈希验证失败');
+if (isAdminRoute && pathname !== '/admin/login') {
+  if (!isAuthenticated || !isAdmin) {
+    const loginUrl = new URL('/admin/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
 }
 ```
 
-### `app/api/admin/auth/login/route.ts`
+### 2. 强制 Session Role 注入（lib/auth.ts）
+**已确认**：
+- ✅ `jwt` callback 中设置 `token.role = isAdmin ? 'ADMIN' : 'USER'`
+- ✅ `session` callback 中设置 `session.user.role = isAdmin ? 'ADMIN' : 'USER'`
+- ✅ 每次都会从数据库查询最新的 `isAdmin` 状态
 
-**添加调试日志：**
+### 3. 修复 Admin 登录 API（app/api/admin/auth/login/route.ts）
+**修改前**：
+- 手动设置 `adminToken` cookie
+- 不创建 NextAuth session
+
+**修改后**：
+- ✅ 仅用于验证凭据
+- ✅ 实际登录由前端调用 NextAuth `signIn` 完成
+- ✅ 返回成功状态，前端再调用 NextAuth
+
+### 4. 修复登录页面（app/admin/login/page.tsx）
+**修改前**：
+- 调用自定义 API `/api/admin/auth/login`
+- 手动设置 cookie，然后跳转
+
+**修改后**：
+- ✅ **直接使用 NextAuth 的 `signIn('credentials')`**
+- ✅ 自动创建 NextAuth session
+- ✅ 登录成功后立即硬跳转：`window.location.href = '/admin/dashboard'`
+
 ```typescript
-console.log('🔍 [Admin Login] 开始密码验证:');
-console.log(`   Email: ${user.email}`);
-console.log(`   Password Hash (前30字符): ${user.passwordHash?.substring(0, 30)}...`);
+const result = await signIn('credentials', {
+  email: email,
+  password: password,
+  redirect: false, // 不自动跳转，手动控制
+});
 
-const isPasswordValid = await comparePassword(adminPassword, user.passwordHash);
-console.log(`🔍 [Admin Login] 密码验证结果: ${isPasswordValid}`);
+if (result?.ok) {
+  window.location.href = '/admin/dashboard';
+}
 ```
 
----
+### 5. 数据库用户角色检查
+**已确认**：
+- ✅ `guanliyuan@yesno.com` 的 `isAdmin` 字段为 `true`
+- ✅ 数据库中有 1 个管理员账号
 
-## ✅ 修复状态
+## 验证步骤
 
-- [x] Seeding 强制验证哈希调用
-- [x] Seeding 添加密码验证测试
-- [x] 登录 API 添加详细调试日志
-- [x] 重新执行 Seeding，覆盖旧记录
-- [x] 密码哈希验证测试通过
+1. **清除浏览器数据**（重要！）
+   - 清除所有 cookies
+   - 清除 localStorage 和 sessionStorage
 
----
+2. **访问后台登录页**
+   - 访问 `http://localhost:3000/admin/login`
 
-**所有修复已完成！** 🎉
+3. **使用邮箱密码登录**
+   - 输入 `guanliyuan@yesno.com` 和密码
+   - 点击登录
 
-现在 Admin 登录系统应该能够：
-1. 正确生成和存储密码哈希
-2. 正确验证密码
-3. 提供详细的调试信息以便排查问题
+4. **检查 Network 标签**
+   - 应该看到：
+     - ✅ `POST /api/auth/callback/credentials` 返回 200
+     - ✅ 设置 `next-auth.session-token` cookie
+     - ✅ 302 重定向到 `/admin/dashboard`
+     - ❌ **不应该**看到重定向到 `/admin/login` 的循环
 
+5. **检查 Session**
+   - 打开浏览器控制台
+   - 检查 `session.user.role` 应该为 `'ADMIN'`
+
+## 技术细节
+
+### NextAuth Session 流程
+1. 用户输入邮箱密码
+2. 前端调用 `signIn('credentials', { email, password })`
+3. NextAuth 调用 `authorize` 函数验证凭据
+4. 如果验证成功，NextAuth 创建 JWT token
+5. `jwt` callback 设置 `token.role = 'ADMIN'`
+6. NextAuth 设置 `next-auth.session-token` cookie
+7. `session` callback 设置 `session.user.role = 'ADMIN'`
+8. Middleware 检查 `session.user.role === 'ADMIN'`
+9. 允许访问 `/admin/*` 路由
+
+### 关键修复点
+- ✅ **统一认证机制**：所有登录都使用 NextAuth session
+- ✅ **简化 Middleware**：只检查 NextAuth session 的 role
+- ✅ **硬跳转**：登录成功后使用 `window.location.href` 立即跳转
+- ✅ **Role 注入**：确保 jwt 和 session callback 都正确设置 role
+
+## 注意事项
+
+1. **Google 登录**：仍然使用 NextAuth，但会检查 `isAdmin` 并设置 `role`
+2. **邮箱密码登录**：现在也使用 NextAuth，与 Google 登录一致
+3. **Session 同步**：每次请求都会从数据库查询最新的 `isAdmin` 状态
+4. **Cookie 清理**：旧的 `adminToken` cookie 可以忽略，不再使用
+
+## 测试建议
+
+1. ✅ 清除浏览器数据后测试登录
+2. ✅ 检查 Network 标签，确认没有重定向循环
+3. ✅ 验证 `session.user.role === 'ADMIN'`
+4. ✅ 测试 Google 登录（如果配置了）
+5. ✅ 测试登出后重新登录
+
+## 相关文件
+
+- `middleware.ts` - 路由保护逻辑
+- `lib/auth.ts` - NextAuth 配置
+- `app/api/admin/auth/login/route.ts` - Admin 登录 API（已简化）
+- `app/admin/login/page.tsx` - Admin 登录页面
+- `scripts/check-user-role.ts` - 检查用户角色脚本

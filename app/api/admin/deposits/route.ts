@@ -3,6 +3,8 @@ import { DBService } from '@/lib/dbService'; // 修复：使用正确的 DBServi
 import { verifyAdminToken, createUnauthorizedResponse } from '@/lib/adminAuth';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // 权限校验：使用统一的 Admin Token 验证函数（从 Cookie 读取）

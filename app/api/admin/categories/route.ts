@@ -34,9 +34,12 @@ export async function GET(request: NextRequest) {
     // 🔥 双重校验：角色为 ADMIN 或邮箱为管理员邮箱
     const userRole = (session.user as any).role;
     const userEmail = session.user.email;
-    const adminEmail = 'yesno@yesno.com'; // 管理员邮箱
+    const adminEmails = ['yesno@yesno.com', 'guanliyuan@yesno.com']; // 管理员邮箱列表
     
-    if (userRole !== 'ADMIN' && userEmail !== adminEmail) {
+    // 检查是否为管理员：角色为 ADMIN 或邮箱在管理员列表中
+    const isAdmin = userRole === 'ADMIN' || (userEmail && adminEmails.includes(userEmail));
+    
+    if (!isAdmin) {
       return NextResponse.json(
         {
           success: false,
@@ -62,8 +65,8 @@ export async function GET(request: NextRequest) {
     // 🔥 彻底清空后台分类接口过滤器：物理删除所有过滤，直接执行 findMany()
     // 确保返回数据库里所有分类记录，不管它有没有父类，不管它是什么状态
 
-    const categories = await prisma.categories.findMany({
-      // 🔥 物理删除所有 where 条件
+    // 🔥 修复：先查询所有分类，然后在应用层去重，避免数据库层面的重复
+    const allCategories = await prisma.categories.findMany({
       include: {
         categories: {
           select: {
@@ -72,8 +75,61 @@ export async function GET(request: NextRequest) {
             slug: true,
           },
         },
+        other_categories: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            level: true,
+            displayOrder: true,
+            sortOrder: true,
+            status: true,
+          },
+          orderBy: { sortOrder: 'asc' },
+        },
       },
       orderBy: { sortOrder: 'asc' },
+    });
+
+    // 🔥 修复：只返回顶级分类（parentId 为 null），子分类通过 children 字段显示
+    // 这样可以避免子分类被重复显示（既作为独立行，又作为父分类的子分类）
+    const topLevelCategories = allCategories.filter((cat: any) => !cat.parentId);
+    
+    // 🔥 去重：根据 id 去重，确保每个分类只出现一次
+    const uniqueCategoriesMap = new Map();
+    topLevelCategories.forEach((cat: any) => {
+      if (!uniqueCategoriesMap.has(cat.id)) {
+        // 对子分类也去重
+        const uniqueChildrenMap = new Map();
+        if (cat.other_categories && Array.isArray(cat.other_categories)) {
+          cat.other_categories.forEach((child: any) => {
+            const childId = String(child.id || '');
+            if (!uniqueChildrenMap.has(childId)) {
+              uniqueChildrenMap.set(childId, child);
+            } else {
+              // 🔥 调试：如果发现重复，打印日志
+              console.warn(`⚠️ [Admin Categories] 发现重复的子分类: ${child.name} (${child.slug}), ID: ${childId}`);
+            }
+          });
+        }
+        uniqueCategoriesMap.set(cat.id, {
+          ...cat,
+          other_categories: Array.from(uniqueChildrenMap.values()),
+        });
+      }
+    });
+    
+    const categories = Array.from(uniqueCategoriesMap.values());
+    
+    // 🔥 调试：打印分类结构
+    console.log('📊 [Admin Categories] 顶级分类数量:', categories.length);
+    categories.forEach((cat: any) => {
+      console.log(`📁 [Admin Categories] 分类: ${cat.name} (${cat.slug}), 子分类数: ${cat.other_categories?.length || 0}`);
+      if (cat.other_categories && cat.other_categories.length > 0) {
+        cat.other_categories.forEach((child: any) => {
+          console.log(`  └─ 子分类: ${child.name} (${child.slug}), ID: ${child.id}`);
+        });
+      }
     });
 
     // 🔥 调试：打印前3个分类的详细信息
@@ -189,10 +245,14 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    // 🔥 修复：再次过滤，只处理顶级分类（parentId 为 null）
+    // 因为 categoriesWithUniqueCount 可能包含子分类，我们需要确保只返回顶级分类
+    const topLevelCategoriesWithCount = categoriesWithUniqueCount.filter((cat: any) => !cat.parentId);
+    
     // 🔥 简化处理：直接映射，确保不抛出任何错误
     const sanitizedCategories: any[] = [];
     
-    for (const category of categoriesWithUniqueCount) {
+    for (const category of topLevelCategoriesWithCount) {
       try {
         const totalCount = (category as any).uniqueMarketCount || 0;
         
@@ -228,6 +288,34 @@ export async function GET(request: NextRequest) {
           }
         } else {
           sanitizedCategory.parent = null;
+        }
+        
+        // 🔥 修复：包含子分类数据（children），并去重
+        if (category.other_categories && Array.isArray(category.other_categories) && category.other_categories.length > 0) {
+          try {
+            // 🔥 去重：使用 Map 根据 id 去重，避免重复显示
+            const uniqueChildrenMap = new Map();
+            category.other_categories.forEach((child: any) => {
+              const childId = String(child.id || '');
+              // 如果已存在相同 ID，保留第一个（或根据需求选择保留哪个）
+              if (!uniqueChildrenMap.has(childId)) {
+                uniqueChildrenMap.set(childId, {
+                  id: childId,
+                  name: String(child.name || ''),
+                  slug: String(child.slug || ''),
+                  level: convertToNumber(child.level || 0),
+                  displayOrder: convertToNumber(child.displayOrder || 0),
+                  sortOrder: convertToNumber(child.sortOrder || child.displayOrder || 0),
+                  status: String(child.status || 'active'),
+                });
+              }
+            });
+            sanitizedCategory.children = Array.from(uniqueChildrenMap.values());
+          } catch {
+            sanitizedCategory.children = [];
+          }
+        } else {
+          sanitizedCategory.children = [];
         }
         
         sanitizedCategories.push(sanitizedCategory);
@@ -301,9 +389,12 @@ export async function POST(request: NextRequest) {
     // 🔥 双重校验：角色为 ADMIN 或邮箱为管理员邮箱
     const userRole = (session.user as any).role;
     const userEmail = session.user.email;
-    const adminEmail = 'yesno@yesno.com'; // 管理员邮箱
+    const adminEmails = ['yesno@yesno.com', 'guanliyuan@yesno.com']; // 管理员邮箱列表
     
-    if (userRole !== 'ADMIN' && userEmail !== adminEmail) {
+    // 检查是否为管理员：角色为 ADMIN 或邮箱在管理员列表中
+    const isAdmin = userRole === 'ADMIN' || (userEmail && adminEmails.includes(userEmail));
+    
+    if (!isAdmin) {
       return NextResponse.json(
         {
           success: false,
@@ -471,6 +562,9 @@ export async function POST(request: NextRequest) {
 
     // 创建分类
 
+    // 🔥 修复：确保新创建的分类状态默认为 'active'，这样前端才能立即显示
+    const finalStatus = status && status.trim() ? status.trim() : 'active';
+    
     const newCategory = await prisma.categories.create({
       data: {
         id: randomUUID(),
@@ -481,9 +575,19 @@ export async function POST(request: NextRequest) {
         sortOrder: finalSortOrder,
         parentId: finalParentId, // 确保 parentId 正确保存
         level: level,
-        status: status || 'active',
+        status: finalStatus, // 🔥 确保状态为 'active'
         updatedAt: new Date(),
       },
+    });
+    
+    // 🔥 调试：打印创建的分类信息
+    console.log('✅ [Admin Categories POST] 创建分类成功:', {
+      id: newCategory.id,
+      name: newCategory.name,
+      slug: newCategory.slug,
+      status: newCategory.status,
+      parentId: newCategory.parentId,
+      level: newCategory.level,
     });
 
     return NextResponse.json({

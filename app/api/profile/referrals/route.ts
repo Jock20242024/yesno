@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth/utils';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * 用户返佣数据 API
  * GET /api/profile/referrals

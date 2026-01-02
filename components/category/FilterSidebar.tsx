@@ -4,16 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 
-// 🔥 物理隔离：本地硬编码筛选器配置，切断与外部配置文件的依赖
-const LOCAL_TIME_FILTERS = [
-  { id: 'all', labelKey: 'common.time.all' },
-  { id: '15m', labelKey: 'common.time.15m' },
-  { id: '1h', labelKey: 'common.time.1h' },
-  { id: '4h', labelKey: 'common.time.4h' },
-  { id: '1d', labelKey: 'common.time.1d' },
-  { id: '1w', labelKey: 'common.time.1w' },
-  { id: '1M', labelKey: 'common.time.1M' },
-];
+// 🔥 恢复数据库子分类设计：移除所有硬编码的时间过滤器
 
 interface FilterSidebarProps {
   slug: string;
@@ -47,19 +38,8 @@ export default function FilterSidebar({
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [filterCounts, setFilterCounts] = useState<Record<string, number>>({});
-
-  // 🔥 物理隔离：使用本地硬编码的筛选器配置，不使用外部 CATEGORY_FILTERS_CONFIG
-  // 对于 crypto 和 finance 分类，使用时间筛选器
-  const shouldShowTimeFilters = slug === 'crypto' || slug === 'finance';
-  const translatedFilters = useMemo(() => {
-    if (!shouldShowTimeFilters) return [];
-    return LOCAL_TIME_FILTERS.map((filter) => ({
-      id: filter.id,
-      labelKey: filter.labelKey,
-      translatedLabel: t(filter.labelKey),
-    }));
-  }, [shouldShowTimeFilters, t]);
+  // 🔥 恢复数据库子分类设计：移除所有硬编码的时间过滤器逻辑
+  // 只显示数据库中的子分类
 
   // 获取分类列表（包含父子关系）
   useEffect(() => {
@@ -82,35 +62,8 @@ export default function FilterSidebar({
     fetchCategories();
   }, []);
 
-  // 获取筛选器数量
-  useEffect(() => {
-    const fetchFilterCounts = async () => {
-      try {
-        const response = await fetch(`/api/markets?category=${slug}`);
-        const data = await response.json();
-
-        if (data.success && data.data) {
-          const counts: Record<string, number> = {};
-          data.data.forEach((market: any) => {
-            const period = market.period;
-            if (period === 15) counts['15m'] = (counts['15m'] || 0) + 1;
-            else if (period === 60) counts['1h'] = (counts['1h'] || 0) + 1;
-            else if (period === 240) counts['4h'] = (counts['4h'] || 0) + 1;
-            else if (period === 1440) counts['1d'] = (counts['1d'] || 0) + 1;
-            else if (period === 10080) counts['1w'] = (counts['1w'] || 0) + 1;
-            counts['all'] = (counts['all'] || 0) + 1;
-          });
-          setFilterCounts(counts);
-        }
-      } catch (error) {
-        console.error("Failed to fetch filter counts:", error);
-      }
-    };
-
-    if (shouldShowTimeFilters) {
-      fetchFilterCounts();
-    }
-  }, [slug, shouldShowTimeFilters]);
+  // 🔥 恢复数据库子分类设计：移除时间过滤器的数量统计逻辑
+  // 子分类的数量已经通过 /api/categories 返回的 count 字段获取
 
   // 切换分类展开/折叠
   const toggleCategory = (categoryId: string) => {
@@ -181,44 +134,15 @@ export default function FilterSidebar({
     });
   };
 
+  // 🔥 恢复数据库子分类设计：只显示数据库中的分类树，不显示硬编码的时间过滤器
+  // 查找当前分类及其子分类
+  const currentCategory = useMemo(() => {
+    return categories.find(cat => cat.slug === slug);
+  }, [categories, slug]);
+
   return (
     <div className="flex flex-col gap-6">
-      {/* 时间筛选器 - 仅对 crypto 和 finance 显示 */}
-      {shouldShowTimeFilters && translatedFilters.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-            {t('common.time.title') || 'Time Filter'}
-          </h3>
-          <div className="flex flex-col gap-2">
-            {translatedFilters.map((filter) => {
-              const isActive = activeFilter === filter.id;
-              return (
-                <button
-                  key={filter.id}
-                  onClick={() => onFilterChange(filter.id)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-primary/20 text-primary border border-primary/50"
-                      : "text-text-secondary hover:text-white hover:bg-white/5 border border-transparent"
-                  }`}
-                >
-                  {/* 🔥 关键：suppressHydrationWarning + t() 翻译 */}
-                  <span suppressHydrationWarning>
-                    {filter.translatedLabel || filter.id}
-                  </span>
-                  {filterCounts[filter.id] !== undefined && (
-                    <span className="text-xs text-text-secondary">
-                      ({filterCounts[filter.id]})
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 分类树 */}
+      {/* 分类树 - 只显示数据库中的分类 */}
       {!isLoading && categories.length > 0 && (
         <div className="flex flex-col gap-3">
           <h3 className="text-sm font-bold text-white uppercase tracking-wider">
@@ -226,6 +150,38 @@ export default function FilterSidebar({
           </h3>
           <div className="flex flex-col gap-1">
             {renderCategoryTree(categories)}
+          </div>
+        </div>
+      )}
+
+      {/* 如果当前分类有子分类，显示子分类 */}
+      {!isLoading && currentCategory && currentCategory.children && currentCategory.children.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+            Subcategories
+          </h3>
+          <div className="flex flex-col gap-1">
+            {currentCategory.children.map((child) => {
+              const isActive = activeFilter === child.slug;
+              return (
+                <button
+                  key={child.id}
+                  onClick={() => selectCategory(child.slug)}
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-primary/20 text-primary border border-primary/50"
+                      : "text-text-secondary hover:text-white hover:bg-white/5 border border-transparent"
+                  }`}
+                >
+                  <span>{child.name}</span>
+                  {child.count !== undefined && (
+                    <span className="text-xs text-text-secondary">
+                      ({child.count})
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

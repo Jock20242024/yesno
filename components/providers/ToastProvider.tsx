@@ -1,10 +1,17 @@
 'use client';
 
+import { Toaster } from 'sonner';
+
 /**
- * Toast Provider - 已移除 sonner 依赖
- * 如需 toast 功能，请使用其他 toast 库或自定义实现
+ * Toast Provider - 使用 sonner 提供 toast 通知功能
  */
 export function ToastProvider() {
-  // 暂时返回空，等待替换为其他 toast 库
-  return null;
+  return (
+    <Toaster
+      position="top-center"
+      richColors
+      closeButton
+      duration={3000}
+    />
+  );
 }

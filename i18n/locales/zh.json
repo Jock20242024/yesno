@@ -64,7 +64,13 @@
       "active_events": "活跃预测事件",
       "total_rewards": "累计发放奖励",
       "loading": "加载中...",
-      "no_data": "暂无数据"
+      "no_data": "暂无数据",
+      "stats": {
+        "active_events": "进行中事件",
+        "volume_24h": "24H 交易量",
+        "tvl": "总锁仓量 (TVL)",
+        "active_traders_24h": "24H 活跃交易者"
+      }
     },
     "status": {
       "ending_soon": "即将截止",
@@ -326,7 +332,8 @@
       "success": "登录成功",
       "error": "登录失败",
       "error_credentials": "邮箱或密码错误",
-      "error_network": "网络错误，请稍后重试"
+      "error_network": "网络错误，请稍后重试",
+      "error_google_user": "此账号使用 Google 登录注册，请使用 Google 登录按钮登录"
     },
     "register": {
       "title": "注册",
@@ -356,6 +363,7 @@
     "time": {
       "all": "全部",
       "15m": "15分钟",
+      "30m": "30分钟",
       "1h": "1小时",
       "4h": "4小时",
       "daily": "每天",

@@ -3,6 +3,8 @@ import { DBService } from '@/lib/dbService';
 import { prisma } from '@/lib/prisma';
 import { calculatePositionValue } from '@/lib/utils/valuation';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * 排行榜 API
  * GET /api/rankings

@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth/utils';
 import { calculatePositionValue } from '@/lib/utils/valuation';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * 获取用户持仓列表 API
  * GET /api/positions?type=active|history

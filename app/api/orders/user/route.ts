@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { DBService } from '@/lib/dbService';
 import { requireAuth } from '@/lib/auth/utils';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * 获取当前用户的订单列表 API
  * GET /api/orders/user

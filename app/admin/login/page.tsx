@@ -9,36 +9,66 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/admin/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          adminEmail: email,
-          adminPassword: password,
-        }),
+      console.log('🔐 [Admin Login] 开始登录请求...', { email });
+      
+      // 🔥 关键修复：直接使用 NextAuth 的 signIn 方法
+      // 这会自动创建 session 并设置 next-auth.session-token cookie
+      const result = await signIn('credentials', {
+        email: email,
+        password: password,
+        redirect: false, // 不自动跳转，手动控制
       });
 
-      const data = await response.json();
+      console.log('📡 [Admin Login] NextAuth signIn 结果:', result);
 
-      if (data.success) {
-        toast.success('登录成功');
-        window.location.href = '/admin/dashboard';
-      } else {
-        toast.error(data.error || '登录失败');
+      if (result?.error) {
+        console.error('❌ [Admin Login] NextAuth signIn 失败:', result.error);
+        let errorMessage = '登录失败';
+        
+        if (result.error === 'CredentialsSignin') {
+          errorMessage = '邮箱或密码错误';
+        } else if (result.error === 'GOOGLE_USER_MUST_USE_OAUTH') {
+          errorMessage = '此账号使用 Google 登录注册，请使用 Google 登录按钮登录';
+        }
+        
+        toast.error(errorMessage);
+        setIsLoading(false);
+        return;
       }
-    } catch (error) {
-      console.error('Admin login error:', error);
+
+      if (result?.ok) {
+        console.log('🎉 [Admin Login] NextAuth 登录成功！');
+        console.log('🔍 [Admin Login] 当前路径:', window.location.pathname);
+        
+        // 🔥 绝杀修复：先清除所有 localStorage 缓存，确保没有旧数据干扰
+        console.log('🧹 [Admin Login] 清除 localStorage 缓存...');
+        try {
+          window.localStorage.clear();
+          console.log('✅ [Admin Login] localStorage 已清除');
+        } catch (clearError) {
+          console.warn('⚠️ [Admin Login] 清除 localStorage 失败:', clearError);
+        }
+        
+        // 🔥 绝杀修复：使用 replace 而不是 href，避免历史记录问题
+        console.log('🚀 [Admin Login] 执行硬跳转: window.location.replace("/admin/dashboard")');
+        window.location.replace('/admin/dashboard');
+        return;
+      }
+
+      // 如果既没有 error 也没有 ok，说明出现了未知情况
+      console.error('❌ [Admin Login] NextAuth signIn 返回未知结果:', result);
       toast.error('登录失败，请稍后重试');
-    } finally {
+      setIsLoading(false);
+    } catch (error) {
+      console.error('❌ [Admin Login] 登录异常:', error);
+      console.error('❌ [Admin Login] 错误详情:', error instanceof Error ? error.message : String(error));
+      toast.error('登录失败，请稍后重试');
       setIsLoading(false);
     }
   };

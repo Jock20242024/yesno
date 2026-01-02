@@ -19,9 +19,8 @@ interface CategoryPageProps {
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = await params;
 
-  // 检查该分类是否有筛选配置
-  // 🔥 物理隔离：本地硬编码判断，crypto 和 finance 分类有筛选器
-  const hasFilters = slug === 'crypto' || slug === 'finance';
+  // 🔥 恢复数据库子分类设计：移除硬编码的筛选配置判断
+  // 所有子分类都从数据库读取，不需要硬编码判断
 
   let categoryName: string;
   let pageTitle: string;
@@ -59,7 +58,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       slug={slug}
       categoryName={categoryName}
       pageTitle={pageTitle}
-      hasFilters={hasFilters}
+      hasFilters={false}
     />
   );
 }

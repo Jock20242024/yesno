@@ -14,7 +14,7 @@ import { randomUUID } from "crypto";
 // NextAuth 配置
 // NextAuth v5 配置对象
 export const authOptions: NextAuthConfig = {
-  debug: true,
+  debug: process.env.NODE_ENV === 'development',
   // 🔥 修复：信任 localhost 和所有主机（用于开发和生产环境）
   trustHost: true,
   // 🔥 修复：移除全局 signIn 页面配置，让各个页面自己控制跳转
@@ -51,9 +51,27 @@ export const authOptions: NextAuthConfig = {
           // 查找用户
           const user = await prisma.users.findUnique({
             where: { email: credentials.email as string },
+            select: {
+              id: true,
+              email: true,
+              passwordHash: true,
+              provider: true,
+              isAdmin: true,
+              balance: true,
+            },
           });
 
-          if (!user || !user.passwordHash) {
+          if (!user) {
+            return null;
+          }
+
+          // 检查用户是否是通过 Google 注册的
+          if (user.provider === "google") {
+            throw new Error("GOOGLE_USER_MUST_USE_OAUTH");
+          }
+
+          // 检查用户是否有密码
+          if (!user.passwordHash) {
             return null;
           }
 
@@ -74,8 +92,15 @@ export const authOptions: NextAuthConfig = {
             isAdmin: user.isAdmin || false,
             balance: user.balance || 0,
           };
-        } catch (error) {
-          console.error("Credentials authorize error:", error);
+        } catch (error: any) {
+          // 如果是 Google 用户的特殊错误，重新抛出以便前端处理
+          if (error.message === "GOOGLE_USER_MUST_USE_OAUTH") {
+            throw error;
+          }
+          // 只在开发环境记录错误
+          if (process.env.NODE_ENV === 'development') {
+            console.error("Credentials Auth Error:", error);
+          }
           return null;
         }
       }
@@ -94,18 +119,16 @@ export const authOptions: NextAuthConfig = {
         sameSite: 'lax', // 🔥 关键修复：使用 'lax' 而不是 'strict'，允许同站请求携带 Cookie
         path: '/',
         secure: process.env.NODE_ENV === 'production', // 生产环境使用 HTTPS，开发环境允许 HTTP
+        maxAge: 60 * 60 * 24 * 7, // 🔥 修复：设置 7 天过期时间，确保 session 持久化
       },
     },
   },
   callbacks: {
     async signIn({ user, account }: any) {
       try {
-        // 🔥 登录/注册全局扩展：允许所有合法的 Google 和账号登录
-        // 如果是新用户登录且数据库无记录，确保 Prisma 自动创建基础 User 记录
         if (account?.provider === "google") {
           const email = user.email;
           if (!email) {
-            console.error("❌ [SignIn Callback] Google 登录失败：缺少 email");
             return false;
           }
 
@@ -117,67 +140,107 @@ export const authOptions: NextAuthConfig = {
             });
 
             if (existingUser) {
-              // 现有用户：允许登录
-
               return true;
             } else {
-              // 新用户：自动创建基础 User 记录（isAdmin 默认为 false）
-              const newUser = await prisma.users.create({
+              // 新用户：自动创建基础 User 记录
+              await prisma.users.create({
                 data: {
                   id: randomUUID(),
                   updatedAt: new Date(),
                   email: email,
                   provider: "google",
-                  passwordHash: null, // Google 用户没有密码
+                  passwordHash: null,
                   balance: 0,
-                  isAdmin: false, // 🔥 新用户默认非管理员
+                  isAdmin: false,
                   isBanned: false,
                 },
               });
-
               return true;
             }
           } catch (error) {
-            // 🔥 修复：增加详细日志，帮助诊断 Google 登录失败问题
-            console.error("❌ [SignIn Callback] 数据库查询/创建错误:", error);
-            console.error("❌ [SignIn Callback] Error details:", {
-              message: error instanceof Error ? error.message : String(error),
-              stack: error instanceof Error ? error.stack : undefined,
-              email: email,
-            });
+            if (process.env.NODE_ENV === 'development') {
+              console.error("SignIn Callback Error:", error);
+            }
             return false;
           }
         }
         
-        // 非 Google 登录方式（如 Credentials），允许通过
         return true;
       } catch (error) {
-        console.error("❌ [SignIn Callback] 未知错误:", error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error("SignIn Callback Error:", error);
+        }
         return false;
       }
     },
     async jwt({ token, user }: any) {
-      // 🔥 身份"强绑定"：恢复带日志的版本
       if (user) {
-
         token.sub = user.id;
         token.id = user.id;
         token.email = user.email;
       }
-      // 🔥 强制从数据库查询最新的 isAdmin 状态
-      const dbUser = await prisma.users.findUnique({ where: { email: token.email as string } });
-      const isAdmin = dbUser?.isAdmin === true;
-      token.isAdmin = isAdmin;
-      // 🔥 添加 role 字段：如果是管理员则为 'ADMIN'，否则为 'USER'
-      token.role = isAdmin ? 'ADMIN' : 'USER';
+      
+      // 从数据库查询最新的 isAdmin 状态
+      try {
+        const dbUser = await prisma.users.findUnique({ 
+          where: { email: token.email as string },
+          select: { isAdmin: true }
+        });
+        
+        if (dbUser) {
+          const isAdmin = dbUser.isAdmin === true;
+          token.isAdmin = isAdmin;
+          token.role = isAdmin ? 'ADMIN' : 'USER';
+        } else {
+          token.isAdmin = false;
+          token.role = 'USER';
+        }
+      } catch (error: any) {
+        // 如果数据库查询失败，使用 user 对象中的 isAdmin（如果存在）
+        if (user && (user as any).isAdmin !== undefined) {
+          token.isAdmin = (user as any).isAdmin || false;
+          token.role = token.isAdmin ? 'ADMIN' : 'USER';
+        } else {
+          token.isAdmin = false;
+          token.role = 'USER';
+        }
+        if (process.env.NODE_ENV === 'development') {
+          console.error("JWT Callback Error:", error);
+        }
+      }
 
       return token;
+    },
+    async redirect({ url, baseUrl }: any) {
+      try {
+        const urlObj = new URL(url, baseUrl);
+        const callbackUrl = urlObj.searchParams.get('callbackUrl') || urlObj.pathname;
+        
+        if (callbackUrl === '/' || callbackUrl === baseUrl || !callbackUrl) {
+          return baseUrl;
+        }
+        
+        if (url.startsWith('/')) {
+          return new URL(url, baseUrl).toString();
+        }
+        
+        if (url.startsWith(baseUrl)) {
+          return url;
+        }
+        
+        return baseUrl;
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Auth Redirect Error:', error);
+        }
+        return baseUrl;
+      }
     },
     async session({ session, token }: any) {
       if (session.user && token.email) {
         session.user.id = token.sub as string;
         
-        // 🔥 修复：强制从数据库查询最新的 isAdmin 状态（不依赖 JWT token）
+        // 从数据库查询最新的 isAdmin 状态
         try {
           const dbUser = await prisma.users.findUnique({ 
             where: { email: token.email as string },
@@ -188,20 +251,17 @@ export const authOptions: NextAuthConfig = {
             const isAdmin = dbUser.isAdmin === true;
             (session.user as any).isAdmin = isAdmin;
             (session.user as any).role = isAdmin ? 'ADMIN' : 'USER';
-            
-            // 🔥 调试日志：打印当前用户的权限状态
-
           } else {
-            // 用户不存在，设置为非管理员
             (session.user as any).isAdmin = false;
             (session.user as any).role = 'USER';
-            console.warn('⚠️ [Auth-Session] 用户不存在于数据库:', token.email);
           }
         } catch (error) {
-          console.error('❌ [Auth-Session] 数据库查询失败:', error);
           // 出错时使用 token 中的值作为回退
           (session.user as any).isAdmin = token.isAdmin || false;
           (session.user as any).role = token.role || 'USER';
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Auth Session Error:', error);
+          }
         }
       }
       return session;
