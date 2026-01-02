@@ -15,10 +15,13 @@ import { randomUUID } from "crypto";
 // NextAuth v5 配置对象
 export const authOptions: NextAuthConfig = {
   debug: true,
-  // 🔥 修复：配置自定义登录页面，确保管理员路由跳转到 /admin/login 而不是默认的 /login
-  pages: {
-    signIn: '/admin/login', // 管理员登录页面
-  },
+  // 🔥 修复：信任 localhost 和所有主机（用于开发和生产环境）
+  trustHost: true,
+  // 🔥 修复：移除全局 signIn 页面配置，让各个页面自己控制跳转
+  // 不再强制所有登录都跳转到 /admin/login
+  // pages: {
+  //   signIn: '/admin/login', // 已移除：这会导致所有 Google 登录都跳转到后台
+  // },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -135,7 +138,13 @@ export const authOptions: NextAuthConfig = {
               return true;
             }
           } catch (error) {
+            // 🔥 修复：增加详细日志，帮助诊断 Google 登录失败问题
             console.error("❌ [SignIn Callback] 数据库查询/创建错误:", error);
+            console.error("❌ [SignIn Callback] Error details:", {
+              message: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+              email: email,
+            });
             return false;
           }
         }

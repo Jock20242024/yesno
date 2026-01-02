@@ -154,3 +154,7 @@ dist
 
 # next-env.d.ts
 next-env.d.ts
+# 环境变量备份文件
+.env.backup.*
+.env.production.backup.*
+.env.production.bak*

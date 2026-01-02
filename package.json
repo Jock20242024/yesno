@@ -20,7 +20,7 @@
     "seed": "ts-node --compiler-options {\"module\":\"commonjs\"} prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.0.0",
+    "@prisma/client": "^6.19.1",
     "@types/canvas-confetti": "^1.9.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.66.2",

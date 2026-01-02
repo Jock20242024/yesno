@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { createSession } from '@/lib/auth-core/sessionStore';
 import { generateReferralCode, isValidReferralCode } from '@/lib/utils/referral';
+import { randomUUID } from 'crypto'; // 🔥 绝杀修复：直接导入 crypto.randomUUID
 
 export async function POST(request: Request) {
   try {
@@ -90,8 +91,14 @@ export async function POST(request: Request) {
       }
     }
 
+    // 🔥 绝杀修复：显式使用 crypto.randomUUID() 生成用户 ID
+    // 严禁依赖数据库的 @default(cuid())，必须手动提供 ID
+    const userId = randomUUID();
+    
     // 创建用户数据
     const data: any = {
+      id: userId, // 🔥 绝杀修复：显式提供 ID，使用 crypto.randomUUID()
+      updatedAt: new Date(), // 🔥 修复：必须提供 updatedAt
       email,
       passwordHash,
       provider: 'email',

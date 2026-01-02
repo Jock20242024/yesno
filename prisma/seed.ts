@@ -5,7 +5,7 @@
  * 运行方式: npx prisma db seed
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, MarketStatus, ReviewStatus, MarketSource } from '@prisma/client';
 import { hashPassword } from '../services/authService';
 import { randomUUID } from 'crypto';
 
@@ -180,6 +180,95 @@ async function main() {
     console.log(`✅ 已标记 ${markedCount} 个热门市场！`);
   } else {
     console.log('  ⚠️  没有找到开放的市场，无法标记热门市场');
+  }
+  
+  // ========== 创建 BTC 15m 演示市场 ==========
+  console.log('');
+  console.log('🚀 开始创建 BTC 15m 演示市场...');
+  
+  try {
+    // 1. 确保"加密货币"分类存在
+    const cryptoCategory = await prisma.categories.findUnique({
+      where: { slug: 'crypto' },
+    });
+    
+    if (!cryptoCategory) {
+      console.log('⚠️  加密货币分类不存在，跳过 BTC 15m 市场创建');
+    } else {
+      // 2. 计算下一个 15 分钟时间点（对齐到 00/15/30/45）
+      const now = new Date();
+      const minutes = now.getMinutes();
+      const next15Min = Math.ceil(minutes / 15) * 15;
+      const closingDate = new Date(now);
+      closingDate.setMinutes(next15Min);
+      closingDate.setSeconds(0);
+      closingDate.setMilliseconds(0);
+      
+      // 如果计算出的时间已过去，则设置为下一个 15 分钟
+      if (closingDate <= now) {
+        closingDate.setMinutes(closingDate.getMinutes() + 15);
+      }
+      
+      // 3. 创建 BTC 15m 演示市场
+      const btc15mMarket = await prisma.markets.upsert({
+        where: {
+          // 使用唯一标识符：BTC-15m-{timestamp}
+          id: `btc-15m-${Math.floor(closingDate.getTime() / 1000)}`,
+        },
+        update: {
+          // 更新关闭时间
+          closingDate: closingDate,
+          updatedAt: new Date(),
+        },
+        create: {
+          id: `btc-15m-${Math.floor(closingDate.getTime() / 1000)}`,
+          title: 'BTC/USD 15分钟盘',
+          titleZh: 'BTC/USD 15分钟盘',
+          description: 'Bitcoin price will be above the strike price at the end of this 15-minute period',
+          descriptionZh: '比特币价格将在本15分钟周期结束时高于执行价格',
+          symbol: 'BTC/USD',
+          period: 15,
+          closingDate: closingDate,
+          status: MarketStatus.OPEN,
+          reviewStatus: ReviewStatus.PUBLISHED,
+          isActive: true,
+          isFactory: true,
+          isHot: true,
+          source: MarketSource.INTERNAL,
+          totalVolume: 0,
+          totalYes: 0,
+          totalNo: 0,
+          feeRate: 0.05,
+          updatedAt: new Date(),
+        },
+      });
+      
+      // 4. 关联到加密货币分类
+      await prisma.market_categories.upsert({
+        where: {
+          marketId_categoryId: {
+            marketId: btc15mMarket.id,
+            categoryId: cryptoCategory.id,
+          },
+        },
+        update: {},
+        create: {
+          id: randomUUID(),
+          marketId: btc15mMarket.id,
+          categoryId: cryptoCategory.id,
+          createdAt: new Date(),
+        },
+      });
+      
+      console.log('✅ BTC 15m 演示市场已创建/更新:');
+      console.log(`   ID: ${btc15mMarket.id}`);
+      console.log(`   标题: ${btc15mMarket.title}`);
+      console.log(`   关闭时间: ${btc15mMarket.closingDate.toISOString()}`);
+      console.log(`   分类: 加密货币`);
+    }
+  } catch (error) {
+    console.error('❌ 创建 BTC 15m 演示市场失败:', error);
+    // 不阻止整个 seeding 过程
   }
   
   console.log('');

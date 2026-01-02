@@ -20,20 +20,32 @@ export function getRedisClient(): Redis {
   if (!redisClient) {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     
+    // 🔥 Upstash Redis 支持：检测是否为 Upstash（通过域名判断）
+    const isUpstash = redisUrl.includes('upstash.io');
+    
+    // 🔥 Upstash Redis 需要 TLS 连接
+    // 如果 URL 是 redis:// 但指向 Upstash，需要转换为 rediss:// 或配置 TLS
+    let finalRedisUrl = redisUrl;
+    if (isUpstash && redisUrl.startsWith('redis://')) {
+      // 转换为 rediss:// (redis + ssl)
+      finalRedisUrl = redisUrl.replace('redis://', 'rediss://');
+      console.log('✅ [Redis] 检测到 Upstash Redis，已启用 TLS 连接');
+    }
+    
     isConnecting = true;
     
     // 🔥 强制创建实例，不允许失败
     try {
-      redisClient = new Redis(redisUrl, {
+      const redisOptions: any = {
         maxRetriesPerRequest: null, // 🔥 修复：BullMQ 要求必须为 null
         connectTimeout: 10000, // 10 秒连接超时
         lazyConnect: false, // 立即连接
-        retryStrategy(times) {
+        retryStrategy(times: number) {
           const delay = Math.min(times * 50, 2000);
           console.warn(`⚠️ [Redis] 连接重试 ${times} 次，延迟 ${delay}ms`);
           return delay;
         },
-        reconnectOnError(err) {
+        reconnectOnError(err: Error) {
           const targetError = 'READONLY';
           if (err.message.includes(targetError)) {
             return true; // 重新连接
@@ -41,7 +53,17 @@ export function getRedisClient(): Redis {
           return false;
         },
         enableOfflineQueue: false, // 禁用离线队列，避免错误堆积
-      });
+      };
+      
+      // 🔥 Upstash Redis TLS 配置
+      if (isUpstash) {
+        redisOptions.tls = {
+          // Upstash 使用自签名证书，需要验证但不严格检查
+          rejectUnauthorized: true,
+        };
+      }
+      
+      redisClient = new Redis(finalRedisUrl, redisOptions);
 
       redisClient.on('error', (err) => {
         console.error('❌ [Redis] 连接错误:', err.message);
@@ -71,12 +93,22 @@ export function getRedisClient(): Redis {
     } catch (error: any) {
       // 🔥 即使创建失败，也要创建一个占位实例，避免返回 undefined
       console.error('❌ [Redis] 创建客户端失败:', error.message);
+      
       // 创建一个基础的 Redis 实例（即使连接失败）
-      redisClient = new Redis(redisUrl, {
+      const fallbackOptions: any = {
         maxRetriesPerRequest: null,
         lazyConnect: true, // 延迟连接
         enableOfflineQueue: false,
-      });
+      };
+      
+      // 如果是 Upstash，也要配置 TLS
+      if (isUpstash) {
+        fallbackOptions.tls = {
+          rejectUnauthorized: true,
+        };
+      }
+      
+      redisClient = new Redis(finalRedisUrl, fallbackOptions);
     }
   }
 

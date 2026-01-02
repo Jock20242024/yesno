@@ -365,6 +365,11 @@
       "monthly": "每月",
       "1M": "每月",
       "premarket": "盘前"
+    },
+    "not_found": {
+      "category_not_found": "分类不存在",
+      "market_not_found": "市场事件未找到",
+      "back_to_home": "返回首页"
     }
   },
   "profile": {

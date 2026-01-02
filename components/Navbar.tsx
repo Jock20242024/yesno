@@ -4,18 +4,24 @@ import React, { useState, useRef, useEffect } from "react";
 import { Search, Trophy, User, Globe } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useLanguage } from "@/i18n/LanguageContext";
 import LiveWallet from "@/components/user/LiveWallet";
 
 export default function Navbar() {
   const router = useRouter();
+  // 🔥 状态硬隔离：使用 NextAuth 的 useSession 作为唯一认证源
+  const { data: session, status } = useSession();
   const { isLoggedIn, user, currentUser, logout } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [mounted, setMounted] = useState(false);
   const languageMenuRefLoggedIn = useRef<HTMLDivElement>(null);
   const languageMenuRefLoggedOut = useRef<HTMLDivElement>(null);
+  
+  // 🔥 核心逻辑：必须 status === 'authenticated' 才显示登录状态
+  const isAuthenticated = status === 'authenticated';
 
   // 🔥 修复 Hydration 错误：等待客户端挂载后再渲染动态内容
   useEffect(() => {
@@ -141,7 +147,9 @@ export default function Navbar() {
           </div>
         </form>
         <div className="flex flex-1 justify-end gap-3 lg:gap-6 items-center">
-          {isLoggedIn ? (
+          {/* 🔥 状态硬隔离：必须 status === 'authenticated' 且 isLoggedIn && user 才显示登录状态 */}
+          {/* 未认证时，必须销毁所有余额组件的 DOM 节点 */}
+          {isAuthenticated && isLoggedIn && user ? (
             <>
               <Link
                 href="/rank"
@@ -204,7 +212,7 @@ export default function Navbar() {
               </div>
               <div className="h-5 w-px bg-border-dark" />
               <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 ml-auto">
-                {/* 余额区域 - 点击跳转到钱包 */}
+                {/* 🔥 修复：余额区域 - 只有在登录时才显示 */}
                 <Link
                   href="/wallet"
                   prefetch={false}
@@ -243,20 +251,66 @@ export default function Navbar() {
                       <User className="w-5 h-5 opacity-80 group-hover:opacity-100 transition-opacity" />
                     )}
                   </Link>
-                  {/* 登出按钮 */}
+                  {/* 🔥 修复：登出按钮 - 彻底清除所有存储并强制刷新 */}
                   <button
                     onClick={async () => {
                       try {
-                        // 🔥 先调用 logout 清除状态和 localStorage
+                        // 🔥 导入 signOut 函数
+                        const { signOut } = await import('next-auth/react');
+                        
+                        // 🔥 修复：清除本地存储时保留语言设置
+                        if (typeof window !== 'undefined') {
+                          // 🔥 保存语言设置（在清除前）
+                          const savedLanguage = localStorage.getItem('language');
+                          
+                          // 清除所有用户相关的 localStorage（保留语言设置）
+                          const keysToRemove = Object.keys(localStorage).filter(key => 
+                            key.startsWith('swr-') || 
+                            key.startsWith('pm_') ||
+                            key.startsWith('$swr$') ||
+                            key === 'yesno_auth' ||
+                            key === 'auth_core_session' ||
+                            key === 'auth_user_id'
+                          );
+                          keysToRemove.forEach(key => localStorage.removeItem(key));
+                          
+                          // 🔥 恢复语言设置
+                          if (savedLanguage) {
+                            localStorage.setItem('language', savedLanguage);
+                          }
+                          
+                          // 清除 sessionStorage
+                          window.sessionStorage.clear();
+                          
+                          // 清除所有 SWR 缓存
+                          if ((window as any).__SWR_CACHE__) {
+                            (window as any).__SWR_CACHE__.clear();
+                          }
+                        }
+                        
+                        // 🔥 调用 AuthProvider 的 logout
                         await logout();
                         
-                        // 🔥 确保所有状态已清除，然后再跳转
-                        // 使用 replace 而不是 push，避免用户通过后退按钮返回
-                        window.location.replace('/login');
+                        // 🔥 调用 NextAuth 的 signOut，使用 redirect: true 强制跳转
+                        await signOut({ callbackUrl: '/', redirect: true });
                       } catch (error) {
                         console.error('❌ [Navbar] 登出失败:', error);
-                        // 即使出错也强制跳转到登录页
-                        window.location.replace('/login');
+                        // 即使出错也强制清除存储并跳转到首页（保留语言设置）
+                        if (typeof window !== 'undefined') {
+                          // 🔥 修复：保存语言设置
+                          const savedLanguage = localStorage.getItem('language');
+                          
+                          // 清除所有存储
+                          window.localStorage.clear();
+                          window.sessionStorage.clear();
+                          
+                          // 🔥 恢复语言设置
+                          if (savedLanguage) {
+                            localStorage.setItem('language', savedLanguage);
+                          }
+                          
+                          window.location.replace('/');
+                        }
                       }
                     }}
                     className="flex items-center justify-center min-w-[44px] px-3 md:px-3 min-h-[44px] py-1.5 rounded-lg bg-surface-dark hover:bg-red-500/10 border border-border-dark hover:border-red-500/30 text-text-secondary hover:text-red-400 text-xs font-bold transition-colors ml-1 md:ml-2 flex-shrink-0"

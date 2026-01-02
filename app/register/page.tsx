@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
@@ -8,7 +8,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -104,16 +104,30 @@ export default function RegisterPage() {
           console.error("toast failed", e);
         }
 
-        // 立即更新 AuthProvider 状态
-        if (data.user && data.token) {
-          login(data.token, data.user);
-        }
+        // 🔥 修复：注册成功后立即调用 NextAuth 的 signIn 方法实现自动登录
+        try {
+          // 使用 credentials 方式登录（使用刚注册的邮箱和密码）
+          const signInResult = await signIn('credentials', {
+            email: email,
+            password: password,
+            redirect: false,
+          });
 
-        // 等待一小段时间确保状态更新完成，然后跳转
-        setTimeout(() => {
-          router.refresh();
-          router.push("/");
-        }, 100);
+          if (signInResult?.error) {
+            console.error('注册后自动登录失败:', signInResult.error);
+            // 即使自动登录失败，也跳转到登录页让用户手动登录
+            router.push('/login');
+            return;
+          }
+
+          // 🔥 登录成功后，刷新页面状态并跳转到首页
+          // 使用 window.location.href 确保完全刷新页面并清除所有缓存
+          window.location.href = '/';
+        } catch (signInError) {
+          console.error('注册后自动登录异常:', signInError);
+          // 如果自动登录失败，跳转到登录页
+          router.push('/login');
+        }
         return;
       }
 
@@ -327,5 +341,30 @@ export default function RegisterPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center p-4 md:p-6 lg:p-8">
+        <div className="w-full max-w-md">
+          <div className="bg-pm-card rounded-xl border border-pm-border p-8 shadow-2xl">
+            <div className="animate-pulse">
+              <div className="h-8 bg-pm-bg rounded mb-2"></div>
+              <div className="h-4 bg-pm-bg rounded mb-6"></div>
+              <div className="space-y-4">
+                <div className="h-12 bg-pm-bg rounded"></div>
+                <div className="h-12 bg-pm-bg rounded"></div>
+                <div className="h-12 bg-pm-bg rounded"></div>
+                <div className="h-12 bg-pm-bg rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <RegisterForm />
+    </Suspense>
   );
 }

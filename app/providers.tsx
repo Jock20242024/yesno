@@ -1,5 +1,6 @@
 'use client';
 
+import { SessionProvider } from 'next-auth/react';
 import { StoreProvider } from '@/app/context/StoreContext';
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { NotificationProvider } from "@/components/providers/NotificationProvider";
@@ -40,17 +41,23 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
-      <LanguageProvider>
-        <AuthProvider>
-          <StoreProvider>
-            <NotificationProvider>
-              <ConditionalUI>
-                {children}
-              </ConditionalUI>
-            </NotificationProvider>
-          </StoreProvider>
-        </AuthProvider>
-      </LanguageProvider>
+      {/* 🔥 修复：SessionProvider 配置，确保 Session 同步和 Cookie 策略正确 */}
+      <SessionProvider
+        refetchInterval={0} // 禁用自动刷新，避免干扰
+        refetchOnWindowFocus={false} // 禁用窗口聚焦时刷新
+      >
+        <LanguageProvider>
+          <AuthProvider>
+            <StoreProvider>
+              <NotificationProvider>
+                <ConditionalUI>
+                  {children}
+                </ConditionalUI>
+              </NotificationProvider>
+            </StoreProvider>
+          </AuthProvider>
+        </LanguageProvider>
+      </SessionProvider>
     </ErrorBoundary>
   );
 }

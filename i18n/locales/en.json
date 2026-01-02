@@ -365,6 +365,11 @@
       "monthly": "Monthly",
       "1M": "Monthly",
       "premarket": "Premarket"
+    },
+    "not_found": {
+      "category_not_found": "Category does not exist",
+      "market_not_found": "Market event not found",
+      "back_to_home": "Back to Home"
     }
   },
   "profile": {

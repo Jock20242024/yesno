@@ -72,15 +72,15 @@ function OverviewTab({
 
   const userName = user?.name || user?.email?.split("@")[0] || "用户";
   
-  // 格式化加入日期
+  // 🔥 修复：从 userData 或 user 中获取真实的 createdAt 日期
   const formatJoinDate = (dateString?: string): string => {
+    // 🔥 绝杀修复：严禁使用硬编码日期，必须从数据库获取真实日期
     if (!dateString) {
-      // Mock 数据：假设是 2025年10月
-      const mockDate = new Date(2025, 9, 1); // 月份从0开始，所以9代表10月
+      // 如果没有日期，返回空字符串或默认文本
       if (language === 'en') {
-        return `Joined ${mockDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+        return 'Joined recently';
       } else {
-        return `${mockDate.getFullYear()}年${mockDate.getMonth() + 1}月加入`;
+        return '最近加入';
       }
     }
     
@@ -92,7 +92,8 @@ function OverviewTab({
     }
   };
   
-  const joinDate = formatJoinDate();
+  // 🔥 修复：从 userData 或 user 中获取真实的 createdAt
+  const joinDate = formatJoinDate(userData?.createdAt || user?.createdAt);
 
   // 🔥 修复：使用真实持仓数据，并获取市场标题
   const [positionsWithMarketNames, setPositionsWithMarketNames] = useState<Array<{

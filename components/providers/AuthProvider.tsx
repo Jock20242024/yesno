@@ -12,6 +12,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // 1. 最基础的清理
   const clearUserData = useCallback(() => {
+    // 🔥 修复：保存语言设置（在清除前）
+    const savedLanguage = typeof window !== 'undefined' ? localStorage.getItem('language') : null;
 
     // 🔥 清除所有用户相关的 localStorage
     localStorage.removeItem('pm_user');
@@ -26,6 +28,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     localStorage.removeItem('pm_withdrawals');
     localStorage.removeItem('pm_frozenBalance');
     
+    // 🔥 清除所有 SWR 缓存键
+    if (typeof window !== 'undefined') {
+      const cacheKeys = Object.keys(localStorage).filter(key => 
+        key.startsWith('swr-') || 
+        key.startsWith('$swr$')
+      );
+      cacheKeys.forEach(key => localStorage.removeItem(key));
+    }
+    
+    // 🔥 恢复语言设置
+    if (savedLanguage && typeof window !== 'undefined') {
+      localStorage.setItem('language', savedLanguage);
+    }
+    
     // 🔥 清除状态
     setIsLoggedIn(false);
     setUser(null);
@@ -35,12 +51,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // 2. 定义 logout (因为它被后面的函数引用)
   const logout = useCallback(async () => {
     try {
+      // 🔥 调用登出 API
       await fetch('/api/auth/logout', { method: 'POST' });
-    } catch (e) {}
+    } catch (e) {
+      console.error('❌ [AuthProvider] Logout API error:', e);
+    }
+    
+    // 🔥 清除所有用户数据
     clearUserData();
+    
+    // 🔥 清除所有 SWR 缓存
+    if (typeof window !== 'undefined') {
+      // 清除 SWR 全局缓存
+      if ((window as any).__SWR_CACHE__) {
+        (window as any).__SWR_CACHE__.clear();
+      }
+      
+      // 清除所有可能的缓存键
+      const cacheKeys = Object.keys(localStorage).filter(key => 
+        key.startsWith('swr-') || 
+        key.startsWith('pm_') ||
+        key.startsWith('$swr$')
+      );
+      cacheKeys.forEach(key => localStorage.removeItem(key));
+    }
+    
     // 🔥 修复：在执行跳转前先将 isLoading 设置为 false，切断死循环
     setIsLoading(false);
-    // 注意：实际的跳转由 Navbar 中的 window.location.replace('/login') 处理
+    // 注意：实际的跳转由 Navbar 中的 window.location.replace('/') 处理
   }, [clearUserData]);
 
   // 3. 定义 handleApiGuestResponse (现在它能找到 logout 了)

@@ -7,9 +7,13 @@
  * - 不再使用 /api/user/balance（只返回可用余额）
  * - 改用 /api/user/assets（返回总资产 totalBalance）
  * - 与主页面（WalletPage）使用相同的数据源，确保数据一致
+ * 
+ * 🔥 状态硬隔离：必须基于 NextAuth 的 status === 'authenticated' 决定是否渲染
+ * - 未认证时，必须销毁所有 DOM 节点，不显示任何内容（包括 $0.00 占位符）
  */
 
 import useSWR from 'swr';
+import { useSession } from 'next-auth/react';
 import { useAuth } from '@/components/providers/AuthProvider';
 
 interface AssetsData {
@@ -25,13 +29,17 @@ interface LiveWalletProps {
 }
 
 export default function LiveWallet({ className = "" }: LiveWalletProps) {
+  // 🔥 状态硬隔离：使用 NextAuth 的 useSession 作为唯一认证源
+  const { data: session, status } = useSession();
   const { isLoggedIn, isLoading: authLoading, logout, handleApiGuestResponse } = useAuth();
 
-  // 🔴 [AUTH_LEAK] 诊断日志：记录 Auth 状态
-
+  // 🔥 核心逻辑：必须 status === 'authenticated' 才渲染组件
+  // 未认证时，必须销毁所有 DOM 节点，不显示任何内容
+  const isAuthenticated = status === 'authenticated';
+  
   // 🔥 架构修复：不要在 authLoading 为 true 时就去解析余额
-  // 只有当 isLoggedIn 为 true 时才发起请求
-  const shouldFetch = isLoggedIn && !authLoading;
+  // 只有当 NextAuth 认证且 isLoggedIn 为 true 时才发起请求
+  const shouldFetch = isAuthenticated && isLoggedIn && !authLoading;
 
   // 🔥 修复：检测 isGuest: true，强制触发退出登录
   // fetcher 必须放在组件内部，以便访问 logout 函数
@@ -107,14 +115,22 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
 
   // 调试日志
 
-  // 🔥 架构修复：认证加载中或未登录时，不显示任何内容（或显示 $0.00）
-  if (authLoading || !isLoggedIn) {
-    // 未登录：显示 $0.00（不显示加载动画，避免误导）
-    return (
-      <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className}`}>
-        $0.00
-      </span>
-    );
+  // 🔥 状态硬隔离：未认证时，必须销毁所有 DOM 节点，不显示任何内容
+  // 严禁显示 $0.00 占位符，避免状态泄露
+  
+  // 🔥 认证状态加载中：不显示任何内容
+  if (status === 'loading' || authLoading) {
+    return null;
+  }
+  
+  // 🔥 未认证：返回 null，完全销毁组件 DOM
+  if (status === 'unauthenticated' || !isAuthenticated) {
+    return null;
+  }
+  
+  // 🔥 双重检查：即使 NextAuth 认证，也要检查 isLoggedIn
+  if (!isLoggedIn) {
+    return null;
   }
 
   // 🔥 架构修复：只有当 isLoggedIn 且 totalBalance 不为 undefined 时才渲染数值

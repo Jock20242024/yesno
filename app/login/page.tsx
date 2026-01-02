@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { toast } from "sonner";
 import { useLanguage } from "@/i18n/LanguageContext";
 
-export default function LoginPage() {
+function LoginForm() {
   const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -115,15 +115,41 @@ export default function LoginPage() {
                 type="button"
                 onClick={async () => {
                   try {
-                    // 🔥 物理清除所有"自动跳转"：使用 signIn 但不依赖 callbackUrl，登录成功后手动硬跳转
+                    // 🔥 修复：前端登录页面不应该跳转到后台，应该根据用户角色决定
                     const result = await signIn("google", {
-                      callbackUrl: '/admin/dashboard',
+                      callbackUrl: redirect || '/', // 使用 redirect 参数或首页
                       redirect: false, // 不自动跳转，手动控制
                     });
                     
                     if (result?.ok && !result?.error) {
-                      // 登录成功，物理硬跳转
-                      window.location.href = '/admin/dashboard';
+                      // 🔥 修复：登录成功后，等待一小段时间让 session 建立
+                      await new Promise(resolve => setTimeout(resolve, 500));
+                      
+                      // 登录成功，需要检查用户是否是管理员
+                      // 先获取用户信息
+                      try {
+                        const userRes = await fetch('/api/auth/me', {
+                          credentials: 'include',
+                          cache: 'no-store',
+                        });
+                        if (userRes.ok) {
+                          const userData = await userRes.json();
+                          if (userData?.user?.isAdmin) {
+                            // 管理员跳转到后台
+                            window.location.href = '/admin/dashboard';
+                          } else {
+                            // 🔥 修复：普通用户跳转到首页或 redirect 参数，强制刷新页面
+                            window.location.href = redirect || '/';
+                          }
+                        } else {
+                          // 无法获取用户信息，默认跳转到首页
+                          window.location.href = redirect || '/';
+                        }
+                      } catch (e) {
+                        console.error("Failed to get user info:", e);
+                        // 出错时默认跳转到首页
+                        window.location.href = redirect || '/';
+                      }
                     } else {
                       toast.error(t('auth.register.error_google'));
                     }
@@ -236,5 +262,29 @@ export default function LoginPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center p-4 md:p-6 lg:p-8">
+        <div className="w-full max-w-md">
+          <div className="bg-pm-card rounded-xl border border-pm-border p-8 shadow-2xl">
+            <div className="animate-pulse">
+              <div className="h-8 bg-pm-bg rounded mb-2"></div>
+              <div className="h-4 bg-pm-bg rounded mb-6"></div>
+              <div className="space-y-4">
+                <div className="h-12 bg-pm-bg rounded"></div>
+                <div className="h-12 bg-pm-bg rounded"></div>
+                <div className="h-12 bg-pm-bg rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }
