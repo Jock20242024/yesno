@@ -86,7 +86,24 @@ export async function GET(
       id: market.id,
       title: market.title,
       description: market.description,
-      closingDate: market.closingDate.toISOString(),
+      closingDate: (() => {
+        try {
+          if (!market.closingDate) {
+            return new Date().toISOString();
+          }
+          const isoString = market.closingDate.toISOString();
+          // 🔥 验证日期有效性
+          const testDate = new Date(isoString);
+          if (isNaN(testDate.getTime())) {
+            console.warn(`⚠️ [Market Detail API] 无效的 closingDate，使用当前时间 (ID: ${market.id})`);
+            return new Date().toISOString();
+          }
+          return isoString;
+        } catch (e) {
+          console.error(`❌ [Market Detail API] closingDate 转换错误 (ID: ${market.id}):`, e);
+          return new Date().toISOString();
+        }
+      })(),
       resolvedOutcome: market.resolvedOutcome,
       status: market.status,
       totalVolume: market.totalVolume,
@@ -481,6 +498,10 @@ export async function GET(
       category: formattedMarket.category || '',
       categorySlug: formattedMarket.categorySlug || '',
       
+      // 🔥 添加中文翻译字段
+      titleZh: (formattedMarket as any).titleZh || null,
+      descriptionZh: (formattedMarket as any).descriptionZh || null,
+      
       // 用户订单列表（修复详情页订单列表）
       userOrders: userOrders || [],
       userPosition: userPosition || null,
@@ -529,7 +550,8 @@ export async function GET(
           return 'Bitcoin';
         }
         
-        return 'Bitcoin'; // 默认
+        // 🔥 修复：不默认返回Bitcoin，返回null让前端根据分类判断
+        return null;
       })(),
       iconColor: (() => {
         // 🔥 关键修复：优先根据 symbol/title 判断（因为数据库图片可能还是错误的）
@@ -556,7 +578,8 @@ export async function GET(
           return 'bg-[#f7931a]'; // 比特币橙色
         }
         
-        return 'bg-[#f7931a]'; // 默认
+        // 🔥 修复：不默认返回Bitcoin颜色，返回null让前端根据分类判断
+        return null;
       })(),
       // 兼容字段：确保 imageUrl 也正确设置（优先使用数据库中的图片）
       imageUrl: (() => {

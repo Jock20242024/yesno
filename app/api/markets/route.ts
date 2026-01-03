@@ -29,6 +29,22 @@ export async function GET(request: Request) {
   try {
     console.log('🔍 [Markets API] 收到请求:', request.url);
     
+    // 🔥 数据库连接检查
+    try {
+      await prisma.$connect();
+    } catch (dbError) {
+      console.error('❌ [Markets API] 数据库连接失败:', dbError);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Database connection failed',
+          data: [],
+          message: '无法连接到数据库，请检查 DATABASE_URL 配置'
+        },
+        { status: 503 }
+      );
+    }
+    
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const status = searchParams.get('status') as 'OPEN' | 'RESOLVED' | 'CLOSED' | null;
@@ -73,9 +89,41 @@ export async function GET(request: Request) {
       const safeTotalNo = convertToNumber(dbMarket.totalNo);
       const safeFeeRate = convertToNumber(dbMarket.feeRate) || 0.05;
       
+      // 🔥 修复：优先使用数据库中的 yesProbability 和 noProbability（Polymarket 同步的赔率）
+      // 如果是 POLYMARKET 市场，这些字段包含从 Polymarket API 同步的真实赔率
       let safeYesPercent = 50;
       let safeNoPercent = 50;
-      if (safeTotalYes > 0 || safeTotalNo > 0) {
+      
+      // 优先级 1：使用数据库中的 yesProbability 和 noProbability（Polymarket 同步的赔率）
+      if (dbMarket.yesProbability !== null && dbMarket.yesProbability !== undefined &&
+          dbMarket.noProbability !== null && dbMarket.noProbability !== undefined) {
+        safeYesPercent = Number(dbMarket.yesProbability);
+        safeNoPercent = Number(dbMarket.noProbability);
+      }
+      // 优先级 2：如果没有 yesProbability/noProbability，尝试从 outcomePrices 计算（Polymarket 原始数据）
+      else if ((dbMarket as any).outcomePrices) {
+        try {
+          const outcomePrices = typeof (dbMarket as any).outcomePrices === 'string'
+            ? JSON.parse((dbMarket as any).outcomePrices)
+            : (dbMarket as any).outcomePrices;
+          
+          if (Array.isArray(outcomePrices) && outcomePrices.length >= 2) {
+            const yesPrice = parseFloat(String(outcomePrices[0])) || 0;
+            const noPrice = parseFloat(String(outcomePrices[1])) || 0;
+            const total = yesPrice + noPrice;
+            
+            if (total > 0) {
+              safeYesPercent = Math.round((yesPrice / total) * 100);
+              safeNoPercent = 100 - safeYesPercent;
+            }
+          }
+        } catch (e) {
+          // 解析失败，继续使用默认值或下一个优先级
+          console.warn(`⚠️ [Markets API] 解析 outcomePrices 失败:`, e);
+        }
+      }
+      // 优先级 3：如果都没有，则根据 totalYes 和 totalNo 计算
+      else if (safeTotalYes > 0 || safeTotalNo > 0) {
         const totalAmount = safeTotalYes + safeTotalNo;
         const calculatedYes = Math.round((safeTotalYes / totalAmount) * 100);
         const calculatedNo = Math.round((safeTotalNo / totalAmount) * 100);
@@ -86,8 +134,26 @@ export async function GET(request: Request) {
       return {
         id: dbMarket.id,
         title: dbMarket.title,
+        titleZh: (dbMarket as any).titleZh || null, // 🔥 添加中文标题字段
         description: dbMarket.description,
-        closingDate: dbMarket.closingDate.toISOString(),
+        descriptionZh: (dbMarket as any).descriptionZh || null, // 🔥 添加中文描述字段
+        closingDate: (() => {
+          try {
+            const date = dbMarket.closingDate;
+            if (!date) return new Date().toISOString();
+            const isoString = date.toISOString();
+            // 🔥 验证日期有效性
+            const testDate = new Date(isoString);
+            if (isNaN(testDate.getTime())) {
+              console.warn(`⚠️ [Markets API] 无效的 closingDate，使用当前时间 (ID: ${dbMarket.id})`);
+              return new Date().toISOString();
+            }
+            return isoString;
+          } catch (e) {
+            console.error(`❌ [Markets API] closingDate 转换错误 (ID: ${dbMarket.id}):`, e);
+            return new Date().toISOString();
+          }
+        })(),
         resolvedOutcome: dbMarket.resolvedOutcome as Outcome | undefined,
         status: dbMarket.status as MarketStatus,
         totalVolume: safeTotalVolume,
@@ -490,19 +556,13 @@ export async function GET(request: Request) {
             manualOffset,
           });
           
-          // 🔥 计算赔率（基于 totalYes 和 totalNo，与详情页保持一致）
-          const totalAmount = (market.totalYes || 0) + (market.totalNo || 0);
-          const yesPercent = totalAmount > 0 
-            ? Math.round(((market.totalYes || 0) / totalAmount) * 100 * 100) / 100 
-            : 50;
-          const noPercent = totalAmount > 0 
-            ? Math.round(((market.totalNo || 0) / totalAmount) * 100 * 100) / 100 
-            : 50;
+          // 🔥 修复：使用 convertDbMarketToMarketFormat 中已经计算好的 yesPercent 和 noPercent
+          // 不要重新计算，因为已经在 convertDbMarketToMarketFormat 中根据 yesProbability/noProbability 或 outcomePrices 计算过了
+          const yesPercent = (market as any).yesPercent !== undefined ? (market as any).yesPercent : 50;
+          const noPercent = (market as any).noPercent !== undefined ? (market as any).noPercent : 50;
           
-          // 🔥 计算 currentPrice（YES 价格，0-1 之间）
-          const currentPrice = totalAmount > 0 
-            ? (market.totalYes || 0) / totalAmount 
-            : 0.5;
+          // 🔥 计算 currentPrice（YES 价格，0-1 之间），基于 yesPercent
+          const currentPrice = yesPercent / 100;
           
           // 🚀 物理防御：在序列化时再次检查 isActive，确保已删除的市场绝对不会被返回
           if ((market as any).isActive === false) {
@@ -510,17 +570,57 @@ export async function GET(request: Request) {
             return null; // 返回 null，后续会被过滤掉
           }
           
+          // 🔥 确保 titleZh 被正确传递（优先使用 market.titleZh，如果不存在则使用 null）
+          const titleZh = (market as any).titleZh || null;
+          
           return {
             ...market,
-            closingDate: typeof market.closingDate === 'string' 
-              ? market.closingDate 
-              : new Date(market.closingDate).toISOString(),
-            createdAt: typeof market.createdAt === 'string' 
-              ? market.createdAt 
-              : new Date(market.createdAt).toISOString(),
+            closingDate: (() => {
+              try {
+                if (!market.closingDate) {
+                  return new Date().toISOString();
+                }
+                const dateStr = typeof market.closingDate === 'string' 
+                  ? market.closingDate 
+                  : new Date(market.closingDate).toISOString();
+                // 🔥 验证日期有效性
+                const testDate = new Date(dateStr);
+                if (isNaN(testDate.getTime())) {
+                  console.warn(`⚠️ [Markets API] 无效的 closingDate，使用当前时间 (ID: ${market.id})`);
+                  return new Date().toISOString();
+                }
+                return dateStr;
+              } catch (e) {
+                console.error(`❌ [Markets API] closingDate 处理错误 (ID: ${market.id}):`, e);
+                return new Date().toISOString();
+              }
+            })(),
+            createdAt: (() => {
+              try {
+                if (!market.createdAt) {
+                  return new Date().toISOString();
+                }
+                const dateStr = typeof market.createdAt === 'string' 
+                  ? market.createdAt 
+                  : new Date(market.createdAt).toISOString();
+                // 🔥 验证日期有效性
+                const testDate = new Date(dateStr);
+                if (isNaN(testDate.getTime())) {
+                  console.warn(`⚠️ [Markets API] 无效的 createdAt，使用当前时间 (ID: ${market.id})`);
+                  return new Date().toISOString();
+                }
+                return dateStr;
+              } catch (e) {
+                console.error(`❌ [Markets API] createdAt 处理错误 (ID: ${market.id}):`, e);
+                return new Date().toISOString();
+              }
+            })(),
             category: market.category || undefined,
             categorySlug: market.categorySlug || undefined,
             description: market.description || '', // 🔥 保留原始描述字段
+            // 🔥 添加中文翻译字段（确保正确传递）
+            titleZh: titleZh,
+            descriptionZh: (market as any).descriptionZh || null,
             // 🔥 添加展示交易量字段
             displayVolume,
             volume: displayVolume, // 兼容字段

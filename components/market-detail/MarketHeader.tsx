@@ -47,28 +47,47 @@ interface MarketHeaderProps {
   closingDate?: string; // ISO 8601 格式的关闭时间
   period?: number | null; // 🔥 周期（分钟数），用于计算时间区间
   isFactory?: boolean; // 🔥 是否为工厂市场
+  imageUrl?: string | null; // 🔥 市场头像图片URL（从Polymarket抓取的原始图片）
 }
 
 // 倒计时计算函数
 function calculateCountdown(closingDate: string): { days: number; hours: number; minutes: number; seconds: number; isExpired: boolean } {
-  const now = new Date().getTime();
-  const closing = new Date(closingDate).getTime();
-  const diff = closing - now;
+  try {
+    const now = new Date().getTime();
+    const closing = new Date(closingDate).getTime();
+    
+    // 🔥 验证日期有效性
+    if (isNaN(closing)) {
+      console.warn('⚠️ [MarketHeader] 无效的 closingDate，无法计算倒计时:', closingDate);
+      return { days: 0, hours: 0, minutes: 0, seconds: 0, isExpired: true };
+    }
+    
+    const diff = closing - now;
 
-  if (diff <= 0) {
+    if (diff <= 0) {
+      return { days: 0, hours: 0, minutes: 0, seconds: 0, isExpired: true };
+    }
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    return { days, hours, minutes, seconds, isExpired: false };
+  } catch (error) {
+    console.error('❌ [MarketHeader] 倒计时计算错误:', error, 'closingDate:', closingDate);
     return { days: 0, hours: 0, minutes: 0, seconds: 0, isExpired: true };
   }
-
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-  return { days, hours, minutes, seconds, isExpired: false };
 }
 
-export default function MarketHeader({ event, status = "open", result = null, closingDate, period, isFactory }: MarketHeaderProps) {
+export default function MarketHeader({ event, status = "open", result = null, closingDate, period, isFactory, imageUrl }: MarketHeaderProps) {
   const { t, language } = useLanguage();
+  
+  // 🔥 实时翻译已完全禁用：不再发送任何翻译请求
+  // 翻译已通过以下方式实现：
+  // 1. 批量翻译脚本：一次性翻译历史数据
+  // 2. 采集时自动翻译：新市场自动翻译
+  // 前端不再进行实时翻译，避免 API 调用和性能问题
   
   // 🔥 逻辑守卫：确保 event 存在
   if (!event || !event.id) {
@@ -79,11 +98,11 @@ export default function MarketHeader({ event, status = "open", result = null, cl
 
   // 🔥 修复：从 event 中提取 icon 和 iconColor，如果没有则根据 symbol/title 动态计算
   const getIconAndColor = () => {
-    // 优先使用 API 返回的 icon 和 iconColor
-    if ((event as any).icon && (event as any).iconColor) {
+    // 优先使用 API 返回的 icon 和 iconColor（即使iconColor为空也使用icon）
+    if ((event as any).icon) {
       return {
         icon: (event as any).icon,
-        iconColor: (event as any).iconColor,
+        iconColor: (event as any).iconColor || 'bg-[#f7931a]',
       };
     }
     
@@ -106,18 +125,77 @@ export default function MarketHeader({ event, status = "open", result = null, cl
       };
     }
     
-    // 默认使用 Bitcoin
+    // 🔥 修复：不默认使用Bitcoin，根据分类或其他逻辑判断
+    // 如果event.icon存在，使用它；否则根据分类判断
+    if (event.icon) {
+      return {
+        icon: event.icon,
+        iconColor: (event as any).iconColor || 'bg-[#f7931a]',
+      };
+    }
+    
+    // 根据分类判断图标
+    const category = (event as any).category || '';
+    const categoryUpper = category.toUpperCase();
+    
+    if (categoryUpper.includes('CRYPTO') || categoryUpper.includes('加密货币')) {
+      // 加密货币分类，但不确定是BTC还是ETH，使用Coins图标
+      return {
+        icon: 'Coins',
+        iconColor: 'bg-[#f7931a]',
+      };
+    }
+    if (categoryUpper.includes('POLITICS') || categoryUpper.includes('政治')) {
+      return {
+        icon: 'Flag',
+        iconColor: 'bg-[#ef4444]',
+      };
+    }
+    if (categoryUpper.includes('SPORTS') || categoryUpper.includes('体育')) {
+      return {
+        icon: 'Activity',
+        iconColor: 'bg-[#22c55e]',
+      };
+    }
+    if (categoryUpper.includes('FINANCE') || categoryUpper.includes('金融')) {
+      return {
+        icon: 'Building2',
+        iconColor: 'bg-[#3b82f6]',
+      };
+    }
+    if (categoryUpper.includes('TECH') || categoryUpper.includes('科技')) {
+      return {
+        icon: 'Rocket',
+        iconColor: 'bg-[#8b5cf6]',
+      };
+    }
+    
+    // 最后的后备方案：使用Coins而不是Bitcoin
     return {
-      icon: event.icon || 'Bitcoin',
-      iconColor: (event as any).iconColor || 'bg-[#f7931a]',
+      icon: 'Coins',
+      iconColor: 'bg-[#f7931a]',
     };
   };
 
   const { icon, iconColor } = getIconAndColor();
-  const IconComponent = iconMap[icon] || Bitcoin;
+  // 🔥 修复：确保icon在iconMap中存在，否则使用Coins而不是Bitcoin
+  const IconComponent = icon && iconMap[icon] ? iconMap[icon] : Coins;
   
   // 🔥 修复状态判断：对于工厂市场，如果 closingDate 已过期，即使状态还是 OPEN，也应该视为"已结束"
-  const isExpired = closingDate ? new Date(closingDate).getTime() <= Date.now() : false;
+  const isExpired = (() => {
+    if (!closingDate) return false;
+    try {
+      const date = new Date(closingDate);
+      if (isNaN(date.getTime())) {
+        console.warn('⚠️ [MarketHeader] 无效的 closingDate:', closingDate);
+        return false;
+      }
+      return date.getTime() <= Date.now();
+    } catch (e) {
+      console.error('❌ [MarketHeader] 日期比较错误:', e, 'closingDate:', closingDate);
+      return false;
+    }
+  })();
   const isResolved = (status === "closed" || (isFactory && isExpired)) && result !== null;
   const isYesWon = result === "YES_WON";
   // 🔥 工厂市场：即使状态是 OPEN，如果时间已过期，也显示为已结束
@@ -132,6 +210,13 @@ export default function MarketHeader({ event, status = "open", result = null, cl
     if (!closingDate || !isFactory || !period) return null;
     
     try {
+      // 🔥 安全日期验证
+      const testDate = new Date(closingDate);
+      if (isNaN(testDate.getTime())) {
+        console.warn('⚠️ [MarketHeader] 无效的 closingDate，无法计算时间区间:', closingDate);
+        return null;
+      }
+      
       // 🔥 动态获取用户时区（仅用于时间转换，不显示）
       const userTimeZone = typeof window !== 'undefined' 
         ? Intl.DateTimeFormat().resolvedOptions().timeZone 
@@ -139,6 +224,10 @@ export default function MarketHeader({ event, status = "open", result = null, cl
       
       // 后端返回的 closingDate 视为 UTC，转换为用户本地时区
       const endTime = dayjs(closingDate).tz(userTimeZone);
+      if (!endTime.isValid()) {
+        console.warn('⚠️ [MarketHeader] dayjs 解析失败:', closingDate);
+        return null;
+      }
       const startTime = endTime.subtract(period, 'minute'); // 减去周期（分钟）
       
       // 🔥 根据语言切换日期格式
@@ -150,7 +239,7 @@ export default function MarketHeader({ event, status = "open", result = null, cl
       // 🔥 规范化格式：使用翻译的"当地时间"
       return `${dateStr}, ${t('market.time.local_time')} ${startTimeStr}–${endTimeStr}`;
     } catch (error) {
-      console.error('计算时间区间失败:', error);
+      console.error('❌ [MarketHeader] 计算时间区间失败:', error, 'closingDate:', closingDate);
       return null;
     }
   };
@@ -208,16 +297,39 @@ export default function MarketHeader({ event, status = "open", result = null, cl
       )}
 
       <div className="flex items-start gap-4">
-      <div className="size-16 rounded-xl bg-white/5 p-1.5 flex-shrink-0 border border-pm-border">
+      <div className="size-16 rounded-xl bg-white/5 p-1.5 flex-shrink-0 border border-pm-border overflow-hidden">
+        {imageUrl ? (
+          // 🔥 优先使用从Polymarket抓取的原始头像图片
+          <img 
+            src={imageUrl} 
+            alt={event.title}
+            className="w-full h-full rounded-lg object-cover"
+            onError={(e) => {
+              // 如果图片加载失败，fallback到图标
+              (e.target as HTMLImageElement).style.display = 'none';
+              const fallback = (e.target as HTMLImageElement).nextElementSibling as HTMLElement;
+              if (fallback) fallback.style.display = 'flex';
+            }}
+          />
+        ) : null}
         <div
-          className={`w-full h-full rounded-lg ${iconColor} flex items-center justify-center text-white shadow-inner`}
+          className={`w-full h-full rounded-lg ${iconColor} flex items-center justify-center text-white shadow-inner ${imageUrl ? 'hidden' : ''}`}
         >
           <IconComponent className="w-10 h-10" />
         </div>
       </div>
       <div>
         <h1 className="text-2xl md:text-3xl lg:text-[32px] font-bold text-white leading-tight mb-2">
-          {event.title}
+          {(() => {
+            // 🔥 根据语言环境显示对应的标题（不再使用实时翻译）
+            const market = event as any;
+            if (language === 'zh' && market.titleZh) {
+              // 优先使用已有的 titleZh
+              return market.titleZh;
+            }
+            // 英文环境或没有 titleZh，显示原始标题
+            return event.title;
+          })()}
         </h1>
         {/* 🔥 时间区间显示（参考 Polymarket 风格） */}
         {timeInterval && (
@@ -236,7 +348,7 @@ export default function MarketHeader({ event, status = "open", result = null, cl
             /* 如果市场未结束且有倒计时，显示倒计时 */
             <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-pm-card border border-pm-border text-white shadow-sm ring-1 ring-white/5">
               <Clock className="w-[18px] h-[18px] text-pm-blue animate-pulse" />
-              <div className="flex items-baseline gap-1">
+              <div className="flex items-baseline gap-1" suppressHydrationWarning>
                 <span className="font-mono font-bold tracking-wide text-sm">
                   {String(countdown.days).padStart(2, '0')}<span className="text-[10px] text-pm-text-dim font-sans ml-0.5 mr-1">
                     {t('market.time.days')}

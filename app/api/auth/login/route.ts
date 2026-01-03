@@ -22,6 +22,17 @@ export async function POST(request: Request) {
       );
     }
 
+    // 🔥 数据库连接检查
+    try {
+      await prisma.$connect();
+    } catch (dbError) {
+      console.error('❌ [Login API] 数据库连接失败:', dbError);
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed. Please check server configuration.' },
+        { status: 503 }
+      );
+    }
+
     // 查找用户
     const user = await prisma.users.findUnique({
       where: { email },

@@ -94,8 +94,9 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
       const params = new URLSearchParams();
       
       // 🔥 获取 URL 中的搜索参数
+      // 🔥 参数验证：确保 searchQuery 不为空字符串
       const searchQuery = searchParams.get('search');
-      if (searchQuery) {
+      if (searchQuery && searchQuery.trim() !== '') {
         params.append("search", searchQuery);
       }
       
@@ -104,10 +105,11 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
         params.append("category", "hot");
       } else {
         // 普通分类页面：如果选择了子分类，使用子分类的 slug；否则使用父分类的 slug
-        if (activeFilter !== "all" && activeFilter !== slug) {
+        // 🔥 参数验证：确保 activeFilter 和 slug 不为空
+        if (activeFilter && activeFilter !== "all" && activeFilter !== slug && slug) {
           // 选择了子分类，使用子分类的 slug
           params.append("category", activeFilter);
-        } else {
+        } else if (slug && slug.trim() !== '') {
           // 选择了"全部"或父分类本身，使用父分类的 slug
           params.append("category", slug);
         }
@@ -172,18 +174,33 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
   // 将 Market 类型转换为 MarketEvent 类型
   const convertMarketToEvent = (market: Market): MarketEvent & { originalId?: string } => {
     const getSafeDeadline = (dateValue?: string | Date): string => {
-      if (!dateValue) return "N/A";
+      if (!dateValue) return "待定";
       
       try {
-        const date = new Date(dateValue);
-        if (isNaN(date.getTime())) {
-          console.warn('Invalid date value:', dateValue);
-          return "N/A";
+        // 🔥 安全日期处理：确保输入是有效值
+        if (typeof dateValue === 'string' && dateValue.trim() === '') {
+          return "待定";
         }
+        
+        const date = new Date(dateValue);
+        
+        // 🔥 检查是否为无效日期
+        if (isNaN(date.getTime())) {
+          console.warn('⚠️ [CategoryClient] 无效日期值:', dateValue);
+          return "待定";
+        }
+        
+        // 🔥 检查日期是否在合理范围内（1970-2100）
+        const year = date.getFullYear();
+        if (year < 1970 || year > 2100) {
+          console.warn('⚠️ [CategoryClient] 日期超出合理范围:', dateValue, '年份:', year);
+          return "待定";
+        }
+        
         return date.toISOString().split("T")[0];
       } catch (error) {
-        console.error('Error parsing date:', dateValue, error);
-        return "N/A";
+        console.error('❌ [CategoryClient] 日期解析错误:', dateValue, error);
+        return "待定";
       }
     };
 
@@ -307,10 +324,19 @@ export default function CategoryClient({ slug, categoryName, pageTitle, hasFilte
       }
     }
 
+    // 🔥 根据语言环境显示对应的标题（实时翻译在 MarketCard 组件中处理）
+    const displayTitle = (() => {
+      const marketAny = market as any;
+      if (language === 'zh' && marketAny.titleZh) {
+        return marketAny.titleZh;
+      }
+      return market.title;
+    })();
+    
     return {
       id: numericId,
       rank: 1,
-      title: market.title,
+      title: displayTitle, // 🔥 使用根据语言环境选择的标题
       category: market.category || '未分类',
       categorySlug: market.categorySlug || 'all',
       icon: iconName,

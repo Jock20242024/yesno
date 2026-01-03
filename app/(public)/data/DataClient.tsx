@@ -135,11 +135,36 @@ export function DataClient() {
           volume: Number(market.totalVolume || market.volume || 0),
           rank: market.rank !== null && market.rank !== undefined ? market.rank : index + 1,
           // 🔥 安全日期处理：确保 closingDate 始终是有效的日期字符串
-          closingDate: (market.closingDate && typeof market.closingDate === 'string' && market.closingDate.trim() !== '')
-            ? market.closingDate
-            : (market.endTime && typeof market.endTime === 'string' && market.endTime.trim() !== '')
-            ? market.endTime
-            : new Date().toISOString(), // 兜底：使用当前时间
+          closingDate: (() => {
+            const dateStr = (market.closingDate && typeof market.closingDate === 'string' && market.closingDate.trim() !== '')
+              ? market.closingDate
+              : (market.endTime && typeof market.endTime === 'string' && market.endTime.trim() !== '')
+              ? market.endTime
+              : null;
+            
+            if (!dateStr) {
+              return new Date().toISOString(); // 兜底：使用当前时间
+            }
+            
+            // 🔥 验证日期有效性
+            try {
+              const testDate = new Date(dateStr);
+              if (isNaN(testDate.getTime())) {
+                console.warn('⚠️ [DataClient] 无效的 closingDate，使用当前时间:', dateStr);
+                return new Date().toISOString();
+              }
+              // 🔥 检查日期是否在合理范围内
+              const year = testDate.getFullYear();
+              if (year < 1970 || year > 2100) {
+                console.warn('⚠️ [DataClient] closingDate 超出合理范围，使用当前时间:', dateStr, '年份:', year);
+                return new Date().toISOString();
+              }
+              return dateStr;
+            } catch (e) {
+              console.error('❌ [DataClient] 日期验证错误:', e, '原始值:', dateStr);
+              return new Date().toISOString();
+            }
+          })(),
           status: market.status || 'OPEN',
           isHot: market.isHot || false,
         };
@@ -301,17 +326,24 @@ export function DataClient() {
   // 🔥 安全日期格式化：防止 Invalid time value 错误
   const formatDate = (dateString: string | null | undefined) => {
     // 空值检查
-    if (!dateString) {
-      return 'N/A';
+    if (!dateString || (typeof dateString === 'string' && dateString.trim() === '')) {
+      return '待定';
     }
     
     try {
       const date = new Date(dateString);
       
-      // 检查是否为无效日期 (Invalid Date)
+      // 🔥 检查是否为无效日期 (Invalid Date)
       if (isNaN(date.getTime())) {
         console.warn('⚠️ [DataClient] 无效日期:', dateString);
-        return 'N/A';
+        return '待定';
+      }
+      
+      // 🔥 检查日期是否在合理范围内（1970-2100）
+      const year = date.getFullYear();
+      if (year < 1970 || year > 2100) {
+        console.warn('⚠️ [DataClient] 日期超出合理范围:', dateString, '年份:', year);
+        return '待定';
       }
       
       const now = new Date();
@@ -328,7 +360,7 @@ export function DataClient() {
       }
     } catch (e) {
       console.error('❌ [DataClient] 日期格式化错误:', e, '原始值:', dateString);
-      return 'N/A';
+      return '待定';
     }
   };
 
@@ -366,8 +398,8 @@ export function DataClient() {
 
         {/* 主要内容区域 - 80/20 分栏 */}
         <div className="grid grid-cols-1 lg:grid-cols-10 gap-8 items-start">
-          {/* 左侧：全网热门事件 Top 10 - 80% 宽度 */}
-          <div className="lg:col-span-8">
+          {/* 左侧：全网热门事件 Top 10 - 扩大宽度以容纳更多内容 */}
+          <div className="lg:col-span-7 xl:col-span-8">
             <div className="bg-surface-dark rounded-lg border border-border-dark p-6">
               <h2 className="text-xl font-bold text-white mb-4">
                 {t('home.market_list.title')}
@@ -376,7 +408,7 @@ export function DataClient() {
 
               {/* 紧凑表格布局 */}
               <div className="overflow-x-auto -mx-6 px-6">
-                <table className="w-full border-collapse">
+                <table className="w-full border-collapse min-w-[800px]">
                   {/* 表头 - 精美的表头设计 */}
                   <thead>
                     <tr className="border-b-2 border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
@@ -392,10 +424,10 @@ export function DataClient() {
                       <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider min-w-[120px] md:min-w-[200px]">
                         {t('home.market_list.prediction_probability')}
                       </th>
-                      <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider w-24">
+                      <th className="px-3 py-3 text-left text-xs font-bold text-primary uppercase tracking-wider w-28">
                         {t('home.market_list.deadline')}
                       </th>
-                      <th className="px-3 py-3 text-right text-xs font-bold text-primary uppercase tracking-wider w-32">
+                      <th className="px-3 py-3 text-right text-xs font-bold text-primary uppercase tracking-wider w-28 min-w-[100px]">
                         {t('home.market_list.volume')}
                       </th>
                     </tr>
@@ -501,8 +533,8 @@ export function DataClient() {
             </div>
           </div>
 
-          {/* 右侧：预测市场实时数据 - 20% 宽度（最大280px） */}
-          <div className="lg:col-span-2">
+          {/* 右侧：预测市场实时数据 - 保持固定宽度 */}
+          <div className="lg:col-span-3 xl:col-span-2">
             <div className="bg-surface-dark rounded-lg border border-border-dark p-6 sticky top-24 max-w-[280px]">
               <h2 className="text-xl font-bold text-white mb-6">
                 {t('home.sidebar.title')}

@@ -126,6 +126,20 @@ function OverviewTab({
       const positionsWithNames = await Promise.all(
         rawPositions.map(async (pos) => {
           try {
+            // 🔥 参数验证：确保 marketId 不为空
+            if (!pos.marketId || pos.marketId.trim() === '') {
+              console.warn('⚠️ [Profile] marketId 为空，跳过 API 请求');
+              return {
+                id: pos.id,
+                marketId: pos.marketId || '',
+                marketName: `市场 ${pos.marketId?.slice(0, 8) || '未知'}`,
+                averagePrice: pos.avgPrice || 0,
+                currentPrice: pos.currentPrice || 0,
+                value: pos.currentValue || 0,
+                pnlPercent: pos.profitLoss || 0,
+                shares: pos.shares || 0,
+              };
+            }
             const response = await fetch(`/api/markets/${pos.marketId}`);
             if (response.ok) {
               const result = await response.json();
@@ -479,6 +493,11 @@ export default function ProfilePage() {
       setError(null);
 
       try {
+        // 🔥 参数验证：确保 currentUser.id 不为空
+        if (!currentUser?.id || currentUser.id.trim() === '') {
+          console.warn('⚠️ [Profile] currentUser.id 为空，跳过 API 请求');
+          return;
+        }
         const response = await fetch(`/api/users/${currentUser.id}`);
         if (!response.ok) {
           throw new Error("Failed to fetch user data");

@@ -33,6 +33,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   } else {
     // 🔥 从数据库查询分类信息（动态路由）
     try {
+      // 🔥 数据库连接检查
+      try {
+        await prisma.$connect();
+      } catch (dbError) {
+        console.error('❌ [Category Page] 数据库连接失败:', dbError);
+        throw new Error('Database connection failed');
+      }
+
       const category = await prisma.categories.findFirst({
         where: {
           slug: slug,
@@ -47,8 +55,12 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
       categoryName = category.name;
       pageTitle = category.name;
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [Category Page] 查询分类失败:', error);
+      // 🔥 如果是数据库连接错误，显示友好提示而不是直接 404
+      if (error?.message?.includes('Database connection failed') || error?.message?.includes('Can\'t reach database')) {
+        throw new Error('数据库连接失败，请检查服务器配置');
+      }
       notFound(); // 返回 404 页面
     }
   }

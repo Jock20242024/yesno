@@ -172,6 +172,11 @@ export default function CategoriesManagementPage() {
     }
 
     try {
+      // 🔥 参数验证：确保 categoryId 不为空
+      if (!categoryId || categoryId.trim() === '') {
+        console.warn('⚠️ [Categories] categoryId 为空，跳过 API 请求');
+        return;
+      }
       const response = await fetch(`/api/admin/categories/${categoryId}`, {
         method: "DELETE",
         credentials: 'include',

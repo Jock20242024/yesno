@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useLanguage } from "@/i18n/LanguageContext";
 import { MarketEvent } from "@/lib/data";
 import {
   Bitcoin,
@@ -47,7 +48,27 @@ interface MarketCardProps {
 
 export default function MarketCard({ event }: MarketCardProps) {
   const { isLoggedIn } = useAuth();
+  const { language } = useLanguage();
   const router = useRouter();
+  
+  // 🔥 实时翻译已完全禁用：不再发送任何翻译请求
+  // 翻译已通过以下方式实现：
+  // 1. 批量翻译脚本：一次性翻译历史数据
+  // 2. 采集时自动翻译：新市场自动翻译
+  // 前端不再进行实时翻译，避免 API 调用和性能问题
+  
+  // 🔥 根据语言环境显示对应的标题（不再使用实时翻译）
+  const displayTitle = React.useMemo(() => {
+    const market = event as any;
+    
+    // 如果是中文环境，优先使用已有的 titleZh
+    if (language === 'zh' && market.titleZh) {
+      return market.titleZh;
+    }
+    
+    // 英文环境或没有 titleZh，显示原始标题
+    return event.title;
+  }, [event, language]);
   
   // 🚀 优先级 1: 物理提取原始配图（解决 Elon Musk 头像消失问题）
   const getImageSrc = (): string | null => {
@@ -200,7 +221,7 @@ export default function MarketCard({ event }: MarketCardProps) {
           </div>
           <div className="flex flex-col min-w-0 flex-1">
             <h3 className="text-white font-bold text-lg leading-snug line-clamp-2 group-hover:underline decoration-text-secondary/50 underline-offset-2 transition-all">
-              {event.title}
+              {displayTitle}
             </h3>
           </div>
         </div>

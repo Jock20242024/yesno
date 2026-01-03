@@ -435,12 +435,15 @@ export class PolymarketAdapter extends ScraperEngine {
       select: {
         id: true,
         externalId: true,
+        title: true,
+        description: true,
+        titleZh: true, // 🔥 添加 titleZh 字段用于判断是否需要翻译
+        descriptionZh: true, // 🔥 添加 descriptionZh 字段
         source: true,
         isFactory: true,
         internalVolume: true,
         manualOffset: true,
         status: true,
-        description: true, // 🔥 添加 description 字段
       },
     });
     console.log(`✅ [DEBUG] [save] 现有市场查询完成 (耗时: ${Date.now() - existingMarketsQueryStart}ms, 找到: ${existingMarkets.length} 个)`);
@@ -714,14 +717,31 @@ export class PolymarketAdapter extends ScraperEngine {
           endDate = new Date(marketData.endDateIso);
         } else if (marketData.startDate) {
           // 如果没有 endDate，使用 startDate + 30 天
-          endDate = new Date(new Date(marketData.startDate).getTime() + 30 * 24 * 60 * 60 * 1000);
+          try {
+            const startDate = new Date(marketData.startDate);
+            if (!isNaN(startDate.getTime())) {
+              endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+            } else {
+              throw new Error('Invalid startDate');
+            }
+          } catch (e) {
+            console.warn(`⚠️ [PolymarketAdapter] startDate 无效，使用默认值 (ID: ${marketData.id}):`, marketData.startDate);
+            endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+          }
         } else {
           endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         }
         
-        // 验证日期有效性
+        // 🔥 验证日期有效性：检查是否为无效日期
         if (isNaN(endDate.getTime())) {
           console.warn(`⚠️ [PolymarketAdapter] 无效的日期，使用默认值 (ID: ${marketData.id})`);
+          endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        }
+        
+        // 🔥 验证日期是否在合理范围内（1970-2100）
+        const year = endDate.getFullYear();
+        if (year < 1970 || year > 2100) {
+          console.warn(`⚠️ [PolymarketAdapter] 日期超出合理范围 (年份: ${year})，使用默认值 (ID: ${marketData.id})`);
           endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         }
 
@@ -729,34 +749,9 @@ export class PolymarketAdapter extends ScraperEngine {
         const title = marketData.title || marketData.question || '未命名市场';
         const description = marketData.description || '';
         
-        // 🔥 性能优化：暂时禁用翻译功能，减少API调用和处理时间
-        // 翻译服务会为每条数据调用外部API，导致采集变慢
-        // 如果需要翻译，可以在后台手动编辑或使用批量翻译功能
+        // 🔥 初始化翻译字段（将在 existingMarket 查询后决定是否需要翻译）
         let titleZh: string | null = null;
         let descriptionZh: string | null = null;
-        
-        // 🔥 暂时禁用翻译以提升性能
-        // TODO: 如果需要翻译，可以：
-        // 1. 配置翻译 API Key
-        // 2. 使用批量翻译（在后台管理界面）
-        // 3. 或使用异步翻译（采集完成后后台翻译）
-        /*
-        try {
-          const [translatedTitle, translatedDescription] = await Promise.all([
-            translateText(title, 'zh'),
-            description ? translateText(description, 'zh') : Promise.resolve(''),
-          ]);
-          
-          if (translatedTitle && translatedTitle.trim()) {
-            titleZh = translatedTitle.trim();
-          }
-          if (translatedDescription && translatedDescription.trim()) {
-            descriptionZh = translatedDescription.trim();
-          }
-        } catch (error) {
-          console.error(`❌ [PolymarketAdapter] 翻译失败 (ID: ${marketData.id}):`, error);
-        }
-        */
 
         // 🔥 性能优化：从批量查询的分类 Map 中获取
         let categoryId: string | null = null;
@@ -793,6 +788,32 @@ export class PolymarketAdapter extends ScraperEngine {
 
         // 🔥 禁止更新工厂市场：工厂市场由内部系统管理，不应该被 Polymarket 采集源更新
         // 这个检查已经在上面（第1217行）执行，这里保留注释作为说明
+
+        // 🔥 AI 自动翻译：只翻译标题，不翻译描述（节省 API 调用）
+        // 判断是否需要翻译：新市场或现有市场但 titleZh 为空
+        const needsTranslation = !existingMarket || !existingMarket.titleZh;
+        if (needsTranslation && title && title.trim()) {
+          try {
+            console.log(`🌐 [PolymarketAdapter] 开始翻译标题: ${title.substring(0, 50)}...`);
+            titleZh = await translateText(title, 'zh');
+            if (titleZh && titleZh.trim()) {
+              console.log(`✅ [PolymarketAdapter] 标题翻译成功: ${titleZh.substring(0, 50)}...`);
+            } else {
+              console.warn(`⚠️ [PolymarketAdapter] 标题翻译返回空，可能 API Key 未配置`);
+              titleZh = null;
+            }
+          } catch (error) {
+            console.error(`❌ [PolymarketAdapter] 标题翻译失败:`, error);
+            titleZh = null; // 翻译失败时保持为 null，不影响主流程
+          }
+          
+          // 🔥 不翻译描述，节省 API 调用
+          descriptionZh = null;
+        } else if (existingMarket && existingMarket.titleZh) {
+          // 🔥 如果已有翻译，保留现有翻译
+          titleZh = existingMarket.titleZh;
+          descriptionZh = existingMarket.descriptionZh || null;
+        }
 
         // 🔥 状态锁定逻辑：更新数据时绝对禁止修改 status 字段
         // 只有新创建的市场才设置 status，已存在的市场保持原有 status
@@ -837,7 +858,7 @@ export class PolymarketAdapter extends ScraperEngine {
             // 更新基本信息
             title: title,
             description: description || existingMarket.description || '',
-            // 更新翻译字段（如果存在）
+            // 🔥 更新翻译字段：如果翻译成功则更新，否则保持原值（不覆盖已有翻译）
             ...(titleZh ? { titleZh } : {}),
             ...(descriptionZh ? { descriptionZh } : {}),
             closingDate: endDate,
@@ -1122,8 +1143,26 @@ export class PolymarketAdapter extends ScraperEngine {
               // 提取数据（复用 save 方法中的逻辑）
               const title = singleMarketData.title || singleMarketData.question || '';
               const description = singleMarketData.description || '';
+              // 🔥 安全日期处理：验证日期有效性
               const endDateStr = singleMarketData.endDateIso || singleMarketData.endDate;
-              const endDate = endDateStr ? new Date(endDateStr) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+              let endDate: Date;
+              if (endDateStr) {
+                endDate = new Date(endDateStr);
+                // 验证日期有效性
+                if (isNaN(endDate.getTime())) {
+                  console.warn(`⚠️ [PolymarketAdapter] 无效的 endDate，使用默认值 (ID: ${singleMarketData.id}):`, endDateStr);
+                  endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                } else {
+                  // 验证日期是否在合理范围内
+                  const year = endDate.getFullYear();
+                  if (year < 1970 || year > 2100) {
+                    console.warn(`⚠️ [PolymarketAdapter] endDate 超出合理范围 (年份: ${year})，使用默认值 (ID: ${singleMarketData.id})`);
+                    endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                  }
+                }
+              } else {
+                endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+              }
           
               // 提取 outcomePrices
               let outcomePricesJson: string | null = null;

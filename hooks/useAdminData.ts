@@ -83,10 +83,19 @@ export function useDeposits(queryParams?: {
 
       try {
         const params = new URLSearchParams();
-        if (queryParams?.search) params.append("search", queryParams.search);
-        if (queryParams?.status) params.append("status", queryParams.status);
-        if (queryParams?.page) params.append("page", queryParams.page.toString());
-        if (queryParams?.limit) params.append("limit", queryParams.limit.toString());
+        // 🔥 参数验证：确保参数不为空字符串
+        if (queryParams?.search && queryParams.search.trim() !== '') {
+          params.append("search", queryParams.search);
+        }
+        if (queryParams?.status && queryParams.status.trim() !== '') {
+          params.append("status", queryParams.status);
+        }
+        if (queryParams?.page && queryParams.page > 0) {
+          params.append("page", queryParams.page.toString());
+        }
+        if (queryParams?.limit && queryParams.limit > 0) {
+          params.append("limit", queryParams.limit.toString());
+        }
 
         const response = await fetch(`/api/admin/deposits?${params.toString()}`, {
           method: "GET",
@@ -146,10 +155,19 @@ export function useWithdrawals(queryParams?: {
 
       try {
         const params = new URLSearchParams();
-        if (queryParams?.search) params.append("search", queryParams.search);
-        if (queryParams?.status) params.append("status", queryParams.status);
-        if (queryParams?.page) params.append("page", queryParams.page.toString());
-        if (queryParams?.limit) params.append("limit", queryParams.limit.toString());
+        // 🔥 参数验证：确保参数不为空字符串
+        if (queryParams?.search && queryParams.search.trim() !== '') {
+          params.append("search", queryParams.search);
+        }
+        if (queryParams?.status && queryParams.status.trim() !== '') {
+          params.append("status", queryParams.status);
+        }
+        if (queryParams?.page && queryParams.page > 0) {
+          params.append("page", queryParams.page.toString());
+        }
+        if (queryParams?.limit && queryParams.limit > 0) {
+          params.append("limit", queryParams.limit.toString());
+        }
 
         const response = await fetch(`/api/admin/withdrawals?${params.toString()}`, {
           method: "GET",
@@ -448,12 +466,26 @@ export function useAdminMarkets(queryParams?: {
 
       try {
         const params = new URLSearchParams();
-        if (queryParams?.search) params.append("search", queryParams.search);
-        if (queryParams?.status) params.append("status", queryParams.status);
-        if (queryParams?.page) params.append("page", queryParams.page.toString());
-        if (queryParams?.limit) params.append("limit", queryParams.limit.toString());
-        if (queryParams?.showDetails) params.append("showDetails", "true"); // 🔥 下钻功能
-        if (queryParams?.source) params.append("source", queryParams.source); // 🚀 第一步：添加 source 参数
+        // 🔥 参数验证：确保参数不为空字符串
+        if (queryParams?.search && queryParams.search.trim() !== '') {
+          params.append("search", queryParams.search);
+        }
+        if (queryParams?.status && queryParams.status.trim() !== '') {
+          params.append("status", queryParams.status);
+        }
+        if (queryParams?.page && queryParams.page > 0) {
+          params.append("page", queryParams.page.toString());
+        }
+        if (queryParams?.limit && queryParams.limit > 0) {
+          params.append("limit", queryParams.limit.toString());
+        }
+        if (queryParams?.showDetails) {
+          params.append("showDetails", "true"); // 🔥 下钻功能
+        }
+        // 🔥 参数验证：确保 source 不为空字符串
+        if (queryParams?.source && queryParams.source.trim() !== '') {
+          params.append("source", queryParams.source); // 🚀 第一步：添加 source 参数
+        }
 
         const response = await fetch(`/api/admin/markets?${params.toString()}`, {
           method: "GET",
@@ -534,10 +566,19 @@ export function useAdminUsers(queryParams?: {
 
       try {
         const params = new URLSearchParams();
-        if (queryParams?.search) params.append("search", queryParams.search);
-        if (queryParams?.status) params.append("status", queryParams.status);
-        if (queryParams?.page) params.append("page", queryParams.page.toString());
-        if (queryParams?.limit) params.append("limit", queryParams.limit.toString());
+        // 🔥 参数验证：确保参数不为空字符串
+        if (queryParams?.search && queryParams.search.trim() !== '') {
+          params.append("search", queryParams.search);
+        }
+        if (queryParams?.status && queryParams.status.trim() !== '') {
+          params.append("status", queryParams.status);
+        }
+        if (queryParams?.page && queryParams.page > 0) {
+          params.append("page", queryParams.page.toString());
+        }
+        if (queryParams?.limit && queryParams.limit > 0) {
+          params.append("limit", queryParams.limit.toString());
+        }
 
         const response = await fetch(`/api/admin/users?${params.toString()}`, {
           method: "GET",

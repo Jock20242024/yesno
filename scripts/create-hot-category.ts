@@ -1,63 +1,72 @@
+/**
+ * 创建热门分类脚本
+ * 如果热门分类不存在，则创建一个
+ */
+
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
+
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log('🔍 检查并创建/修复"热门"分类...\n');
+async function createHotCategory() {
+  try {
+    // 检查是否已存在热门分类
+    const existingHotCategory = await prisma.categories.findFirst({
+      where: {
+        OR: [
+          { slug: 'hot' },
+          { slug: '-1' },
+          { name: { contains: '热门' } },
+        ],
+      },
+    });
 
-  // 1. 检查是否已存在热门分类
-  const existingHot = await prisma.categories.findFirst({
-    where: {
-      OR: [
-        { slug: "-1" },
-        { slug: "hot" },
-        { name: { contains: "热门" } }
-      ]
-    },
-  });
-
-  if (existingHot) {
-    console.log('✅ "热门"分类已存在:');
-    console.log(`   ID: ${existingHot.id}`);
-    console.log(`   Name: ${existingHot.name}`);
-    console.log(`   Slug: ${existingHot.slug}`);
-    
-    // 确保 slug 是 "-1"
-    if (existingHot.slug !== "-1") {
-      console.log('\n🔄 更新 slug 为 "-1"...');
-      const updated = await prisma.categories.update({
-        where: { id: existingHot.id },
-        data: { slug: "-1" },
+    if (existingHotCategory) {
+      console.log('✅ 热门分类已存在:', {
+        id: existingHotCategory.id,
+        name: existingHotCategory.name,
+        slug: existingHotCategory.slug,
       });
-      console.log('✅ 更新完成，新 slug:', updated.slug);
+      return existingHotCategory;
     }
-    
-    console.log('\n📋 总结：');
-    console.log(`   "热门"分类的真实 ID 是: ${existingHot.id}`);
-    console.log(`   "热门"分类的 slug 是: ${existingHot.slug}`);
-    console.log(`   前端表单应发送 ID: ${existingHot.id}（不是 "-1"）`);
-  } else {
-    console.log('❌ 未找到"热门"分类，开始创建...');
-    
-    // 创建热门分类（使用 UUID 作为 ID，slug 为 "-1"）
-    const newHotCategory = await prisma.categories.create({
+
+    // 创建热门分类
+    const hotCategory = await prisma.categories.create({
       data: {
-        name: "热门",
-        slug: "-1",
-        icon: "Flame",
+        id: randomUUID(),
+        name: '热门',
+        slug: 'hot',
+        icon: 'Flame',
         displayOrder: 0,
         sortOrder: 0,
         level: 0,
-        status: "active",
         parentId: null,
+        status: 'active',
+        updatedAt: new Date(),
       },
     });
-    
-    console.log('✅ "热门"分类创建成功:');
-    console.log(JSON.stringify(newHotCategory, null, 2));
-    console.log('\n📋 前端表单应发送的 ID:', newHotCategory.id);
+
+    console.log('✅ 热门分类创建成功:', {
+      id: hotCategory.id,
+      name: hotCategory.name,
+      slug: hotCategory.slug,
+    });
+
+    return hotCategory;
+  } catch (error) {
+    console.error('❌ 创建热门分类失败:', error);
+    throw error;
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
-main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+createHotCategory()
+  .then(() => {
+    console.log('✅ 脚本执行完成');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('❌ 脚本执行失败:', error);
+    process.exit(1);
+  });

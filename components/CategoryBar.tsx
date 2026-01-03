@@ -70,13 +70,19 @@ export default function CategoryBar() {
     return mounted ? t(key) : fallback;
   }, [mounted, t]);
 
-  // 固定分类（系统内置）- 只保留"数据"，"热门"从数据库获取
+  // 固定分类（系统内置）- 包含"数据"和"热门"
   const fixedCategories: CategoryItem[] = useMemo(() => [
     {
       slug: "data",
       label: mounted ? t('home.categories.data') : 'Data',
       icon: Icons.LineChart,
       isHighlight: false,
+    },
+    {
+      slug: "hot",
+      label: mounted ? t('home.categories.hot') : 'Trending',
+      icon: Icons.Flame,
+      isHighlight: true, // 🔥 热门标签高亮显示
     },
   ], [t, mounted]);
 
@@ -127,9 +133,14 @@ export default function CategoryBar() {
           // 如果 API 返回了分类，使用 API 的数据
           if (data.data.length > 0) {
             // 🔥 只显示顶级分类（level 0 或 parentId 为 null）用于导航栏
+            // 🔥 同时过滤掉"热门"分类（slug 为 "hot" 或 "-1"），因为已经在固定分类中定义了
             const topLevelCategories = data.data.filter(
               (cat: ApiCategory & { level?: number; parentId?: string | null }) =>
-                !cat.parentId && (cat.level === 0 || cat.level === undefined)
+                !cat.parentId && 
+                (cat.level === 0 || cat.level === undefined) &&
+                cat.slug !== "hot" && 
+                cat.slug !== "-1" &&
+                cat.name !== "热门"
             );
             
             const apiCategories: CategoryItem[] = topLevelCategories

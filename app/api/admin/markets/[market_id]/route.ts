@@ -274,12 +274,18 @@ export async function PUT(
     if (endTime) updateData.closingDate = endTime;
     if (image !== undefined) updateData.image = image?.trim() || null;
     if (externalId !== undefined) updateData.externalId = externalId?.trim() || null;
-    // 🔥 修复'设为热门'保存：必须显式更新 isHot（即使为 false 也要更新）
+    // 🔥 统一热门标签逻辑：isHot 字段是决定是否热门的唯一标准
+    // 如果用户明确设置了 isHot，使用用户设置的值；否则根据分类关联自动判断
     if (isHot !== undefined) {
+      // 用户明确设置了 isHot，直接使用
       updateData.isHot = Boolean(isHot);
-
     }
-    if (reviewStatus !== undefined) updateData.reviewStatus = reviewStatus; // 🔥 审核状态
+    
+    // 🔥 关键修复：确保 reviewStatus 不会被意外改变
+    // 只有在用户明确提供 reviewStatus 时才更新，否则保持原值不变
+    if (reviewStatus !== undefined) {
+      updateData.reviewStatus = reviewStatus;
+    }
 
     // 🔥 处理分类关联更新（如果提供了 categoryIds）
     if (categoryIds !== undefined && Array.isArray(categoryIds)) {
@@ -299,28 +305,25 @@ export async function PUT(
         });
       }
       
-      // 🔥 修复热门标签逻辑：检查是否包含热门分类（ID=-1 或 slug="-1"）
-      const hotCategory = await prisma.categories.findFirst({
-        where: {
-          OR: [
-            { slug: '-1' },
-            { slug: 'hot' },
-            { name: { contains: '热门' } },
-          ],
-        },
-        select: { id: true },
-      });
-      
-      if (hotCategory && categoryIds.includes(hotCategory.id)) {
-        // 如果分类列表中包含热门分类，自动设置 isHot = true
-        updateData.isHot = true;
-
-      } else if (categoryIds.length > 0) {
-        // 如果分类列表中不包含热门分类，且 isHot 未显式提供，设置为 false
-        if (isHot === undefined) {
-          updateData.isHot = false;
-
+      // 🔥 统一热门标签逻辑：如果用户没有明确设置 isHot，则根据分类关联自动判断
+      if (isHot === undefined) {
+        const hotCategory = await prisma.categories.findFirst({
+          where: {
+            OR: [
+              { slug: '-1' },
+              { slug: 'hot' },
+              { name: { contains: '热门' } },
+            ],
+          },
+          select: { id: true },
+        });
+        
+        if (hotCategory && categoryIds.includes(hotCategory.id)) {
+          // 如果分类列表中包含热门分类，自动设置 isHot = true
+          updateData.isHot = true;
         }
+        // 注意：如果分类列表中不包含热门分类，不自动设置 isHot = false
+        // 保持市场的原 isHot 值，避免意外清除热门标记
       }
     }
 

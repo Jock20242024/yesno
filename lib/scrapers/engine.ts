@@ -130,17 +130,20 @@ export abstract class ScraperEngine {
       await this.updateDataSourceStatus('ACTIVE', itemsCount);
       console.log(`✅ [DEBUG] 采集源状态已更新`);
       
+      // 🔥 修复 write after end：所有日志和操作都在 return 之前完成
       const totalTime = Date.now() - overallStartTime;
       console.log(`🎉 [DEBUG] ========== 采集器执行完成 ==========`);
       console.log(`⏱️ [DEBUG] 总耗时: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}秒)`);
 
-      return {
+      // 🔥 确保在 return 之前完成所有操作
+      const result = {
         success: true,
         itemsCount,
         data: normalizedData,
       };
+      return result;
     } catch (error) {
-      // 详细错误日志
+      // 🔥 修复 write after end：所有日志和操作都在 return 之前完成
       console.error(`❌ [Scraper] ${this.sourceName} 采集失败:`);
       console.error(`   错误类型: ${error?.constructor?.name || 'Unknown'}`);
       console.error(`   错误消息: ${error instanceof Error ? error.message : String(error)}`);
@@ -151,23 +154,24 @@ export abstract class ScraperEngine {
         ? `${error.name}: ${error.message}` 
         : String(error);
 
-      // 更新为错误状态
+      // 🔥 更新为错误状态（必须在 return 之前完成）
       try {
         await this.updateDataSourceStatus(
           'ERROR',
           undefined,
           errorMessage.substring(0, 500) // 限制错误消息长度
         );
-
       } catch (updateError) {
         console.error(`❌ [Scraper] 更新错误状态失败:`, updateError);
       }
 
-      return {
+      // 🔥 确保在 return 之前完成所有操作
+      const result = {
         success: false,
         itemsCount: 0,
         error: errorMessage,
       };
+      return result;
     }
   }
 }

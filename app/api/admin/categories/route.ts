@@ -168,16 +168,16 @@ export async function GET(request: NextRequest) {
     const categoriesWithUniqueCount = await Promise.all(
       categories.map(async (category) => {
         try {
-          // 🚀 核心修复：判断是否为热门分类（categoryId === "-1" 或 slug === "hot"）
-          const isHotCategory = category.id === "-1" || category.slug === "hot" || category.name === "热门";
+          // 🚀 核心修复：判断是否为热门分类（slug === "hot" 或 name === "热门"）
+          const isHotCategory = category.slug === "hot" || category.slug === "-1" || category.name === "热门";
           
-          // 🚀 热门分类：使用统一的 buildHotMarketFilter 函数（动态获取真实UUID）
+          // 🚀 热门分类：使用统一的 buildHotMarketFilter 函数（基于 isHot: true）
           // 非热门分类：使用 BASE_MARKET_FILTER + categoryId
           const whereCondition = isHotCategory 
             ? await buildHotMarketFilter()
             : {
                 ...BASE_MARKET_FILTER,
-                categories: {
+                market_categories: {
                   some: {
                     categoryId: category.id
                   }

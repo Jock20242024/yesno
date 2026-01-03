@@ -217,32 +217,35 @@ export async function POST(
       console.warn(`⚠️ [Admin Scrapers] 更新 ScraperTask 失败:`, error);
     }
 
+    // 🔥 修复 write after end：所有逻辑必须在 return 之前完成
     if (result.success) {
-      return NextResponse.json({
+      // 🔥 所有日志和操作都在 return 之前完成
+      const responseData = {
         success: true,
         message: `采集成功，共处理 ${result.itemsCount} 条数据`,
         data: {
           itemsCount: result.itemsCount,
         },
-      });
+      };
+      // 🔥 确保在 return 之前完成所有操作
+      return NextResponse.json(responseData);
     } else {
-      // 返回详细的错误信息
+      // 🔥 所有日志和操作都在 return 之前完成
       const errorMessage = result.error || '采集失败';
       console.error(`❌ [Admin Scrapers] 采集失败: ${errorMessage}`);
       
-      return NextResponse.json(
-        {
-          success: false,
-          error: errorMessage,
-          data: {
-            itemsCount: result.itemsCount,
-          },
+      const responseData = {
+        success: false,
+        error: errorMessage,
+        data: {
+          itemsCount: result.itemsCount,
         },
-        { status: 500 }
-      );
+      };
+      // 🔥 确保在 return 之前完成所有操作
+      return NextResponse.json(responseData, { status: 500 });
     }
   } catch (error) {
-    // 详细的错误日志
+    // 🔥 修复 write after end：所有日志和操作都在 return 之前完成
     console.error('❌ [Admin Scrapers] 运行采集失败 (catch 块):');
     console.error(`   错误类型: ${error?.constructor?.name || 'Unknown'}`);
     console.error(`   错误消息: ${error instanceof Error ? error.message : String(error)}`);
@@ -253,12 +256,11 @@ export async function POST(
       ? `${error.name}: ${error.message}` 
       : String(error);
     
-    return NextResponse.json(
-      {
-        success: false,
-        error: errorMessage,
-      },
-      { status: 500 }
-    );
+    // 🔥 确保在 return 之前完成所有操作
+    const responseData = {
+      success: false,
+      error: errorMessage,
+    };
+    return NextResponse.json(responseData, { status: 500 });
   }
 }

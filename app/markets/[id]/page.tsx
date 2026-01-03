@@ -50,6 +50,12 @@ export default function MarketDetailPage() {
     setActiveTab(tab);
   };
 
+  // 🔥 修复：添加详情标签页状态管理（订单簿/评论/持仓者/规则）
+  const [detailTab, setDetailTab] = useState<"orderbook" | "comments" | "holders" | "rules">("orderbook");
+  const handleDetailTabChange = (tab: "orderbook" | "comments" | "holders" | "rules") => {
+    setDetailTab(tab);
+  };
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -314,8 +320,8 @@ export default function MarketDetailPage() {
       title: marketData.title,
       category: (marketData as any).category?.name || (marketData as any).category || '加密货币',
       categorySlug: (marketData as any).category?.slug || 'crypto',
-      icon: (marketData as any).icon || 'Bitcoin',
-      iconColor: (marketData as any).iconColor || 'bg-[#f7931a]',
+      icon: (marketData as any).icon || undefined, // 🔥 修复：不默认使用Bitcoin，让MarketHeader根据数据动态判断
+      iconColor: (marketData as any).iconColor || undefined,
       yesPercent: displayYesPercent,
       noPercent: displayNoPercent,
       deadline: new Date(marketData.endTime).toISOString().split("T")[0],
@@ -392,6 +398,7 @@ export default function MarketDetailPage() {
           closingDate={marketData.endTime}
           period={(marketData as any)?.period || null}
           isFactory={!!(marketData as any)?.templateId}
+          imageUrl={(marketData as any)?.imageUrl || (marketData as any)?.image || null}
         />
 
         {/* 2. 物理修复 Sticky 交易区（左动右不动） */}
@@ -399,7 +406,7 @@ export default function MarketDetailPage() {
           {/* 左侧区域 */}
           <div className="flex-1 lg:flex-[2] space-y-4 w-full">
             {/* K线图 */}
-            <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative">
+            <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative mb-8">
               <PriceChart
                 yesPercent={displayYesPercent}
                 marketStatus={marketStatus}
@@ -410,7 +417,7 @@ export default function MarketDetailPage() {
                 templateId={(marketData as any)?.templateId || (marketData as any)?.template?.id || null}
                 height={320}
                 data={priceData}
-                hideNavigation={true}
+                hideNavigation={false}
                 isFactory={!!((marketData as any)?.isFactory || (marketData as any)?.templateId)}
               />
             </div>
@@ -448,14 +455,16 @@ export default function MarketDetailPage() {
             )}
 
             {/* 详情 Tabs */}
-            <OrderBook
-              activeTab="orderbook"
-              onTabChange={() => {}}
-              marketTitle={marketData.title}
-              endDate={new Date(marketData.endTime).toISOString().split("T")[0]}
-              userOrders={(marketData as any).userOrders || []}
-              marketId={marketData.id}
-            />
+            <div className="mt-16">
+              <OrderBook
+                activeTab={detailTab}
+                onTabChange={handleDetailTabChange}
+                marketTitle={marketData.title}
+                endDate={new Date(marketData.endTime).toISOString().split("T")[0]}
+                userOrders={(marketData as any).userOrders || []}
+                marketId={marketData.id}
+              />
+            </div>
           </div>
 
           {/* 右侧交易区：粘性固定 */}

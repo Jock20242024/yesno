@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { BASE_MARKET_FILTER, buildHotMarketFilter } from '@/lib/marketQuery';
+import { aggregateMarketsByTemplate } from '@/lib/marketAggregation';
 
 // 🔥 强制禁用缓存，确保新创建的分类能立即显示
 export const dynamic = 'force-dynamic';
@@ -17,7 +19,23 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🔍 [Categories API] 收到请求:', request.url);
     
-    // 🔥 简化版本：直接返回基本分类数据，不计算 count
+    // 🔥 数据库连接检查
+    try {
+      await prisma.$connect();
+    } catch (dbError) {
+      console.error('❌ [Categories API] 数据库连接失败:', dbError);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Database connection failed',
+          data: [],
+          message: '无法连接到数据库，请检查 DATABASE_URL 配置'
+        },
+        { status: 503 }
+      );
+    }
+    
+    // 🔥 查询所有分类（包括子分类）
     const categories = await prisma.categories.findMany({
       where: {
         status: 'active',
@@ -56,33 +74,174 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    // 🔥 简化：直接返回分类数据，count 设为 0
-    const formattedCategories = categories
-      .filter(cat => !cat.parentId) // 只返回顶级分类
-      .map(cat => ({
-        id: cat.id,
-        name: cat.name,
-        slug: cat.slug,
-        icon: cat.icon,
-        displayOrder: cat.displayOrder,
-        status: cat.status,
-        createdAt: cat.createdAt,
-        updatedAt: cat.updatedAt,
-        level: cat.level,
-        parentId: cat.parentId,
-        sortOrder: cat.sortOrder,
-        count: 0, // 🔥 临时设为 0，后续可以添加计算逻辑
-        children: (cat.other_categories || []).map(child => ({
-          id: child.id,
-          name: child.name,
-          slug: child.slug,
-          icon: child.icon,
-          level: child.level,
-          displayOrder: child.displayOrder,
-          sortOrder: child.sortOrder,
-          count: 0, // 🔥 临时设为 0
-        })),
-      }));
+    // 🔥 递归函数：获取分类及其所有子分类的 ID
+    const getAllCategoryIds = (category: any, allCategories: any[]): string[] => {
+      const ids = [category.id];
+      const children = allCategories.filter(c => c.parentId === category.id);
+      children.forEach(child => {
+        ids.push(...getAllCategoryIds(child, allCategories));
+      });
+      return ids;
+    };
+
+    // 🔥 为每个分类计算市场数量（使用与后台相同的逻辑）
+    const categoriesWithCount = await Promise.all(
+      categories
+        .filter(cat => !cat.parentId) // 只处理顶级分类
+        .map(async (cat) => {
+          try {
+            // 🚀 判断是否为热门分类
+            const isHotCategory = cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门";
+            
+            // 🚀 构建查询条件（与后台逻辑一致）
+            const whereCondition = isHotCategory 
+              ? await buildHotMarketFilter()
+              : {
+                  ...BASE_MARKET_FILTER,
+                  market_categories: {
+                    some: {
+                      categoryId: { in: getAllCategoryIds(cat, categories) }, // 🔥 父分类统计所有子分类
+                    },
+                  },
+                };
+
+            // 🚀 查询市场（与后台使用相同的字段）
+            const markets = await prisma.markets.findMany({
+              where: whereCondition,
+              select: {
+                id: true,
+                templateId: true,
+                title: true,
+                period: true,
+                closingDate: true,
+                status: true,
+                isFactory: true,
+              },
+            });
+
+            // 🚀 使用与后台相同的聚合逻辑
+            const aggregatedMarkets = aggregateMarketsByTemplate(markets);
+            const count = aggregatedMarkets.length;
+
+            // 🔥 为子分类计算数量
+            const childrenWithCount = await Promise.all(
+              (cat.other_categories || []).map(async (child: any) => {
+                try {
+                  const childWhereCondition = {
+                    ...BASE_MARKET_FILTER,
+                    market_categories: {
+                      some: {
+                        categoryId: child.id,
+                      },
+                    },
+                  };
+
+                  const childMarkets = await prisma.markets.findMany({
+                    where: childWhereCondition,
+                    select: {
+                      id: true,
+                      templateId: true,
+                      title: true,
+                      period: true,
+                      closingDate: true,
+                      status: true,
+                      isFactory: true,
+                    },
+                  });
+
+                  const aggregatedChildMarkets = aggregateMarketsByTemplate(childMarkets);
+                  return {
+                    id: child.id,
+                    name: child.name,
+                    slug: child.slug,
+                    icon: child.icon,
+                    level: child.level,
+                    displayOrder: child.displayOrder,
+                    sortOrder: child.sortOrder,
+                    count: aggregatedChildMarkets.length,
+                  };
+                } catch (error) {
+                  // 🔥 [Count API Fail] 明确记录错误
+                  console.error(`[Count API Fail] ❌ [Categories API] 计算子分类 "${child.name}" (${child.slug}) 市场数量失败:`);
+                  console.error('错误类型:', error instanceof Error ? error.constructor.name : typeof error);
+                  console.error('错误消息:', error instanceof Error ? error.message : String(error));
+                  if (error instanceof Error && error.message.includes('ETIMEDOUT')) {
+                    console.error('🔴 [Count API Fail] 数据库连接超时 (6543端口问题)');
+                  }
+                  if (error instanceof Error && error.stack) {
+                    console.error('错误堆栈:', error.stack);
+                  }
+                  return {
+                    id: child.id,
+                    name: child.name,
+                    slug: child.slug,
+                    icon: child.icon,
+                    level: child.level,
+                    displayOrder: child.displayOrder,
+                    sortOrder: child.sortOrder,
+                    count: 0,
+                  };
+                }
+              })
+            );
+
+            return {
+              id: cat.id,
+              name: cat.name,
+              slug: cat.slug,
+              icon: cat.icon,
+              displayOrder: cat.displayOrder,
+              status: cat.status,
+              createdAt: cat.createdAt,
+              updatedAt: cat.updatedAt,
+              level: cat.level,
+              parentId: cat.parentId,
+              sortOrder: cat.sortOrder,
+              count: count, // 🔥 使用计算出的真实数量
+              children: childrenWithCount,
+            };
+          } catch (error) {
+            // 🔥 [Count API Fail] 明确记录错误
+            console.error(`[Count API Fail] ❌ [Categories API] 计算分类 "${cat.name}" (${cat.slug}) 市场数量失败:`);
+            console.error('错误类型:', error instanceof Error ? error.constructor.name : typeof error);
+            console.error('错误消息:', error instanceof Error ? error.message : String(error));
+            if (error instanceof Error && error.message.includes('ETIMEDOUT')) {
+              console.error('🔴 [Count API Fail] 数据库连接超时 (6543端口问题)');
+            }
+            if (error instanceof Error && error.stack) {
+              console.error('错误堆栈:', error.stack);
+            }
+            
+            // 即使出错也返回基本结构，count设为0
+            return {
+              id: cat.id,
+              name: cat.name,
+              slug: cat.slug,
+              icon: cat.icon,
+              displayOrder: cat.displayOrder,
+              status: cat.status,
+              createdAt: cat.createdAt,
+              updatedAt: cat.updatedAt,
+              level: cat.level,
+              parentId: cat.parentId,
+              sortOrder: cat.sortOrder,
+              count: 0, // 🔥 查询失败时返回0
+              children: (cat.other_categories || []).map(child => ({
+                id: child.id,
+                name: child.name,
+                slug: child.slug,
+                icon: child.icon,
+                level: child.level,
+                displayOrder: child.displayOrder,
+                sortOrder: child.sortOrder,
+                count: 0,
+              })),
+            };
+          }
+        })
+    );
+
+    const formattedCategories = categoriesWithCount;
 
     const response = NextResponse.json({
       success: true,
@@ -96,10 +255,16 @@ export async function GET(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('❌ [Categories API] 获取分类列表失败:');
+    // 🔥 [Count API Fail] 明确记录错误
+    console.error('[Count API Fail] ❌ [Categories API] 获取分类列表失败:');
     console.error('错误类型:', error instanceof Error ? error.constructor.name : typeof error);
     console.error('错误消息:', error instanceof Error ? error.message : String(error));
-    console.error('错误堆栈:', error instanceof Error ? error.stack : 'N/A');
+    if (error instanceof Error && error.message.includes('ETIMEDOUT')) {
+      console.error('🔴 [Count API Fail] 数据库连接超时 (6543端口问题)');
+    }
+    if (error instanceof Error && error.stack) {
+      console.error('错误堆栈:', error.stack);
+    }
     
     // 🔥 即使出错也返回空数组，而不是 500 错误
     const errorResponse = NextResponse.json(

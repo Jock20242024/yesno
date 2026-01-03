@@ -65,6 +65,9 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
   const activeSlotRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
+  // 🔥 新增：时间范围选择状态（1H/24H/7D/30D/ALL）
+  const [timeRange, setTimeRange] = useState<"1H" | "24H" | "7D" | "30D" | "ALL">("24H");
+  
   // 🔥 生成全天槽位数组函数（纯函数，不依赖 hooks）
   const generateAllDaySlots = (periodMinutes: number): Array<{ startTime: dayjs.Dayjs; endTime: dayjs.Dayjs; slotKey: string }> => {
     const slots: Array<{ startTime: dayjs.Dayjs; endTime: dayjs.Dayjs; slotKey: string }> = [];
@@ -167,14 +170,43 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
 
   // 🔥 使用真实数据：优先使用传入的 data，如果没有则使用默认数据
   const currentValue = yesPercent / 100;
-  const chartData = data && data.length > 0 
+  const allChartData = data && data.length > 0 
     ? data 
     : getDefaultChartData(currentValue);
   const isResolved = marketStatus === "closed" && marketResult !== null;
   
+  // 🔥 新增：根据时间范围过滤数据
+  const chartData = useMemo(() => {
+    if (!allChartData || allChartData.length === 0) return allChartData;
+    
+    const now = Date.now();
+    let cutoffTime: number;
+    
+    switch (timeRange) {
+      case "1H":
+        cutoffTime = now - 60 * 60 * 1000; // 1小时前
+        break;
+      case "24H":
+        cutoffTime = now - 24 * 60 * 60 * 1000; // 24小时前
+        break;
+      case "7D":
+        cutoffTime = now - 7 * 24 * 60 * 60 * 1000; // 7天前
+        break;
+      case "30D":
+        cutoffTime = now - 30 * 24 * 60 * 60 * 1000; // 30天前
+        break;
+      case "ALL":
+      default:
+        return allChartData; // 显示所有数据
+    }
+    
+    // 过滤数据：只保留时间戳在cutoffTime之后的数据点
+    return allChartData.filter((point) => point.timestamp >= cutoffTime);
+  }, [allChartData, timeRange]);
+  
   // 🔥 计算24小时价格变化百分比（基于真实历史数据）
   const priceChange24h = useMemo(() => {
-    if (!data || data.length === 0) {
+    if (!allChartData || allChartData.length === 0) {
       return null; // 没有历史数据，无法计算
     }
     
@@ -185,7 +217,7 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
     let price24hAgo: number | null = null;
     let minTimeDiff = Infinity;
     
-    for (const point of data) {
+    for (const point of allChartData) {
       const timeDiff = Math.abs(point.timestamp - twentyFourHoursAgo);
       if (timeDiff < minTimeDiff && point.timestamp <= twentyFourHoursAgo) {
         minTimeDiff = timeDiff;
@@ -194,8 +226,8 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
     }
     
     // 如果找不到24小时前的数据，尝试找最早的数据点
-    if (price24hAgo === null && data.length > 0) {
-      const firstPoint = data[0];
+    if (price24hAgo === null && allChartData.length > 0) {
+      const firstPoint = allChartData[0];
       // 如果最早的数据点在24小时前，使用它
       if (firstPoint.timestamp <= twentyFourHoursAgo) {
         price24hAgo = firstPoint.value;
@@ -215,7 +247,7 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
       percent: changePercent,
       isPositive: changePercent >= 0,
     };
-  }, [data, currentValue]);
+  }, [allChartData, currentValue]);
   
   // 🔥 动态获取用户时区（使用浏览器本地时区，不硬编码）
   const userTimeZone = typeof window !== 'undefined' 
@@ -269,21 +301,39 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
     // 原有的周期切换栏（1H, 6H, 1D...）
     return (
       <div className="w-full h-full flex flex-col">
-        <div className="flex items-baseline gap-3 mb-2">
-          <span className="text-3xl md:text-4xl font-black text-pm-green tracking-tight">
-            {yesPercent}%
-          </span>
-          <span className="text-lg font-bold text-pm-green">Yes</span>
-          {priceChange24h !== null ? (
-            <span className={`flex items-center text-xs font-bold ${priceChange24h.isPositive ? 'text-pm-green bg-pm-green-dim' : 'text-red-500 bg-red-500/20'} px-2 py-0.5 rounded ml-2`}>
-              {priceChange24h.isPositive ? (
-            <TrendingUp className="w-3 h-3 mr-0.5" />
-              ) : (
-                <TrendingDown className="w-3 h-3 mr-0.5" />
-              )}
-              {priceChange24h.isPositive ? '+' : ''}{priceChange24h.percent.toFixed(1)}% (24h)
-          </span>
-          ) : null}
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="flex items-baseline gap-3">
+            <span className="text-3xl md:text-4xl font-black text-pm-green tracking-tight">
+              {yesPercent}%
+            </span>
+            <span className="text-lg font-bold text-pm-green">Yes</span>
+            {priceChange24h !== null ? (
+              <span className={`flex items-center text-xs font-bold ${priceChange24h.isPositive ? 'text-pm-green bg-pm-green-dim' : 'text-red-500 bg-red-500/20'} px-2 py-0.5 rounded ml-2`}>
+                {priceChange24h.isPositive ? (
+              <TrendingUp className="w-3 h-3 mr-0.5" />
+                ) : (
+                  <TrendingDown className="w-3 h-3 mr-0.5" />
+                )}
+                {priceChange24h.isPositive ? '+' : ''}{priceChange24h.percent.toFixed(1)}% (24h)
+            </span>
+            ) : null}
+          </div>
+          {/* 🔥 时间范围选择器 */}
+          <div className="flex gap-1.5">
+            {(["1H", "24H", "7D", "30D", "ALL"] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                  timeRange === range
+                    ? "bg-pm-green/10 text-pm-green border border-pm-green/30"
+                    : "bg-transparent text-pm-text-dim hover:text-white hover:bg-white/5 border border-transparent"
+                }`}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
         </div>
         <div id="chart-container" className="w-full bg-[#0a0b0d] relative outline-none flex-1" style={{ height: `${height}px`, minHeight: `${height}px`, maxHeight: `${height}px`, outline: 'none' }} tabIndex={-1}>
           <ResponsiveContainer width="100%" height={height} className="outline-none">
@@ -345,6 +395,8 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
         </div>
         {/* 🔥 所有市场都隐藏时间导航栏和时区显示 */}
         {/* 已删除：1H 6H 1D 1W 1M 导航栏和 Asia/Shanghai 时区显示 */}
+        {/* 🔥 增加底部间距，确保与标签页有足够距离 */}
+        <div className="mb-6"></div>
       </div>
     );
   }
@@ -369,6 +421,11 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
       try {
         const endTime = slot.endTime.utc().toISOString();
         
+        // 🔥 参数验证：确保 templateId 不为空
+        if (!templateId || templateId.trim() === '') {
+          console.warn('⚠️ [PriceChart] templateId 为空，跳过 API 请求');
+          return;
+        }
         const response = await fetch(`/api/admin/factory/templates/${templateId}/trigger`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
