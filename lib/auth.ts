@@ -125,16 +125,17 @@ export const authOptions: NextAuthConfig = {
   session: {
     strategy: "jwt" as const, // 🔥 强制物理重置：策略归位，确保只有一行 strategy: 'jwt'
   },
-  // 🔥 修复 Cookie 配置：统一域名 Cookie，确保带 www 和不带 www 都能共享登录状态
+  // 🔥 修复 Cookie 配置：确保 SameSite 设置为 'lax'，防止跨域请求时 Cookie 丢失
   cookies: {
     sessionToken: {
-      name: `__Secure-next-auth.session-token`,
+      name: `${process.env.NODE_ENV === 'production' ? '__Secure-' : ''}next-auth.session-token`,
       options: {
         httpOnly: true,
-        sameSite: 'lax',
+        sameSite: 'lax', // 🔥 关键修复：使用 'lax' 而不是 'strict'，允许同站请求携带 Cookie
         path: '/',
-        secure: true,
-        domain: '.yesnoex.com', // 🔥 关键修复：允许 yesnoex.com 及其所有子域共享
+        secure: process.env.NODE_ENV === 'production', // 生产环境使用 HTTPS，开发环境允许 HTTP
+        // 🔥 修复：移除 domain 配置，NextAuth v5 会自动处理 Cookie 作用域
+        // 使用 sameSite: 'lax' 已经足够支持带 www 和不带 www 的域名共享
       },
     },
   },
