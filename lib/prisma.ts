@@ -12,9 +12,16 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   console.error('❌ [Prisma] DATABASE_URL 环境变量未设置！');
 } else {
-  // 打印前 20 个字符（保护隐私）
-  const preview = databaseUrl.substring(0, 20);
-  console.log(`✅ [Prisma] DATABASE_URL 已设置: ${preview}...`);
+  // 打印前 30 个字符（保护隐私，但显示更多信息用于诊断）
+  const preview = databaseUrl.substring(0, 30);
+  const hasPgbouncer = databaseUrl.includes('pgbouncer=true');
+  const portMatch = databaseUrl.match(/:(\d+)\//);
+  const port = portMatch ? portMatch[1] : 'unknown';
+  
+  console.log(`✅ [Prisma] DATABASE_URL 已加载:`);
+  console.log(`   预览: ${preview}...`);
+  console.log(`   端口: ${port}`);
+  console.log(`   pgbouncer: ${hasPgbouncer ? '✅ 已配置' : '❌ 未配置'}`);
   
   // 🔥 检查 URL 编码问题：如果包含中括号但没有被转义，发出警告
   if (databaseUrl.includes('[') || databaseUrl.includes(']')) {
@@ -31,6 +38,11 @@ if (!databaseUrl) {
   // PrismaClient 会直接使用 URL，不会再次转义，所以如果已经包含 %5B, %5D 等，应该没问题
   if (databaseUrl.includes('%5B') || databaseUrl.includes('%5D')) {
     console.log('✅ [Prisma] DATABASE_URL 包含已转义的字符，PrismaClient 将直接使用（不会再次转义）');
+  }
+  
+  // 🔥 检查端口配置
+  if (port === '6543' && !hasPgbouncer) {
+    console.warn('⚠️ [Prisma] 使用 6543 端口但未配置 ?pgbouncer=true，可能导致连接问题');
   }
 }
 
