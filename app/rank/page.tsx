@@ -1,5 +1,8 @@
 "use client";
 
+// 🔥 强制动态渲染：防止构建时数据请求失败
+export const dynamic = 'force-dynamic';
+
 import RankingTable from "@/components/RankingTable";
 import MaxWinsSidebar from "@/components/MaxWinsSidebar";
 import { useLanguage } from "@/i18n/LanguageContext";

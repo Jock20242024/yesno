@@ -1,5 +1,8 @@
 'use client';
 
+// 🔥 强制动态渲染：防止构建时数据请求失败
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { 
