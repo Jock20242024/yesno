@@ -16,20 +16,22 @@ let oddsWorker: Worker | null = null;
 
 /**
  * 获取赔率更新队列实例
+ * 🔥 生产环境修复：如果 REDIS_URL 不存在，返回 null 而不是创建队列
  */
-export function getOddsQueue(): Queue {
+export function getOddsQueue(): Queue | null {
+  // 🔥 关键修复：生产环境下如果 REDIS_URL 不存在，绝对不创建队列
+  if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
+    console.warn('⚠️ [OddsQueue] 生产环境未配置 REDIS_URL，队列功能不可用');
+    return null;
+  }
+
   if (!oddsQueue) {
     try {
-      // 🔥 生产环境检查：如果未配置 REDIS_URL，不创建队列
-      if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
-        console.warn('⚠️ [OddsQueue] 生产环境未配置 REDIS_URL，队列功能将不可用');
-        throw new Error('Redis URL not configured in production environment');
-      }
-      
       // 🔥 关键修复：确保 Redis 客户端已就绪
       const redisClient = getRedisClient();
       if (!redisClient) {
-        throw new Error('Redis 客户端未就绪，无法创建队列');
+        console.warn('⚠️ [OddsQueue] Redis 客户端未就绪，无法创建队列');
+        return null;
       }
       
       // BullMQ 可以直接使用 ioredis 实例
@@ -53,7 +55,7 @@ export function getOddsQueue(): Queue {
 
     } catch (error: any) {
       console.error('❌ [OddsQueue] 创建队列实例失败:', error.message);
-      throw error;
+      return null; // 🔥 修复：返回 null 而不是抛出错误
     }
   }
 
@@ -73,8 +75,15 @@ export interface OddsUpdateJobData {
 
 /**
  * 启动队列工作器（处理任务）
+ * 🔥 生产环境修复：如果 REDIS_URL 不存在，绝对不创建 Worker
  */
 export function startOddsWorker(): void {
+  // 🔥 关键修复：生产环境下如果 REDIS_URL 不存在，绝对不创建 Worker
+  if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
+    console.warn('⚠️ [OddsQueue] 生产环境未配置 REDIS_URL，Worker 无法启动');
+    return;
+  }
+
   if (oddsWorker) {
     console.warn('⚠️ [OddsQueue] 工作器已在运行');
     return;
@@ -204,6 +213,10 @@ export async function stopOddsWorker(): Promise<void> {
  */
 export async function addOddsUpdateJob(data: OddsUpdateJobData): Promise<void> {
   const queue = getOddsQueue();
+  if (!queue) {
+    console.warn('⚠️ [OddsQueue] 队列不可用，跳过任务添加');
+    return;
+  }
   await queue.add('update-odds', data, {
     jobId: `odds-${data.marketId}`, // 使用 marketId 作为 jobId，避免重复任务
   });
@@ -214,6 +227,10 @@ export async function addOddsUpdateJob(data: OddsUpdateJobData): Promise<void> {
  */
 export async function addOddsUpdateJobs(jobs: OddsUpdateJobData[]): Promise<void> {
   const queue = getOddsQueue();
+  if (!queue) {
+    console.warn('⚠️ [OddsQueue] 队列不可用，跳过批量任务添加');
+    return;
+  }
   await queue.addBulk(
     jobs.map((data) => ({
       name: 'update-odds',
@@ -231,6 +248,9 @@ export async function addOddsUpdateJobs(jobs: OddsUpdateJobData[]): Promise<void
 export async function getQueueBacklog(): Promise<number> {
   try {
     const queue = getOddsQueue();
+    if (!queue) {
+      return 0;
+    }
     const waiting = await queue.getWaitingCount();
     const active = await queue.getActiveCount();
     return waiting + active;
@@ -245,6 +265,10 @@ export async function getQueueBacklog(): Promise<number> {
  */
 export async function clearQueue(): Promise<void> {
   const queue = getOddsQueue();
+  if (!queue) {
+    console.warn('⚠️ [OddsQueue] 队列不可用，无法清空');
+    return;
+  }
   await queue.obliterate({ force: true });
 
 }
@@ -261,6 +285,15 @@ export async function getQueueStats(): Promise<{
 }> {
   try {
     const queue = getOddsQueue();
+    if (!queue) {
+      return {
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        backlog: 0,
+      };
+    }
     const [waiting, active, completed, failed] = await Promise.all([
       queue.getWaitingCount(),
       queue.getActiveCount(),
