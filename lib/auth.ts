@@ -283,49 +283,12 @@ export const authOptions: NextAuthConfig = {
         return baseUrl;
       }
     },
+    // 🔥 简化 session 回调：暂时移除复杂逻辑，直接返回原始 session
     async session({ session, token }: any) {
-      if (session.user && token.email) {
-        session.user.id = token.sub as string;
-        
-        // 从数据库查询最新的 isAdmin 状态
-        try {
-          // 🔥 修复：确保数据库连接
-          try {
-            await prisma.$connect();
-          } catch (dbError) {
-            console.error('❌ [NextAuth Session] 数据库连接失败:', dbError);
-            // 连接失败时使用 token 中的值作为回退
-            (session.user as any).isAdmin = token.isAdmin || false;
-            (session.user as any).role = token.role || 'USER';
-            return session;
-          }
-
-          const dbUser = await prisma.users.findUnique({ 
-            where: { email: token.email as string },
-            select: { id: true, isAdmin: true, isBanned: true }
-          });
-          
-          if (dbUser) {
-            const isAdmin = dbUser.isAdmin === true;
-            (session.user as any).isAdmin = isAdmin;
-            (session.user as any).role = isAdmin ? 'ADMIN' : 'USER';
-          } else {
-            (session.user as any).isAdmin = false;
-            (session.user as any).role = 'USER';
-          }
-        } catch (error: any) {
-          // 出错时使用 token 中的值作为回退
-          (session.user as any).isAdmin = token.isAdmin || false;
-          (session.user as any).role = token.role || 'USER';
-          console.error('❌ [NextAuth Session] Callback Error:', error?.message || error);
-        } finally {
-          // 🔥 确保断开数据库连接
-          try {
-            await prisma.$disconnect();
-          } catch (e) {
-            // 忽略断开连接时的错误
-          }
-        }
+      if (session.user && token) {
+        session.user.id = token.sub as string || token.id as string;
+        (session.user as any).isAdmin = token.isAdmin || false;
+        (session.user as any).role = token.role || 'USER';
       }
       return session;
     }
