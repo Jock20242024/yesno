@@ -30,7 +30,10 @@ interface LiveWalletProps {
 
 export default function LiveWallet({ className = "" }: LiveWalletProps) {
   // 🔥 状态硬隔离：使用 NextAuth 的 useSession 作为唯一认证源
-  const { data: session, status } = useSession();
+  // 🔥 修复：安全处理 useSession，防止服务端渲染时返回 undefined
+  const sessionQuery = useSession();
+  const session = sessionQuery?.data ?? null;
+  const status = sessionQuery?.status ?? 'unauthenticated';
   const { isLoggedIn, isLoading: authLoading, logout, handleApiGuestResponse } = useAuth();
 
   // 🔥 核心逻辑：必须 status === 'authenticated' 才渲染组件

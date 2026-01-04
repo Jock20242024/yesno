@@ -12,7 +12,10 @@ import LiveWallet from "@/components/user/LiveWallet";
 export default function Navbar() {
   const router = useRouter();
   // 🔥 状态硬隔离：使用 NextAuth 的 useSession 作为唯一认证源
-  const { data: session, status } = useSession();
+  // 🔥 修复：处理 useSession 返回 undefined 的情况
+  const sessionResult = useSession();
+  const session = sessionResult?.data || null;
+  const status = sessionResult?.status || 'unauthenticated';
   const { isLoggedIn, user, currentUser, logout } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
