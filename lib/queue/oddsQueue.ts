@@ -97,9 +97,13 @@ export function startOddsWorker(): void {
       return;
     }
 
-    // 检查连接状态（如果未连接，BullMQ 会在内部处理，但最好先检查）
-    // 注意：在开发环境下，Redis 可能未运行，但不应该阻止应用启动
-    // 所以这里只记录警告，不阻止 Worker 创建
+    // 🔥 生产环境严格检查：如果 Redis 未连接，不启动 Worker
+    if (process.env.NODE_ENV === 'production' && !isRedisConnected()) {
+      console.error('❌ [OddsQueue] 生产环境 Redis 未连接，Worker 无法启动');
+      return;
+    }
+
+    // 开发环境：如果未连接，记录警告但继续（允许开发时 Redis 未运行）
     if (!isRedisConnected()) {
       console.warn('⚠️ [OddsQueue] Redis 未连接，但继续创建 Worker（将在连接后自动恢复）');
     }

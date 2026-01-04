@@ -15,36 +15,38 @@ let isConnecting = false;
  * 获取 Redis 客户端实例（单例模式）
  * 🔥 强制修复：确保始终返回有效的客户端实例，禁止返回 undefined
  */
-export function getRedisClient(): Redis {
+export function getRedisClient(): Redis | null {
   // 🔥 强制初始化：如果未初始化，立即创建
   if (!redisClient) {
-    // 🔥 生产环境修复：如果 REDIS_URL 未设置且是生产环境，使用空字符串（不连接本地 Redis）
-    const defaultRedisUrl = process.env.NODE_ENV === 'production' 
-      ? '' // 生产环境不连接本地 Redis
-      : 'redis://localhost:6379'; // 开发环境默认本地
+    // 🔥 关键修复：必须使用环境变量 REDIS_URL，严禁连接 127.0.0.1
+    const redisUrl = process.env.REDIS_URL;
     
-    const redisUrl = process.env.REDIS_URL || defaultRedisUrl;
-    
-    // 🔥 生产环境检查：如果没有 REDIS_URL 且是生产环境，抛出明确错误
-    if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
-      console.warn('⚠️ [Redis] 生产环境未配置 REDIS_URL，Redis 功能将不可用');
-      // 创建一个占位实例，但不连接
-      redisClient = new Redis('', {
-        maxRetriesPerRequest: null,
-        lazyConnect: true, // 延迟连接，实际上不会连接
-        enableOfflineQueue: false,
-      });
-      return redisClient;
+    // 🔥 如果获取不到环境变量，直接返回 null 或抛出清晰的错误
+    if (!redisUrl) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('❌ [Redis] 生产环境未配置 REDIS_URL，Redis 功能不可用');
+        return null; // 生产环境返回 null，不创建实例
+      } else {
+        // 开发环境可以尝试本地连接，但记录警告
+        console.warn('⚠️ [Redis] REDIS_URL 未配置，尝试连接本地 Redis (仅开发环境)');
+        const localUrl = 'redis://localhost:6379';
+        redisClient = new Redis(localUrl, {
+          maxRetriesPerRequest: null,
+          connectTimeout: 5000,
+          lazyConnect: true,
+          enableOfflineQueue: false,
+        });
+        return redisClient;
+      }
     }
     
-    // 🔥 Upstash Redis 支持：检测是否为 Upstash（通过域名判断）
+    // 🔥 检测是否为 TLS 连接（rediss:// 开头）
+    const isTLS = redisUrl.startsWith('rediss://');
     const isUpstash = redisUrl.includes('upstash.io');
     
-    // 🔥 Upstash Redis 需要 TLS 连接
-    // 如果 URL 是 redis:// 但指向 Upstash，需要转换为 rediss:// 或配置 TLS
+    // 🔥 如果是 redis:// 但指向 Upstash，转换为 rediss://
     let finalRedisUrl = redisUrl;
     if (isUpstash && redisUrl.startsWith('redis://')) {
-      // 转换为 rediss:// (redis + ssl)
       finalRedisUrl = redisUrl.replace('redis://', 'rediss://');
       console.log('✅ [Redis] 检测到 Upstash Redis，已启用 TLS 连接');
     }
@@ -72,12 +74,13 @@ export function getRedisClient(): Redis {
         enableOfflineQueue: false, // 禁用离线队列，避免错误堆积
       };
       
-      // 🔥 Upstash Redis TLS 配置
-      if (isUpstash) {
+      // 🔥 TLS 配置：如果是 rediss:// 开头（TLS 连接），必须配置 TLS
+      if (isTLS || isUpstash) {
         redisOptions.tls = {
-          // Upstash 使用自签名证书，需要验证但不严格检查
-          rejectUnauthorized: true,
+          // 🔥 关键修复：Upstash 使用自签名证书，必须设置 rejectUnauthorized: false
+          rejectUnauthorized: false,
         };
+        console.log('✅ [Redis] 已配置 TLS 连接 (rejectUnauthorized: false)');
       }
       
       redisClient = new Redis(finalRedisUrl, redisOptions);
@@ -108,20 +111,24 @@ export function getRedisClient(): Redis {
         isConnecting = true;
       });
     } catch (error: any) {
-      // 🔥 即使创建失败，也要创建一个占位实例，避免返回 undefined
+      // 🔥 创建失败时，生产环境返回 null，开发环境创建占位实例
       console.error('❌ [Redis] 创建客户端失败:', error.message);
       
-      // 创建一个基础的 Redis 实例（即使连接失败）
+      if (process.env.NODE_ENV === 'production') {
+        return null; // 生产环境返回 null
+      }
+      
+      // 开发环境创建占位实例
       const fallbackOptions: any = {
         maxRetriesPerRequest: null,
         lazyConnect: true, // 延迟连接
         enableOfflineQueue: false,
       };
       
-      // 如果是 Upstash，也要配置 TLS
-      if (isUpstash) {
+      // 如果是 TLS 连接，也要配置 TLS
+      if (isTLS || isUpstash) {
         fallbackOptions.tls = {
-          rejectUnauthorized: true,
+          rejectUnauthorized: false,
         };
       }
       
@@ -129,11 +136,7 @@ export function getRedisClient(): Redis {
     }
   }
 
-  // 🔥 强制断言：确保返回的不是 undefined
-  if (!redisClient) {
-    throw new Error('Redis client initialization failed');
-  }
-
+  // 🔥 返回客户端实例（可能为 null）
   return redisClient;
 }
 
@@ -167,6 +170,10 @@ const SCHEDULER_STATUS_KEY = 'SYSTEM:SCHEDULER_ACTIVE';
 export async function getSchedulerActiveStatus(): Promise<boolean> {
   try {
     const client = getRedisClient();
+    if (!client) {
+      console.warn('⚠️ [Redis] 客户端不可用，默认返回启用状态');
+      return true;
+    }
     const value = await client.get(SCHEDULER_STATUS_KEY);
     
     // 如果没有设置值，默认返回 true（启用状态）
@@ -189,6 +196,9 @@ export async function getSchedulerActiveStatus(): Promise<boolean> {
 export async function setSchedulerActiveStatus(active: boolean): Promise<void> {
   try {
     const client = getRedisClient();
+    if (!client) {
+      throw new Error('Redis 客户端不可用，无法设置调度器状态');
+    }
     await client.set(SCHEDULER_STATUS_KEY, active ? 'true' : 'false');
 
   } catch (error: any) {

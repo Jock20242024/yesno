@@ -16,21 +16,32 @@ if (!databaseUrl) {
   const preview = databaseUrl.substring(0, 20);
   console.log(`✅ [Prisma] DATABASE_URL 已设置: ${preview}...`);
   
-  // 检查 URL 编码问题：如果包含中括号但没有被转义，发出警告
+  // 🔥 检查 URL 编码问题：如果包含中括号但没有被转义，发出警告
   if (databaseUrl.includes('[') || databaseUrl.includes(']')) {
     if (!databaseUrl.includes('%5B') && !databaseUrl.includes('%5D')) {
       console.warn('⚠️ [Prisma] DATABASE_URL 包含中括号但可能未正确转义！');
       console.warn('   如果连接失败，请确保密码中的特殊字符已正确 URL 编码');
       console.warn('   中括号应编码为: [ -> %5B, ] -> %5D');
+    } else {
+      console.log('✅ [Prisma] DATABASE_URL 中的中括号已正确转义');
     }
+  }
+  
+  // 🔥 确认已转义的字符不会被再次转义
+  // PrismaClient 会直接使用 URL，不会再次转义，所以如果已经包含 %5B, %5D 等，应该没问题
+  if (databaseUrl.includes('%5B') || databaseUrl.includes('%5D')) {
+    console.log('✅ [Prisma] DATABASE_URL 包含已转义的字符，PrismaClient 将直接使用（不会再次转义）');
   }
 }
 
+// 🔥 关键修复：确保 DATABASE_URL 能够被正确读取
+// PrismaClient 初始化时直接使用环境变量，不会对其进行转义
 const prisma = globalForPrisma.prisma || new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   datasources: {
     db: {
-      url: process.env.DATABASE_URL, // 🔥 强制使用环境变量，确保 Vercel 环境正确连接
+      // 🔥 直接使用环境变量，Prisma 不会再次转义已转义的字符
+      url: databaseUrl, // 使用已检查的 databaseUrl 变量
     },
   },
 })
