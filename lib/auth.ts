@@ -198,18 +198,9 @@ export const authOptions: NextAuthConfig = {
       }
       
       // 从数据库查询最新的 isAdmin 状态
+      // 🔥 优化：使用 Prisma 全局单例，不需要显式 $connect() 和 $disconnect()
+      // Prisma 会自动管理连接池，显式断开会导致连接泄漏
       try {
-        // 🔥 修复：确保数据库连接
-        try {
-          await prisma.$connect();
-        } catch (dbError) {
-          console.error('❌ [NextAuth JWT] 数据库连接失败:', dbError);
-          // 连接失败时使用默认值
-          token.isAdmin = false;
-          token.role = 'USER';
-          return token;
-        }
-
         const dbUser = await prisma.users.findUnique({ 
           where: { email: token.email as string },
           select: { isAdmin: true }
@@ -233,13 +224,6 @@ export const authOptions: NextAuthConfig = {
           token.role = 'USER';
         }
         console.error("❌ [NextAuth JWT] Callback Error:", error?.message || error);
-      } finally {
-        // 🔥 确保断开数据库连接
-        try {
-          await prisma.$disconnect();
-        } catch (e) {
-          // 忽略断开连接时的错误
-        }
       }
 
       return token;
