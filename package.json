@@ -6,7 +6,7 @@
     "check:positions": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/check-positions.ts",
     "check:orders": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/check-orders.ts",
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "NODE_OPTIONS='--max-http-header-size=65536' next start -p 3000",
     "lint": "next lint",
     "cron:market-factory": "ts-node --compiler-options {\"module\":\"commonjs\"} scripts/market-factory-cron.ts",
