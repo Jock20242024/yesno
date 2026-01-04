@@ -140,18 +140,35 @@ export async function GET(request: Request) {
         closingDate: (() => {
           try {
             const date = dbMarket.closingDate;
-            if (!date) return new Date().toISOString();
-            const isoString = date.toISOString();
-            // 🔥 验证日期有效性
-            const testDate = new Date(isoString);
-            if (isNaN(testDate.getTime())) {
-              console.warn(`⚠️ [Markets API] 无效的 closingDate，使用当前时间 (ID: ${dbMarket.id})`);
-              return new Date().toISOString();
+            if (!date) {
+              const now = new Date();
+              return isNaN(now.getTime()) ? new Date('2024-01-01T00:00:00Z').toISOString() : now.toISOString();
             }
-            return isoString;
+            // 🔥 安全日期处理：先验证日期对象
+            if (date instanceof Date) {
+              if (isNaN(date.getTime())) {
+                console.warn(`⚠️ [Markets API] 无效的 closingDate，使用默认时间 (ID: ${dbMarket.id})`);
+                return new Date('2024-01-01T00:00:00Z').toISOString();
+              }
+              const isoString = date.toISOString();
+              // 🔥 再次验证转换后的日期
+              const testDate = new Date(isoString);
+              if (isNaN(testDate.getTime())) {
+                console.warn(`⚠️ [Markets API] closingDate 转换后无效，使用默认时间 (ID: ${dbMarket.id})`);
+                return new Date('2024-01-01T00:00:00Z').toISOString();
+              }
+              return isoString;
+            }
+            // 如果不是 Date 对象，尝试转换
+            const parsedDate = new Date(date as any);
+            if (isNaN(parsedDate.getTime())) {
+              console.warn(`⚠️ [Markets API] closingDate 无法解析，使用默认时间 (ID: ${dbMarket.id})`);
+              return new Date('2024-01-01T00:00:00Z').toISOString();
+            }
+            return parsedDate.toISOString();
           } catch (e) {
             console.error(`❌ [Markets API] closingDate 转换错误 (ID: ${dbMarket.id}):`, e);
-            return new Date().toISOString();
+            return new Date('2024-01-01T00:00:00Z').toISOString();
           }
         })(),
         resolvedOutcome: dbMarket.resolvedOutcome as Outcome | undefined,
@@ -162,7 +179,33 @@ export async function GET(request: Request) {
         feeRate: safeFeeRate,
         category: dbMarket.market_categories?.[0]?.categories?.name || dbMarket.category || undefined,
         categorySlug: dbMarket.market_categories?.[0]?.categories?.slug || dbMarket.categorySlug || undefined,
-        createdAt: dbMarket.createdAt.toISOString(),
+        createdAt: (() => {
+          try {
+            const date = dbMarket.createdAt;
+            if (!date) {
+              const now = new Date();
+              return isNaN(now.getTime()) ? new Date('2024-01-01T00:00:00Z').toISOString() : now.toISOString();
+            }
+            // 🔥 安全日期处理：先验证日期对象
+            if (date instanceof Date) {
+              if (isNaN(date.getTime())) {
+                console.warn(`⚠️ [Markets API] 无效的 createdAt，使用默认时间 (ID: ${dbMarket.id})`);
+                return new Date('2024-01-01T00:00:00Z').toISOString();
+              }
+              return date.toISOString();
+            }
+            // 如果不是 Date 对象，尝试转换
+            const parsedDate = new Date(date as any);
+            if (isNaN(parsedDate.getTime())) {
+              console.warn(`⚠️ [Markets API] createdAt 无法解析，使用默认时间 (ID: ${dbMarket.id})`);
+              return new Date('2024-01-01T00:00:00Z').toISOString();
+            }
+            return parsedDate.toISOString();
+          } catch (e) {
+            console.error(`❌ [Markets API] createdAt 转换错误 (ID: ${dbMarket.id}):`, e);
+            return new Date('2024-01-01T00:00:00Z').toISOString();
+          }
+        })(),
         volume: safeTotalVolume,
         yesPercent: safeYesPercent,
         noPercent: safeNoPercent,
