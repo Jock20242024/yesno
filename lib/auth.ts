@@ -29,8 +29,11 @@ if (!authSecret) {
 export const authOptions: NextAuthConfig = {
   // 🔥 启用极致调试：放在配置第一行
   debug: true,
-  // 🔥 修复：信任 localhost 和所有主机（用于开发和生产环境）
+  // 🔥 强制对齐 Secret：显式使用 AUTH_SECRET
+  secret: process.env.AUTH_SECRET,
+  // 🔥 配置固定作用域：信任所有主机并设置 basePath
   trustHost: true,
+  basePath: '/api/auth',
   // 🔥 修复：移除全局 signIn 页面配置，让各个页面自己控制跳转
   // 不再强制所有登录都跳转到 /admin/login
   // pages: {
@@ -123,29 +126,8 @@ export const authOptions: NextAuthConfig = {
       }
     }),
   ],
-  // 🔥 强制对齐 Secret：显式设置 secret（优先 AUTH_SECRET，然后 NEXTAUTH_SECRET）
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || (() => {
-    console.error('❌ [NextAuth] AUTH_SECRET 和 NEXTAUTH_SECRET 都未设置，认证将失败');
-    throw new Error('AUTH_SECRET or NEXTAUTH_SECRET environment variable is required');
-  })(),
   session: {
     strategy: "jwt" as const, // 🔥 确保使用 JWT 策略
-  },
-  // 🔥 手动强制 Cookie 策略：生产环境使用安全 Cookie
-  useSecureCookies: process.env.NODE_ENV === 'production',
-  // 🔥 修复 Cookie 配置：确保 SameSite 设置为 'lax'，防止跨域请求时 Cookie 丢失
-  cookies: {
-    sessionToken: {
-      name: `${process.env.NODE_ENV === 'production' ? '__Secure-' : ''}next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: 'lax', // 🔥 关键修复：使用 'lax' 而不是 'strict'，允许同站请求携带 Cookie
-        path: '/',
-        secure: process.env.NODE_ENV === 'production', // 生产环境使用 HTTPS，开发环境允许 HTTP
-        // 🔥 修复：移除 domain 配置，NextAuth v5 会自动处理 Cookie 作用域
-        // 使用 sameSite: 'lax' 已经足够支持带 www 和不带 www 的域名共享
-      },
-    },
   },
   callbacks: {
     async signIn({ user, account }: any) {
