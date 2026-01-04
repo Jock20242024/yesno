@@ -17,6 +17,10 @@ const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 // 🔥 关键修复：优先使用 AUTH_SECRET，确保与 Vercel 环境变量一致
 const authSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
 
+// 🔥 调试：检查 AUTH_URL 环境变量
+console.log("AUTH_URL_CHECK:", process.env.AUTH_URL);
+console.log("NEXTAUTH_URL_CHECK:", process.env.NEXTAUTH_URL);
+
 if (!googleClientId || !googleClientSecret) {
   console.warn('⚠️ [NextAuth] GOOGLE_CLIENT_ID 或 GOOGLE_CLIENT_SECRET 未设置，Google OAuth 将不可用');
 }
