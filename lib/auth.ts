@@ -27,7 +27,8 @@ if (!authSecret) {
 // NextAuth 配置
 // NextAuth v5 配置对象
 export const authOptions: NextAuthConfig = {
-  debug: process.env.NODE_ENV === 'development',
+  // 🔥 启用极致调试：放在配置第一行
+  debug: true,
   // 🔥 修复：信任 localhost 和所有主机（用于开发和生产环境）
   trustHost: true,
   // 🔥 修复：移除全局 signIn 页面配置，让各个页面自己控制跳转
@@ -122,14 +123,16 @@ export const authOptions: NextAuthConfig = {
       }
     }),
   ],
-  // 🔥 关键修复：明确使用 AUTH_SECRET，不允许硬编码回退
-  secret: authSecret || (() => {
-    console.error('❌ [NextAuth] AUTH_SECRET 未设置，认证将失败');
-    throw new Error('AUTH_SECRET environment variable is required');
+  // 🔥 强制对齐 Secret：显式设置 secret（优先 AUTH_SECRET，然后 NEXTAUTH_SECRET）
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || (() => {
+    console.error('❌ [NextAuth] AUTH_SECRET 和 NEXTAUTH_SECRET 都未设置，认证将失败');
+    throw new Error('AUTH_SECRET or NEXTAUTH_SECRET environment variable is required');
   })(),
   session: {
     strategy: "jwt" as const, // 🔥 确保使用 JWT 策略
   },
+  // 🔥 手动强制 Cookie 策略：生产环境使用安全 Cookie
+  useSecureCookies: process.env.NODE_ENV === 'production',
   // 🔥 修复 Cookie 配置：确保 SameSite 设置为 'lax'，防止跨域请求时 Cookie 丢失
   cookies: {
     sessionToken: {
