@@ -19,6 +19,11 @@ let oddsWorker: Worker | null = null;
  * 🔥 生产环境修复：如果 REDIS_URL 不存在，返回 null 而不是创建队列
  */
 export function getOddsQueue(): Queue | null {
+  // 🔥 构建环境修复：禁止在构建时初始化 Redis 连接
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return null;
+  }
+  
   // 🔥 关键修复：生产环境下如果 REDIS_URL 不存在，绝对不创建队列
   if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
     console.warn('⚠️ [OddsQueue] 生产环境未配置 REDIS_URL，队列功能不可用');
@@ -78,6 +83,11 @@ export interface OddsUpdateJobData {
  * 🔥 生产环境修复：如果 REDIS_URL 不存在，绝对不创建 Worker
  */
 export function startOddsWorker(): void {
+  // 🔥 构建环境修复：禁止在构建时初始化 Redis 连接
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return;
+  }
+  
   // 🔥 关键修复：生产环境下如果 REDIS_URL 不存在，绝对不创建 Worker
   if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
     console.warn('⚠️ [OddsQueue] 生产环境未配置 REDIS_URL，Worker 无法启动');
