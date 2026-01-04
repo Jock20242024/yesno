@@ -182,6 +182,17 @@ export const authOptions: NextAuthConfig = {
       
       // 从数据库查询最新的 isAdmin 状态
       try {
+        // 🔥 修复：确保数据库连接
+        try {
+          await prisma.$connect();
+        } catch (dbError) {
+          console.error('❌ [NextAuth JWT] 数据库连接失败:', dbError);
+          // 连接失败时使用默认值
+          token.isAdmin = false;
+          token.role = 'USER';
+          return token;
+        }
+
         const dbUser = await prisma.users.findUnique({ 
           where: { email: token.email as string },
           select: { isAdmin: true }
@@ -204,8 +215,13 @@ export const authOptions: NextAuthConfig = {
           token.isAdmin = false;
           token.role = 'USER';
         }
-        if (process.env.NODE_ENV === 'development') {
-          console.error("JWT Callback Error:", error);
+        console.error("❌ [NextAuth JWT] Callback Error:", error?.message || error);
+      } finally {
+        // 🔥 确保断开数据库连接
+        try {
+          await prisma.$disconnect();
+        } catch (e) {
+          // 忽略断开连接时的错误
         }
       }
 
@@ -242,6 +258,17 @@ export const authOptions: NextAuthConfig = {
         
         // 从数据库查询最新的 isAdmin 状态
         try {
+          // 🔥 修复：确保数据库连接
+          try {
+            await prisma.$connect();
+          } catch (dbError) {
+            console.error('❌ [NextAuth Session] 数据库连接失败:', dbError);
+            // 连接失败时使用 token 中的值作为回退
+            (session.user as any).isAdmin = token.isAdmin || false;
+            (session.user as any).role = token.role || 'USER';
+            return session;
+          }
+
           const dbUser = await prisma.users.findUnique({ 
             where: { email: token.email as string },
             select: { id: true, isAdmin: true, isBanned: true }
@@ -255,12 +282,17 @@ export const authOptions: NextAuthConfig = {
             (session.user as any).isAdmin = false;
             (session.user as any).role = 'USER';
           }
-        } catch (error) {
+        } catch (error: any) {
           // 出错时使用 token 中的值作为回退
           (session.user as any).isAdmin = token.isAdmin || false;
           (session.user as any).role = token.role || 'USER';
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Auth Session Error:', error);
+          console.error('❌ [NextAuth Session] Callback Error:', error?.message || error);
+        } finally {
+          // 🔥 确保断开数据库连接
+          try {
+            await prisma.$disconnect();
+          } catch (e) {
+            // 忽略断开连接时的错误
           }
         }
       }
