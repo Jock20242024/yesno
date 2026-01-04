@@ -104,17 +104,19 @@ function RegisterForm() {
           console.error("toast failed", e);
         }
 
-        // 🔥 修复：注册成功后立即调用 NextAuth 的 signIn 方法实现自动登录
+        // 🔥 修复：注册成功后使用 AuthProvider 的 login 方法实现自动登录
         try {
-          // 使用 credentials 方式登录（使用刚注册的邮箱和密码）
-          const signInResult = await signIn('credentials', {
-            email: email,
-            password: password,
-            redirect: false,
-          });
+          // 使用 AuthProvider 的 login 方法（它会调用 /api/auth/login）
+          const loginResult = await login({ email, password });
 
-          if (signInResult?.error) {
-            console.error('注册后自动登录失败:', signInResult.error);
+          if (!loginResult.success) {
+            console.error('❌ [Register] 注册后自动登录失败:', loginResult.error);
+            // 显示错误提示
+            try {
+              toast.error(loginResult.error || t('auth.login.error'));
+            } catch (e) {
+              console.error("toast failed", e);
+            }
             // 即使自动登录失败，也跳转到登录页让用户手动登录
             router.push('/login');
             return;
@@ -122,9 +124,20 @@ function RegisterForm() {
 
           // 🔥 登录成功后，刷新页面状态并跳转到首页
           // 使用 window.location.href 确保完全刷新页面并清除所有缓存
+          try {
+            toast.success(t('auth.login.success'));
+          } catch (e) {
+            console.error("toast failed", e);
+          }
           window.location.href = '/';
-        } catch (signInError) {
-          console.error('注册后自动登录异常:', signInError);
+        } catch (loginError: any) {
+          console.error('❌ [Register] 注册后自动登录异常:', loginError);
+          // 显示错误提示
+          try {
+            toast.error(loginError?.message || t('auth.login.error'));
+          } catch (e) {
+            console.error("toast failed", e);
+          }
           // 如果自动登录失败，跳转到登录页
           router.push('/login');
         }

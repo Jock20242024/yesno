@@ -94,10 +94,27 @@ export async function POST(request: Request) {
       },
       token: sessionId, // 返回 sessionId 作为 token（保持兼容性）
     }, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('❌ [Login API] 登录失败:', error);
+    console.error('❌ [Login API] 错误详情:', {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name,
+    });
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { 
+        success: false, 
+        error: error?.message || 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error?.stack : undefined,
+      },
       { status: 500 }
     );
+  } finally {
+    // 确保断开数据库连接
+    try {
+      await prisma.$disconnect();
+    } catch (e) {
+      // 忽略断开连接时的错误
+    }
   }
 }

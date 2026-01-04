@@ -95,10 +95,20 @@ export async function POST(request: Request) {
     // 严禁依赖数据库的 @default(cuid())，必须手动提供 ID
     const userId = randomUUID();
     
+    // 🔥 安全日期处理：防止 Invalid time value 错误
+    const now = new Date();
+    if (isNaN(now.getTime())) {
+      console.error('❌ [Register API] 系统日期无效');
+      return NextResponse.json(
+        { success: false, error: 'System date error' },
+        { status: 500 }
+      );
+    }
+
     // 创建用户数据
     const data: any = {
       id: userId, // 🔥 绝杀修复：显式提供 ID，使用 crypto.randomUUID()
-      updatedAt: new Date(), // 🔥 修复：必须提供 updatedAt
+      updatedAt: now, // 🔥 修复：必须提供 updatedAt，使用验证过的日期
       email,
       passwordHash,
       provider: 'email',

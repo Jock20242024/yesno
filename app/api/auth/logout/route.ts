@@ -24,7 +24,7 @@ export async function POST() {
     // 🔥 清除所有认证相关的 Cookies
     // 使用明确的过期时间确保 cookie 被删除
     const cookieOptions = {
-      expires: new Date(0), // 设置为过去的时间，确保立即过期
+      expires: new Date('1970-01-01T00:00:00Z'), // 🔥 安全日期：使用明确的日期字符串，防止 Invalid time value
       path: '/',
     };
     

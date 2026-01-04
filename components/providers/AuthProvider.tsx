@@ -124,19 +124,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = useCallback(async (credentials?: any) => {
     try {
-      // 🔥 执行真正的 NextAuth 登录
-      const result = await signIn('credentials', {
-        ...credentials,
-        redirect: false, // 防止页面被 NextAuth 强行刷新导致状态丢失
-      }) as { error?: string } | undefined;
+      console.log('🔍 [AuthProvider] 开始登录，邮箱:', credentials?.email);
+      
+      // 🔥 修复：先调用自定义登录 API（/api/auth/login），而不是直接使用 NextAuth
+      // 这样可以获得更详细的错误信息
+      const loginResponse = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(credentials),
+      });
 
-      // 🔥 修复：检查是否是 Google 用户的特殊错误
-      if (result?.error) {
-        // 如果是 Google 用户的错误，需要特殊处理
-        if (result.error.includes('GOOGLE_USER') || result.error === 'GOOGLE_USER_MUST_USE_OAUTH') {
-          throw new Error('GOOGLE_USER_MUST_USE_OAUTH');
-        }
-        throw new Error(result.error);
+      const loginData = await loginResponse.json();
+      
+      if (!loginResponse.ok || !loginData.success) {
+        console.error('❌ [AuthProvider] 登录 API 失败:', loginData);
+        // 🔥 修复：返回详细的错误信息
+        return { 
+          success: false, 
+          error: loginData.error || 'Login failed',
+          details: loginData.details,
+        };
+      }
+
+      // 🔥 登录成功后，也调用 NextAuth 的 signIn 以保持兼容性
+      try {
+        await signIn('credentials', {
+          ...credentials,
+          redirect: false,
+        });
+      } catch (nextAuthError: any) {
+        // NextAuth 登录失败不影响，因为我们已经通过自定义 API 登录成功
+        console.warn('⚠️ [AuthProvider] NextAuth signIn 失败（不影响登录）:', nextAuthError);
       }
 
       // 登录成功后手动刷新状态
@@ -147,11 +166,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data = await res.json();
       const userData = data.success && data.user ? data.user : null;
       
+      console.log('✅ [AuthProvider] 登录成功，用户:', userData?.email);
       return { success: true, user: userData };
     } catch (error: any) {
       console.error("❌ [AuthProvider] Login failed:", error);
-      // 🔥 修复：保留原始错误信息，特别是 Google 用户的错误
-      return { success: false, error: error.message || 'Login failed' };
+      // 🔥 修复：保留原始错误信息
+      return { 
+        success: false, 
+        error: error.message || 'Login failed',
+        details: error.stack,
+      };
     }
   }, [refreshUserState]);
 
