@@ -148,24 +148,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         };
       }
 
-      // 🔥 登录成功后，也调用 NextAuth 的 signIn 以保持兼容性
-      try {
-        await signIn('credentials', {
-          ...credentials,
-          redirect: false,
-        });
-      } catch (nextAuthError: any) {
-        // NextAuth 登录失败不影响，因为我们已经通过自定义 API 登录成功
-        console.warn('⚠️ [AuthProvider] NextAuth signIn 失败（不影响登录）:', nextAuthError);
-      }
+      // 🔥 性能优化：移除 NextAuth signIn 调用，因为我们已经在 /api/auth/login 中设置了 cookie
+      // 直接使用 /api/auth/me 获取用户数据，避免重复的 NextAuth 调用
 
-      // 登录成功后手动刷新状态
-      await refreshUserState();
+      // 🔥 登录成功后手动刷新状态（不等待，直接使用 loginData 中的 user）
+      // refreshUserState() 会在后台更新状态，但不阻塞登录流程
+      refreshUserState().catch(err => {
+        console.warn('⚠️ [AuthProvider] refreshUserState 失败（不影响登录）:', err);
+      });
       
-      // 🔥 获取最新的用户数据用于返回
-      const res = await fetch('/api/auth/me');
-      const data = await res.json();
-      const userData = data.success && data.user ? data.user : null;
+      // 🔥 直接使用 loginData 中的 user 数据，不需要再次调用 /api/auth/me
+      const userData = loginData.user || null;
       
       console.log('✅ [AuthProvider] 登录成功，用户:', userData?.email);
       return { success: true, user: userData };
