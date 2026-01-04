@@ -139,10 +139,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       if (!loginResponse.ok || !loginData.success) {
         console.error('❌ [AuthProvider] 登录 API 失败:', loginData);
-        // 🔥 修复：返回详细的错误信息
+        // 🔥 修复：返回详细的错误信息，优先使用 message 字段
+        const errorMessage = loginData.message || loginData.error || 'Login failed';
         return { 
           success: false, 
-          error: loginData.error || 'Login failed',
+          error: errorMessage,
           details: loginData.details,
         };
       }

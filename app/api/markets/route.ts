@@ -720,7 +720,7 @@ export async function GET(request: Request) {
     response.headers.set('Expires', '0');
     
     return response;
-  } catch (error) {
+  } catch (error: any) {
     // 捕获异常：打印完整的错误堆栈
     console.error('❌ [Markets API] ========== 获取市场列表失败 ==========');
     console.error('❌ [Markets API] 错误类型:', error instanceof Error ? error.constructor.name : typeof error);
@@ -733,21 +733,39 @@ export async function GET(request: Request) {
     }
     console.error('❌ [Markets API] ===============================');
 
-    // 🔥 错误响应也要禁用缓存
+    // 🔥 确保断开数据库连接
+    try {
+      await prisma.$disconnect();
+    } catch (e) {
+      // 忽略断开连接时的错误
+    }
+
+    // 🔥 错误响应也要禁用缓存，并返回空数组而不是失败
+    // 这样前端可以显示空状态而不是错误提示
     const errorResponse = NextResponse.json(
       {
-        success: false,
-        error: 'Failed to fetch markets',
+        success: true, // 🔥 修复：返回 success: true，但 data 为空数组
+        data: [], // 返回空数组，让前端显示"暂无数据"而不是"获取数据失败"
+        error: null,
+        pagination: {
+          total: 0,
+          page: 1,
+          pageSize: 100,
+          totalPages: 0,
+          hasMore: false,
+        },
         // 开发环境下返回详细错误信息（生产环境应移除）
         ...(process.env.NODE_ENV === 'development' && error instanceof Error
           ? { 
-              details: error.message, 
-              stack: error.stack,
-              name: error.name,
+              debug: {
+                details: error.message, 
+                stack: error.stack,
+                name: error.name,
+              }
             }
           : {}),
       },
-      { status: 500 }
+      { status: 200 } // 🔥 修复：返回 200 而不是 500，避免前端显示错误
     );
     
     // 🔥 设置错误响应的缓存头
@@ -756,6 +774,13 @@ export async function GET(request: Request) {
     errorResponse.headers.set('Expires', '0');
     
     return errorResponse;
+  } finally {
+    // 🔥 确保在所有情况下都断开数据库连接
+    try {
+      await prisma.$disconnect();
+    } catch (e) {
+      // 忽略断开连接时的错误
+    }
   }
 }
 

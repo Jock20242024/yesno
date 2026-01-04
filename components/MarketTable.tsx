@@ -68,8 +68,8 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // 获取市场数据
-  const fetchMarkets = async (pageNum: number = 1, append: boolean = false) => {
+  // 获取市场数据（带重试机制）
+  const fetchMarkets = async (pageNum: number = 1, append: boolean = false, retryCount: number = 0) => {
     if (append) {
       setIsLoadingMore(true);
     } else {
@@ -81,28 +81,47 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       // 🔥 强制实时刷新：禁用缓存，使用 pageSize=100 确保有足够数据
       const response = await fetch(`/api/markets?page=${pageNum}&pageSize=100`, {
         cache: 'no-store',
+        credentials: 'include', // 🔥 修复：包含 credentials，确保 cookie 被发送
       });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch markets');
+        // 🔥 如果是 503 错误（服务不可用），可能是数据库连接问题，尝试重试
+        if (response.status === 503 && retryCount < 2) {
+          console.warn(`⚠️ [MarketTable] 服务不可用，${2} 秒后重试 (${retryCount + 1}/2)...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          return fetchMarkets(pageNum, append, retryCount + 1);
+        }
+        throw new Error(`Failed to fetch markets: ${response.status} ${response.statusText}`);
       }
 
       const result = await response.json();
       
-      if (result.success && result.data) {
+      // 🔥 修复：即使 result.success 为 false，也尝试使用 result.data（可能是空数组）
+      if (result.data !== undefined) {
         if (append) {
-          setMarketData(prev => [...prev, ...result.data]);
+          setMarketData(prev => [...prev, ...(result.data || [])]);
         } else {
-          setMarketData(result.data);
+          setMarketData(result.data || []);
         }
         // 🔥 设置 hasMore 状态
         setHasMore(result.pagination?.hasMore || false);
+        
+        // 🔥 如果没有数据，不显示错误，而是显示空状态
+        if (!result.data || result.data.length === 0) {
+          setError(null); // 清除错误，显示空状态
+        }
       } else {
         throw new Error('Invalid response format');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error fetching data.');
-      console.error('Error fetching markets:', err);
+      // 🔥 修复：只在最后一次重试失败后显示错误
+      if (retryCount >= 2) {
+        setError(err instanceof Error ? err.message : 'Error fetching data.');
+        console.error('❌ [MarketTable] 获取市场数据失败（已重试 2 次）:', err);
+      } else {
+        // 重试中，不显示错误
+        console.warn(`⚠️ [MarketTable] 获取市场数据失败，准备重试 (${retryCount + 1}/2):`, err);
+      }
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);

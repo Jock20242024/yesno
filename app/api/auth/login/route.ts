@@ -101,13 +101,29 @@ export async function POST(request: Request) {
       stack: error?.stack,
       name: error?.name,
     });
+    
+    // 🔥 修复：根据错误类型返回更友好的错误信息
+    let errorMessage = 'Internal server error';
+    let statusCode = 500;
+    
+    if (error?.message?.includes('Database connection') || error?.message?.includes('DATABASE_URL')) {
+      errorMessage = 'Database connection failed. Please check server configuration.';
+      statusCode = 503;
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
+    
     return NextResponse.json(
       { 
         success: false, 
-        error: error?.message || 'Internal server error',
+        error: errorMessage,
+        // 🔥 修复：生产环境也返回简化的错误信息，帮助用户理解问题
+        message: statusCode === 503 
+          ? 'There is a problem with the server configuration. Please try again later.'
+          : 'An error occurred during login. Please try again.',
         details: process.env.NODE_ENV === 'development' ? error?.stack : undefined,
       },
-      { status: 500 }
+      { status: statusCode }
     );
   } finally {
     // 确保断开数据库连接
