@@ -143,10 +143,17 @@ export const authOptions: NextAuthConfig = {
               return true;
             } else {
               // 新用户：自动创建基础 User 记录
+              // 🔥 安全日期处理：防止 Invalid time value
+              const now = new Date();
+              if (isNaN(now.getTime())) {
+                console.error('❌ [NextAuth SignIn] 系统日期无效，无法创建用户');
+                return false;
+              }
+              
               await prisma.users.create({
                 data: {
                   id: randomUUID(),
-                  updatedAt: new Date(),
+                  updatedAt: now,
                   email: email,
                   provider: "google",
                   passwordHash: null,
