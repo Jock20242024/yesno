@@ -61,6 +61,12 @@ export async function hasSignificantPriceChange(
       return { changed: false, newPrice: null, oldPrice: null };
     }
 
+    // 🔥 空值检查：如果 Redis 不可用，认为有变化（首次同步）
+    if (!redis) {
+      console.warn(`⚠️ [DiffSync] Redis 不可用，跳过缓存检查 (marketId: ${marketId})`);
+      return { changed: true, newPrice, oldPrice: null };
+    }
+
     // 从缓存中获取旧价格
     const cachedPriceStr = await redis.get(cacheKey);
     const oldPrice = cachedPriceStr ? parseFloat(cachedPriceStr) : null;
@@ -125,6 +131,10 @@ export async function filterMarketsByPriceChange(
  */
 export async function clearPriceCache(marketId: string): Promise<void> {
   const redis = getRedisClient();
+  if (!redis) {
+    console.warn(`⚠️ [DiffSync] Redis 不可用，无法清除缓存 (marketId: ${marketId})`);
+    return;
+  }
   const cacheKey = getPriceCacheKey(marketId);
   await redis.del(cacheKey);
 }

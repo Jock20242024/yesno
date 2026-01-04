@@ -114,6 +114,12 @@ export function startOddsWorker(): void {
 
   // 重新获取以确保在 try-catch 外部使用
   const redisClient = getRedisClient();
+  
+  // 🔥 关键修复：确保 redisClient 不为 null
+  if (!redisClient) {
+    console.error('❌ [OddsQueue] Redis 客户端不可用，无法创建 Worker');
+    return;
+  }
 
   oddsWorker = new Worker<OddsUpdateJobData>(
     QUEUE_NAME,
