@@ -162,3 +162,4 @@ next-env.d.ts
 
 # 环境变量备份和临时文件
 .env.bak*
+.env.local.bak
