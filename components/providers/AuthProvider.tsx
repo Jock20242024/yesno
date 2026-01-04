@@ -147,14 +147,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         };
       }
 
-      // 🔥 性能优化：直接使用 loginData 中的 user 数据，不等待 refreshUserState
-      // refreshUserState 在后台异步执行，不阻塞登录流程
+      // 🔥 修复：登录成功后立即更新状态，确保跳转前状态已更新
+      const userData = loginData.user || null;
+      if (userData) {
+        setIsLoggedIn(true);
+        setUser(userData);
+        setIsLoading(false);
+      }
+      
+      // 🔥 在后台同步状态（不阻塞登录流程）
       refreshUserState().catch(() => {
         // 静默失败，不影响登录流程
       });
-      
-      // 🔥 直接返回 loginData 中的 user 数据，不需要任何额外的 API 调用
-      const userData = loginData.user || null;
       
       return { success: true, user: userData };
     } catch (error: any) {
