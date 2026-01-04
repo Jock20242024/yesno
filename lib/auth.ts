@@ -14,13 +14,14 @@ import { randomUUID } from "crypto";
 // 🔥 环境变量检查和验证
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
-const nextAuthSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+// 🔥 关键修复：优先使用 AUTH_SECRET，确保与 Vercel 环境变量一致
+const authSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
 
 if (!googleClientId || !googleClientSecret) {
   console.warn('⚠️ [NextAuth] GOOGLE_CLIENT_ID 或 GOOGLE_CLIENT_SECRET 未设置，Google OAuth 将不可用');
 }
-if (!nextAuthSecret) {
-  console.error('❌ [NextAuth] NEXTAUTH_SECRET 或 AUTH_SECRET 未设置，这可能导致认证失败');
+if (!authSecret) {
+  console.error('❌ [NextAuth] AUTH_SECRET 或 NEXTAUTH_SECRET 未设置，这可能导致认证失败');
 }
 
 // NextAuth 配置
