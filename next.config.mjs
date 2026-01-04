@@ -23,6 +23,19 @@ const nextConfig = {
   experimental: {
     instrumentationHook: true,
   },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.google.com https://fonts.googleapis.com; connect-src 'self' *.google.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
