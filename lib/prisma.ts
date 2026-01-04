@@ -3,12 +3,6 @@ import { PrismaClient } from '@prisma/client'
 const prismaClientSingleton = () => {
   return new PrismaClient({
     log: ['error'],
-    // 🔥 修复：在 Serverless 环境中确保连接正确初始化
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL,
-      },
-    },
   })
 }
 
