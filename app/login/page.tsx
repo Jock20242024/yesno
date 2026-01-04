@@ -1,8 +1,7 @@
-export const dynamic = 'force-dynamic';
-"use client";
-
 // 🔥 强制动态渲染：防止构建时数据请求失败
 export const dynamic = 'force-dynamic';
+
+"use client";
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -275,4 +274,3 @@ export default function LoginPage() {
     </Suspense>
   );
 }
-export const dynamic = 'force-dynamic';
