@@ -125,16 +125,16 @@ export const authOptions: NextAuthConfig = {
   session: {
     strategy: "jwt" as const, // 🔥 强制物理重置：策略归位，确保只有一行 strategy: 'jwt'
   },
-  // 🔥 修复 Cookie 配置：确保 SameSite 设置为 'lax'，防止跨域请求时 Cookie 丢失
+  // 🔥 修复 Cookie 配置：统一域名 Cookie，确保带 www 和不带 www 都能共享登录状态
   cookies: {
     sessionToken: {
-      name: `${process.env.NODE_ENV === 'production' ? '__Secure-' : ''}next-auth.session-token`,
+      name: `__Secure-next-auth.session-token`,
       options: {
         httpOnly: true,
-        sameSite: 'lax', // 🔥 关键修复：使用 'lax' 而不是 'strict'，允许同站请求携带 Cookie
+        sameSite: 'lax',
         path: '/',
-        secure: process.env.NODE_ENV === 'production', // 生产环境使用 HTTPS，开发环境允许 HTTP
-        maxAge: 60 * 60 * 24 * 7, // 🔥 修复：设置 7 天过期时间，确保 session 持久化
+        secure: true,
+        domain: '.yesnoex.com', // 🔥 关键修复：允许 yesnoex.com 及其所有子域共享
       },
     },
   },
