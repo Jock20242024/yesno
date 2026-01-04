@@ -225,7 +225,7 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       iconColor: 'bg-[#f7931a]', // 默认颜色
       yesPercent,
       noPercent,
-      deadline: getSafeDeadline(market.closingDate || (market as any).endTime),
+      deadline: getSafeDeadline((market as any).closingDate || market.endTime),
       imageUrl,
       // 🔥 添加原始数据字段（传递给 MarketCard 使用）
       // outcomePrices: (market as any).outcomePrices || null, // Not in MarketEvent interface
