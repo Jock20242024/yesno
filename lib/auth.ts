@@ -11,6 +11,18 @@ import { prisma } from "@/lib/prisma";
 import { comparePassword } from "@/services/authService";
 import { randomUUID } from "crypto";
 
+// 🔥 环境变量检查和验证
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const nextAuthSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+
+if (!googleClientId || !googleClientSecret) {
+  console.warn('⚠️ [NextAuth] GOOGLE_CLIENT_ID 或 GOOGLE_CLIENT_SECRET 未设置，Google OAuth 将不可用');
+}
+if (!nextAuthSecret) {
+  console.error('❌ [NextAuth] NEXTAUTH_SECRET 或 AUTH_SECRET 未设置，这可能导致认证失败');
+}
+
 // NextAuth 配置
 // NextAuth v5 配置对象
 export const authOptions: NextAuthConfig = {
@@ -23,17 +35,20 @@ export const authOptions: NextAuthConfig = {
   //   signIn: '/admin/login', // 已移除：这会导致所有 Google 登录都跳转到后台
   // },
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          prompt: "consent",  // 🔥 关键：每次登录都强制弹窗询问，禁止自动后台登录
-          access_type: "offline",
-          response_type: "code"
+    // 🔥 修复：只在环境变量存在时才添加 Google Provider
+    ...(googleClientId && googleClientSecret ? [
+      GoogleProvider({
+        clientId: googleClientId,
+        clientSecret: googleClientSecret,
+        authorization: {
+          params: {
+            prompt: "consent",  // 🔥 关键：每次登录都强制弹窗询问，禁止自动后台登录
+            access_type: "offline",
+            response_type: "code"
+          }
         }
-      }
-    }),
+      })
+    ] : []),
     // 🔥 添加 Credentials Provider 支持邮箱密码登录
     CredentialsProvider({
       id: "credentials",
@@ -106,7 +121,7 @@ export const authOptions: NextAuthConfig = {
       }
     }),
   ],
-  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
+  secret: nextAuthSecret || 'fallback-secret-key-change-in-production', // 🔥 修复：提供默认值避免错误
   session: {
     strategy: "jwt" as const, // 🔥 强制物理重置：策略归位，确保只有一行 strategy: 'jwt'
   },
