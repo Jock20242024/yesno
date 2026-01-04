@@ -16,9 +16,6 @@
     "fix:all-data": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/fix-all-data.ts",
     "diagnose:odds": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/diagnose-odds-sync.ts"
   },
-  "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"commonjs\"} prisma/seed.ts"
-  },
   "dependencies": {
     "@prisma/client": "^6.19.1",
     "@types/canvas-confetti": "^1.9.0",
