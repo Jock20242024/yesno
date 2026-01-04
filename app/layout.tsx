@@ -21,6 +21,9 @@ const notoSansSC = Noto_Sans_SC({
   preload: false, // 禁用预加载，避免构建时下载
 });
 
+// 🔥 强制动态渲染：防止构建时预渲染失败
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "YesNo - Prediction Market",
   description: "Predict the future, earn rewards. Join the global prediction market.",
