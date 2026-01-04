@@ -18,7 +18,24 @@ let isConnecting = false;
 export function getRedisClient(): Redis {
   // 🔥 强制初始化：如果未初始化，立即创建
   if (!redisClient) {
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    // 🔥 生产环境修复：如果 REDIS_URL 未设置且是生产环境，使用空字符串（不连接本地 Redis）
+    const defaultRedisUrl = process.env.NODE_ENV === 'production' 
+      ? '' // 生产环境不连接本地 Redis
+      : 'redis://localhost:6379'; // 开发环境默认本地
+    
+    const redisUrl = process.env.REDIS_URL || defaultRedisUrl;
+    
+    // 🔥 生产环境检查：如果没有 REDIS_URL 且是生产环境，抛出明确错误
+    if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
+      console.warn('⚠️ [Redis] 生产环境未配置 REDIS_URL，Redis 功能将不可用');
+      // 创建一个占位实例，但不连接
+      redisClient = new Redis('', {
+        maxRetriesPerRequest: null,
+        lazyConnect: true, // 延迟连接，实际上不会连接
+        enableOfflineQueue: false,
+      });
+      return redisClient;
+    }
     
     // 🔥 Upstash Redis 支持：检测是否为 Upstash（通过域名判断）
     const isUpstash = redisUrl.includes('upstash.io');

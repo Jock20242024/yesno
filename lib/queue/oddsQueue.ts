@@ -20,6 +20,12 @@ let oddsWorker: Worker | null = null;
 export function getOddsQueue(): Queue {
   if (!oddsQueue) {
     try {
+      // 🔥 生产环境检查：如果未配置 REDIS_URL，不创建队列
+      if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
+        console.warn('⚠️ [OddsQueue] 生产环境未配置 REDIS_URL，队列功能将不可用');
+        throw new Error('Redis URL not configured in production environment');
+      }
+      
       // 🔥 关键修复：确保 Redis 客户端已就绪
       const redisClient = getRedisClient();
       if (!redisClient) {

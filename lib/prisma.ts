@@ -4,12 +4,13 @@ import { PrismaClient } from '@prisma/client'
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
 
 // 🔥 关键修复：配置 Prisma Client 连接池和超时设置
+// 确保使用环境变量中的 DATABASE_URL，支持 Vercel 环境
 // 注意：连接池配置通过 DATABASE_URL 中的参数控制（如 ?pgbouncer=true&connection_limit=10）
 const prisma = globalForPrisma.prisma || new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   datasources: {
     db: {
-      url: process.env.DATABASE_URL,
+      url: process.env.DATABASE_URL, // 🔥 强制使用环境变量，确保 Vercel 环境正确连接
     },
   },
 })
