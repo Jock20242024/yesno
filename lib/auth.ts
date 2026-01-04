@@ -121,9 +121,13 @@ export const authOptions: NextAuthConfig = {
       }
     }),
   ],
-  secret: nextAuthSecret || 'fallback-secret-key-change-in-production', // 🔥 修复：提供默认值避免错误
+  // 🔥 关键修复：明确使用 AUTH_SECRET，不允许硬编码回退
+  secret: authSecret || (() => {
+    console.error('❌ [NextAuth] AUTH_SECRET 未设置，认证将失败');
+    throw new Error('AUTH_SECRET environment variable is required');
+  })(),
   session: {
-    strategy: "jwt" as const, // 🔥 强制物理重置：策略归位，确保只有一行 strategy: 'jwt'
+    strategy: "jwt" as const, // 🔥 确保使用 JWT 策略
   },
   // 🔥 修复 Cookie 配置：确保 SameSite 设置为 'lax'，防止跨域请求时 Cookie 丢失
   cookies: {
