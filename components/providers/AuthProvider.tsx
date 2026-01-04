@@ -124,7 +124,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = useCallback(async (credentials?: any) => {
     try {
-      console.log('🔍 [AuthProvider] 开始登录，邮箱:', credentials?.email);
+      // 🔥 性能优化：移除 console.log，减少不必要的日志输出
       
       // 🔥 修复：先调用自定义登录 API（/api/auth/login），而不是直接使用 NextAuth
       // 这样可以获得更详细的错误信息
@@ -138,7 +138,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const loginData = await loginResponse.json();
       
       if (!loginResponse.ok || !loginData.success) {
-        console.error('❌ [AuthProvider] 登录 API 失败:', loginData);
         // 🔥 修复：返回详细的错误信息，优先使用 message 字段
         const errorMessage = loginData.message || loginData.error || 'Login failed';
         return { 
@@ -148,22 +147,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         };
       }
 
-      // 🔥 性能优化：移除 NextAuth signIn 调用，因为我们已经在 /api/auth/login 中设置了 cookie
-      // 直接使用 /api/auth/me 获取用户数据，避免重复的 NextAuth 调用
-
-      // 🔥 登录成功后手动刷新状态（不等待，直接使用 loginData 中的 user）
-      // refreshUserState() 会在后台更新状态，但不阻塞登录流程
-      refreshUserState().catch(err => {
-        console.warn('⚠️ [AuthProvider] refreshUserState 失败（不影响登录）:', err);
+      // 🔥 性能优化：直接使用 loginData 中的 user 数据，不等待 refreshUserState
+      // refreshUserState 在后台异步执行，不阻塞登录流程
+      refreshUserState().catch(() => {
+        // 静默失败，不影响登录流程
       });
       
-      // 🔥 直接使用 loginData 中的 user 数据，不需要再次调用 /api/auth/me
+      // 🔥 直接返回 loginData 中的 user 数据，不需要任何额外的 API 调用
       const userData = loginData.user || null;
       
-      console.log('✅ [AuthProvider] 登录成功，用户:', userData?.email);
       return { success: true, user: userData };
     } catch (error: any) {
-      console.error("❌ [AuthProvider] Login failed:", error);
       // 🔥 修复：保留原始错误信息
       return { 
         success: false, 

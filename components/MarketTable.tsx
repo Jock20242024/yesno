@@ -181,6 +181,40 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
     // 🔥 优先使用 image，然后 imageUrl，最后 iconUrl
     const imageUrl = (market as any).image || market.imageUrl || (market as any).iconUrl || '';
     
+    // 🔥 修复：安全日期处理，使用 closingDate 字段（API 返回的字段名）
+    const getSafeDeadline = (dateValue: string | null | undefined): string => {
+      try {
+        if (!dateValue) {
+          // 如果没有日期，返回 30 天后的日期作为默认值
+          const defaultDate = new Date();
+          defaultDate.setDate(defaultDate.getDate() + 30);
+          return defaultDate.toISOString().split('T')[0];
+        }
+        const date = new Date(dateValue);
+        // 验证日期是否有效
+        if (isNaN(date.getTime())) {
+          console.warn('⚠️ [MarketTable] 无效的日期值:', dateValue);
+          const defaultDate = new Date();
+          defaultDate.setDate(defaultDate.getDate() + 30);
+          return defaultDate.toISOString().split('T')[0];
+        }
+        // 验证日期范围（1970-2100）
+        const year = date.getFullYear();
+        if (year < 1970 || year > 2100) {
+          console.warn('⚠️ [MarketTable] 日期超出范围:', dateValue);
+          const defaultDate = new Date();
+          defaultDate.setDate(defaultDate.getDate() + 30);
+          return defaultDate.toISOString().split('T')[0];
+        }
+        return date.toISOString().split('T')[0];
+      } catch (e) {
+        console.error('❌ [MarketTable] 日期转换错误:', e, dateValue);
+        const defaultDate = new Date();
+        defaultDate.setDate(defaultDate.getDate() + 30);
+        return defaultDate.toISOString().split('T')[0];
+      }
+    };
+    
     return {
       id: parseInt(market.id),
       rank,
@@ -191,7 +225,7 @@ export default function MarketTable({ data: staticData }: MarketTableProps) {
       iconColor: 'bg-[#f7931a]', // 默认颜色
       yesPercent,
       noPercent,
-      deadline: new Date(market.endTime).toISOString().split('T')[0],
+      deadline: getSafeDeadline(market.closingDate || (market as any).endTime),
       imageUrl,
       // 🔥 添加原始数据字段（传递给 MarketCard 使用）
       // outcomePrices: (market as any).outcomePrices || null, // Not in MarketEvent interface
