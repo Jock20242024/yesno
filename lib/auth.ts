@@ -21,6 +21,12 @@ const authSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
 console.log("AUTH_URL_CHECK:", process.env.AUTH_URL);
 console.log("NEXTAUTH_URL_CHECK:", process.env.NEXTAUTH_URL);
 
+// 🔥 调试：检查 Google OAuth 配置（隐藏敏感信息）
+console.log("GOOGLE_CLIENT_ID_CHECK:", googleClientId ? `${googleClientId.substring(0, 20)}...${googleClientId.substring(googleClientId.length - 10)}` : '未设置');
+console.log("GOOGLE_CLIENT_SECRET_CHECK:", googleClientSecret ? `${googleClientSecret.substring(0, 10)}...` : '未设置');
+console.log("GOOGLE_CLIENT_ID_LENGTH:", googleClientId?.length || 0);
+console.log("GOOGLE_CLIENT_SECRET_LENGTH:", googleClientSecret?.length || 0);
+
 if (!googleClientId || !googleClientSecret) {
   console.warn('⚠️ [NextAuth] GOOGLE_CLIENT_ID 或 GOOGLE_CLIENT_SECRET 未设置，Google OAuth 将不可用');
 }
@@ -47,8 +53,8 @@ export const authOptions: NextAuthConfig = {
     // 🔥 修复：只在环境变量存在时才添加 Google Provider
     ...(googleClientId && googleClientSecret ? [
       GoogleProvider({
-        clientId: googleClientId,
-        clientSecret: googleClientSecret,
+        clientId: googleClientId.trim(), // 🔥 修复：去除首尾空格
+        clientSecret: googleClientSecret.trim(), // 🔥 修复：去除首尾空格
         authorization: {
           params: {
             prompt: "consent",  // 🔥 关键：每次登录都强制弹窗询问，禁止自动后台登录
