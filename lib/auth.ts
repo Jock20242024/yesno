@@ -191,39 +191,37 @@ export const authOptions: NextAuthConfig = {
       }
     },
     async jwt({ token, user }: any) {
+      // 🔥 首次登录：user 对象存在时，初始化 token
       if (user) {
         token.sub = user.id;
         token.id = user.id;
         token.email = user.email;
+        // 🔥 从 user 对象中获取 isAdmin（authorize 或 signIn callback 中已经设置）
+        token.isAdmin = (user as any).isAdmin || false;
+        token.role = token.isAdmin ? 'ADMIN' : 'USER';
+        
+        // 🔥 可选：从数据库查询最新的 isAdmin 状态（仅首次登录时）
+        try {
+          const dbUser = await prisma.users.findUnique({ 
+            where: { email: user.email as string },
+            select: { isAdmin: true }
+          });
+          
+          if (dbUser) {
+            token.isAdmin = dbUser.isAdmin === true;
+            token.role = token.isAdmin ? 'ADMIN' : 'USER';
+          }
+        } catch (error: any) {
+          // 如果数据库查询失败，使用 user 对象中的 isAdmin
+          console.error("❌ [NextAuth JWT] 数据库查询失败:", error?.message || error);
+        }
       }
       
-      // 从数据库查询最新的 isAdmin 状态
-      // 🔥 优化：使用 Prisma 全局单例，不需要显式 $connect() 和 $disconnect()
-      // Prisma 会自动管理连接池，显式断开会导致连接泄漏
-      try {
-        const dbUser = await prisma.users.findUnique({ 
-          where: { email: token.email as string },
-          select: { isAdmin: true }
-        });
-        
-        if (dbUser) {
-          const isAdmin = dbUser.isAdmin === true;
-          token.isAdmin = isAdmin;
-          token.role = isAdmin ? 'ADMIN' : 'USER';
-        } else {
-          token.isAdmin = false;
-          token.role = 'USER';
-        }
-      } catch (error: any) {
-        // 如果数据库查询失败，使用 user 对象中的 isAdmin（如果存在）
-        if (user && (user as any).isAdmin !== undefined) {
-          token.isAdmin = (user as any).isAdmin || false;
-          token.role = token.isAdmin ? 'ADMIN' : 'USER';
-        } else {
-          token.isAdmin = false;
-          token.role = 'USER';
-        }
-        console.error("❌ [NextAuth JWT] Callback Error:", error?.message || error);
+      // 🔥 后续请求：token 已存在，直接返回（不需要每次都查询数据库）
+      // 如果 token 中没有 isAdmin，默认设置为 false
+      if (token.isAdmin === undefined) {
+        token.isAdmin = false;
+        token.role = 'USER';
       }
 
       return token;

@@ -124,48 +124,45 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = useCallback(async (credentials?: any) => {
     try {
-      // 🔥 性能优化：移除 console.log，减少不必要的日志输出
-      
-      // 🔥 修复：先调用自定义登录 API（/api/auth/login），而不是直接使用 NextAuth
-      // 这样可以获得更详细的错误信息
-      const loginResponse = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(credentials),
+      // 🔥 关键修复：使用 NextAuth 的 signIn 方法，而不是自定义登录 API
+      // 这样可以确保 NextAuth 正确创建 session cookie，使 /api/auth/session 能够正常工作
+      const result = await signIn('credentials', {
+        email: credentials?.email,
+        password: credentials?.password,
+        redirect: false, // 不自动跳转，手动控制
       });
 
-      const loginData = await loginResponse.json();
-      
-      if (!loginResponse.ok || !loginData.success) {
-        // 🔥 修复：返回详细的错误信息，优先使用 message 字段
-        const errorMessage = loginData.message || loginData.error || 'Login failed';
+      if (result?.error) {
+        // 🔥 处理错误信息
+        let errorMessage = '登录失败';
+        
+        if (result.error === 'CredentialsSignin') {
+          errorMessage = '邮箱或密码错误';
+        } else if (result.error === 'GOOGLE_USER_MUST_USE_OAUTH') {
+          errorMessage = '此账号使用 Google 登录注册，请使用 Google 登录按钮登录';
+        } else {
+          errorMessage = result.error;
+        }
+        
         return { 
           success: false, 
           error: errorMessage,
-          details: loginData.details,
         };
       }
 
-      // 🔥 修复：登录成功后立即更新状态，确保跳转前状态已更新
-      const userData = loginData.user || null;
-      if (userData) {
-        setIsLoggedIn(true);
-        setUser(userData);
-        setIsLoading(false);
+      if (result?.ok) {
+        // 🔥 登录成功后刷新用户状态
+        const userData = await refreshUserState();
+        
+        return { success: true, user: userData };
       }
       
-      // 🔥 在后台同步状态（不阻塞登录流程）
-      refreshUserState().catch(() => {
-        // 静默失败，不影响登录流程
-      });
-      
-      return { success: true, user: userData };
+      return { success: false, error: '登录失败' };
     } catch (error: any) {
       // 🔥 修复：保留原始错误信息
       return { 
         success: false, 
-        error: error.message || 'Login failed',
+        error: error.message || '登录失败',
         details: error.stack,
       };
     }
