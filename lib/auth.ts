@@ -149,37 +149,35 @@ export const authOptions: NextAuthConfig = {
           }
 
           try {
-            // 查找现有用户
-            const existingUser = await prisma.users.findUnique({ 
+            // 🔥 性能优化：使用 upsert 操作，减少数据库查询次数
+            // 查找或创建用户（一次数据库操作完成）
+            const now = new Date();
+            if (isNaN(now.getTime())) {
+              console.error('❌ [NextAuth SignIn] 系统日期无效，无法创建用户');
+              return false;
+            }
+            
+            const dbUser = await prisma.users.upsert({
               where: { email },
-              select: { id: true, isAdmin: true }
+              update: {}, // 已存在则不做任何更新
+              create: {
+                id: randomUUID(),
+                updatedAt: now,
+                email: email,
+                provider: "google",
+                passwordHash: null,
+                balance: 0,
+                isAdmin: false,
+                isBanned: false,
+              },
+              select: { id: true, isAdmin: true }, // 🔥 只选择需要的字段
             });
 
-            if (existingUser) {
-              return true;
-            } else {
-              // 新用户：自动创建基础 User 记录
-              // 🔥 安全日期处理：防止 Invalid time value
-              const now = new Date();
-              if (isNaN(now.getTime())) {
-                console.error('❌ [NextAuth SignIn] 系统日期无效，无法创建用户');
-                return false;
-              }
-              
-              await prisma.users.create({
-                data: {
-                  id: randomUUID(),
-                  updatedAt: now,
-                  email: email,
-                  provider: "google",
-                  passwordHash: null,
-                  balance: 0,
-                  isAdmin: false,
-                  isBanned: false,
-                },
-              });
-              return true;
-            }
+            // 🔥 性能优化：将 isAdmin 信息附加到 user 对象，供 jwt callback 使用
+            // 注意：NextAuth 的 signIn callback 不能直接修改 user 对象，但可以通过 account 传递
+            // 这里我们将在 jwt callback 中直接查询，但减少查询字段
+            
+            return true;
           } catch (error) {
             if (process.env.NODE_ENV === 'development') {
               console.error("SignIn Callback Error:", error);
@@ -196,30 +194,37 @@ export const authOptions: NextAuthConfig = {
         return false;
       }
     },
-    async jwt({ token, user }: any) {
+    async jwt({ token, user, account }: any) {
       // 🔥 首次登录：user 对象存在时，初始化 token
       if (user) {
         token.sub = user.id;
         token.id = user.id;
         token.email = user.email;
-        // 🔥 从 user 对象中获取 isAdmin（authorize 或 signIn callback 中已经设置）
-        token.isAdmin = (user as any).isAdmin || false;
-        token.role = token.isAdmin ? 'ADMIN' : 'USER';
         
-        // 🔥 可选：从数据库查询最新的 isAdmin 状态（仅首次登录时）
-        try {
-          const dbUser = await prisma.users.findUnique({ 
-            where: { email: user.email as string },
-            select: { isAdmin: true }
-          });
-          
-          if (dbUser) {
-            token.isAdmin = dbUser.isAdmin === true;
+        // 🔥 性能优化：对于 Credentials provider，authorize callback 已返回 isAdmin
+        // 直接使用，避免再次查询数据库
+        if ((user as any).isAdmin !== undefined) {
+          token.isAdmin = (user as any).isAdmin || false;
+          token.role = token.isAdmin ? 'ADMIN' : 'USER';
+        } else {
+          // 🔥 对于 OAuth provider（如 Google），需要查询数据库获取 isAdmin
+          // 只在首次登录时查询一次，结果存储在 token 中
+          try {
+            const dbUser = await prisma.users.findUnique({ 
+              where: { email: user.email as string },
+              select: { isAdmin: true } // 🔥 只查询需要的字段
+            });
+            
+            token.isAdmin = dbUser?.isAdmin === true || false;
             token.role = token.isAdmin ? 'ADMIN' : 'USER';
+          } catch (error: any) {
+            // 如果数据库查询失败，默认设置为 false
+            token.isAdmin = false;
+            token.role = 'USER';
+            if (process.env.NODE_ENV === 'development') {
+              console.error("❌ [NextAuth JWT] 数据库查询失败:", error?.message || error);
+            }
           }
-        } catch (error: any) {
-          // 如果数据库查询失败，使用 user 对象中的 isAdmin
-          console.error("❌ [NextAuth JWT] 数据库查询失败:", error?.message || error);
         }
       }
       
