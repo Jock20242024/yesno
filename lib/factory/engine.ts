@@ -1452,13 +1452,127 @@ export async function createMarketFromTemplate(
     // 🔥 性能优化：仅在开发环境或需要调试时输出（JSON.stringify 可能很慢）
     // console.log('FINAL_CHECK_PAYLOAD:', JSON.stringify(data, null, 2));
 
-    // 10. 使用 Prisma 创建市场
-    const newMarket = await prisma.markets.create({
-      data: {
-        ...data,
-        id: randomUUID(),
-        updatedAt: new Date(),
-      },
+    // 🔥 漏洞4修复：工厂市场创建时也要真实注入流动性
+    // 全局默认注入额度（可通过环境变量配置，默认 $500）
+    const DEFAULT_FACTORY_LIQUIDITY = parseFloat(process.env.DEFAULT_FACTORY_LIQUIDITY || '500');
+    const shouldInjectLiquidity = DEFAULT_FACTORY_LIQUIDITY > 0;
+
+    // 10. 使用事务确保市场创建和流动性注入的原子性
+    const newMarket = await prisma.$transaction(async (tx) => {
+      // 创建市场
+      const createdMarket = await tx.markets.create({
+        data: {
+          ...data,
+          id: randomUUID(),
+          updatedAt: new Date(),
+          // 🔥 漏洞4修复：如果启用流动性注入，初始化 totalYes 和 totalNo（默认 50/50）
+          totalYes: shouldInjectLiquidity ? DEFAULT_FACTORY_LIQUIDITY * 0.5 : 0,
+          totalNo: shouldInjectLiquidity ? DEFAULT_FACTORY_LIQUIDITY * 0.5 : 0,
+        },
+      });
+
+      // 🔥 漏洞4修复：如果启用流动性注入，执行真实扣款和记录流水
+      if (shouldInjectLiquidity) {
+        // 获取流动性账户
+        const liquidityAccount = await tx.users.findFirst({
+          where: { email: 'system.liquidity@yesno.com' },
+        });
+
+        if (!liquidityAccount) {
+          // 如果流动性账户不存在，记录警告但不阻止市场创建
+          console.warn(`⚠️ [FactoryEngine] 流动性账户不存在，跳过流动性注入。市场 ${createdMarket.id} 将没有初始流动性。`);
+        } else {
+          // 检查余额
+          if (liquidityAccount.balance < DEFAULT_FACTORY_LIQUIDITY) {
+            // 🔥 漏洞4修复：如果余额不足，记录错误但不阻止市场创建（允许空头创建）
+            console.error(`❌ [FactoryEngine] 流动性账户余额不足：当前余额 $${liquidityAccount.balance.toFixed(2)}，需要 $${DEFAULT_FACTORY_LIQUIDITY.toFixed(2)}。市场 ${createdMarket.id} 将没有初始流动性。`);
+          } else {
+            // 🔥 漏洞1修复：获取或创建AMM账户
+            let ammAccount = await tx.users.findFirst({
+              where: { email: 'system.amm@yesno.com' },
+            });
+
+            if (!ammAccount) {
+              // 如果AMM账户不存在，创建它
+              ammAccount = await tx.users.create({
+                data: {
+                  id: randomUUID(),
+                  updatedAt: new Date(),
+                  email: 'system.amm@yesno.com',
+                  balance: 0,
+                  isAdmin: false,
+                  isBanned: false,
+                },
+              });
+            }
+
+            // 🔥 漏洞2修复：使用余额法确保精度（Yes+No=总额）
+            // 默认 50/50 分配
+            const yesProb = 0.5;
+            // 先计算Yes（保留2位小数）
+            const calculatedYes = Math.floor(DEFAULT_FACTORY_LIQUIDITY * yesProb * 100) / 100;
+            // No = 总额 - Yes（确保总额绝对等于注入金额）
+            const calculatedNo = DEFAULT_FACTORY_LIQUIDITY - calculatedYes;
+
+            // 🔥 漏洞1修复：从流动性账户扣减余额
+            const updatedLiquidityAccount = await tx.users.update({
+              where: { id: liquidityAccount.id },
+              data: {
+                balance: {
+                  decrement: DEFAULT_FACTORY_LIQUIDITY,
+                },
+              },
+            });
+
+            // 🔥 漏洞1修复：给AMM账户增加余额（资金从LP转移到AMM）
+            const updatedAmmAccount = await tx.users.update({
+              where: { id: ammAccount.id },
+              data: {
+                balance: {
+                  increment: DEFAULT_FACTORY_LIQUIDITY,
+                },
+              },
+            });
+
+            // 🔥 漏洞2修复：更新市场的totalYes和totalNo（使用精确计算的值）
+            await tx.markets.update({
+              where: { id: createdMarket.id },
+              data: {
+                totalYes: calculatedYes,
+                totalNo: calculatedNo,
+              },
+            });
+
+            // 创建 Transaction 记录（LP账户：负数表示支出）
+            await tx.transactions.create({
+              data: {
+                id: randomUUID(),
+                userId: liquidityAccount.id,
+                amount: -DEFAULT_FACTORY_LIQUIDITY,
+                type: 'ADMIN_ADJUSTMENT',
+                reason: `工厂市场创建初始流动性注入 - 市场ID: ${createdMarket.id}`,
+                status: 'COMPLETED',
+              },
+            });
+
+            // 🔥 漏洞1修复：创建AMM账户的Transaction记录（正数表示收入）
+            await tx.transactions.create({
+              data: {
+                id: randomUUID(),
+                userId: ammAccount.id,
+                amount: DEFAULT_FACTORY_LIQUIDITY,
+                type: 'ADMIN_ADJUSTMENT',
+                reason: `工厂市场创建初始流动性注入 - 市场ID: ${createdMarket.id}`,
+                status: 'COMPLETED',
+              },
+            });
+
+            console.log(`✅ [FactoryEngine] 流动性注入成功: 市场 ${createdMarket.id}, 金额 $${DEFAULT_FACTORY_LIQUIDITY}, LP账户余额: $${updatedLiquidityAccount.balance}, AMM账户余额: $${updatedAmmAccount.balance}`);
+          }
+        }
+      }
+
+      return createdMarket;
     });
 
     const newMarketId = newMarket.id;

@@ -1154,6 +1154,7 @@ export async function POST(request: Request) {
 
       // 如果指定了流动性注入，执行真实扣款和记录流水
       if (shouldInjectLiquidity) {
+        // 🔥 漏洞1修复：同时操作LP账户和AMM账户，确保资金流转闭环
         const liquidityAccount = await tx.users.findFirst({
           where: { email: 'system.liquidity@yesno.com' },
         });
@@ -1162,8 +1163,36 @@ export async function POST(request: Request) {
           throw new Error('流动性账户不存在');
         }
 
-        // 从流动性账户扣减余额
-        const updatedAccount = await tx.users.update({
+        // 🔥 漏洞1修复：获取或创建AMM账户
+        let ammAccount = await tx.users.findFirst({
+          where: { email: 'system.amm@yesno.com' },
+        });
+
+        if (!ammAccount) {
+          // 如果AMM账户不存在，创建它
+          const { randomUUID } = await import('crypto');
+          ammAccount = await tx.users.create({
+            data: {
+              id: randomUUID(),
+              updatedAt: new Date(),
+              email: 'system.amm@yesno.com',
+              balance: 0,
+              isAdmin: false,
+              isBanned: false,
+            },
+          });
+        }
+
+        // 🔥 漏洞2修复：使用余额法确保精度（Yes+No=总额）
+        // 默认 50/50 分配
+        const yesProb = 0.5;
+        // 先计算Yes（保留2位小数）
+        const calculatedYes = Math.floor(liquidityAmount * yesProb * 100) / 100;
+        // No = 总额 - Yes（确保总额绝对等于注入金额）
+        const calculatedNo = liquidityAmount - calculatedYes;
+
+        // 🔥 漏洞1修复：从流动性账户扣减余额
+        const updatedLiquidityAccount = await tx.users.update({
           where: { id: liquidityAccount.id },
           data: {
             balance: {
@@ -1172,20 +1201,51 @@ export async function POST(request: Request) {
           },
         });
 
-        // 创建 Transaction 记录（负数表示支出）
+        // 🔥 漏洞1修复：给AMM账户增加余额（资金从LP转移到AMM）
+        const updatedAmmAccount = await tx.users.update({
+          where: { id: ammAccount.id },
+          data: {
+            balance: {
+              increment: liquidityAmount, // AMM账户增加相同金额
+            },
+          },
+        });
+
+        // 🔥 漏洞2修复：更新市场的totalYes和totalNo（使用精确计算的值）
+        await tx.markets.update({
+          where: { id: newMarket.id },
+          data: {
+            totalYes: calculatedYes,
+            totalNo: calculatedNo,
+          },
+        });
+
+        // 创建 Transaction 记录（LP账户：负数表示支出）
         const { randomUUID } = await import('crypto');
         await tx.transactions.create({
           data: {
             id: randomUUID(),
             userId: liquidityAccount.id,
-            amount: -liquidityAmount, // 负数表示从账户扣减
+            amount: -liquidityAmount, // 负数表示从LP账户扣减
             type: 'ADMIN_ADJUSTMENT',
             reason: `市场创建初始流动性注入 - 市场ID: ${newMarket.id}`,
             status: 'COMPLETED',
           },
         });
 
-        console.log(`✅ [Market API] 流动性注入成功: 市场 ${newMarket.id}, 金额 $${liquidityAmount}, 流动性账户余额: $${updatedAccount.balance}`);
+        // 🔥 漏洞1修复：创建AMM账户的Transaction记录（正数表示收入）
+        await tx.transactions.create({
+          data: {
+            id: randomUUID(),
+            userId: ammAccount.id,
+            amount: liquidityAmount, // 正数表示AMM账户收入
+            type: 'ADMIN_ADJUSTMENT',
+            reason: `市场创建初始流动性注入 - 市场ID: ${newMarket.id}`,
+            status: 'COMPLETED',
+          },
+        });
+
+        console.log(`✅ [Market API] 流动性注入成功: 市场 ${newMarket.id}, 金额 $${liquidityAmount}, LP账户余额: $${updatedLiquidityAccount.balance}, AMM账户余额: $${updatedAmmAccount.balance}`);
       }
 
       return newMarket;
