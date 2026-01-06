@@ -117,6 +117,18 @@ export default function AdminSidebar() {
               <p className="text-sm font-medium leading-normal">系统账户资金</p>
             </Link>
 
+            <Link
+              href="/admin/finance/stats"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                pathname === "/admin/finance/stats"
+                  ? "bg-primary text-white shadow-sm hover:bg-blue-600"
+                  : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
+              }`}
+            >
+              <span className="material-symbols-outlined">trending_up</span>
+              <p className="text-sm font-medium leading-normal">做市监控</p>
+            </Link>
+
             {/* 市场运营分组 */}
             <div className="pt-2 pb-1">
               <p className="px-3 text-xs font-bold text-[#637588] dark:text-[#58677a] uppercase tracking-wider">市场运营</p>
