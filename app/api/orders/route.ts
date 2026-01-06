@@ -582,7 +582,7 @@ export async function POST(request: Request) {
       }
       
       // 🔥 推送订单簿更新事件（仅在MARKET订单成交后，异步执行不阻塞响应）
-      if (validOrderType === 'MARKET' && result.market) {
+      if (validOrderType === 'MARKET' && updatedMarket) {
         // 异步执行，不阻塞响应
         (async () => {
           try {
