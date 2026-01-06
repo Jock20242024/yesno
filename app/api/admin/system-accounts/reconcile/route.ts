@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
         const account = accountMap.get(email);
         
         if (!account) {
+          // 🔥 修复：账户不存在时，差异为0，应该视为平衡
           return {
             accountType,
             email,
@@ -55,6 +56,7 @@ export async function GET(request: NextRequest) {
             transactionSum: 0,
             difference: 0,
             hasAccount: false,
+            isBalanced: true, // 🔥 修复：账户不存在且差异为0，视为平衡
           };
         }
 
@@ -97,7 +99,10 @@ export async function GET(request: NextRequest) {
     const isOverallBalanced = totalDifference <= 0.01;
 
     // 4. 检查是否有异常
-    const hasAnomaly = reconciliationResults.some(result => !result.isBalanced) || !isOverallBalanced;
+    // 🔥 修复：只检查存在的账户，且差异 > 0.01 才算异常
+    const hasAnomaly = reconciliationResults.some(result => 
+      result.hasAccount && !result.isBalanced
+    ) || !isOverallBalanced;
 
     return NextResponse.json({
       success: true,
