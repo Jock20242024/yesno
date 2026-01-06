@@ -258,27 +258,9 @@ export default function WalletPage() {
 
   // 渲染函数 - 持仓列表
   const renderPositions = () => {
-    if (isLoadingPositions) {
-      return (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-zinc-500 text-sm">{t('portfolio.empty.loading')}</div>
-        </div>
-      );
-    }
-
-    if (positions.length === 0) {
-      return (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-zinc-600">
-            {statusFilter === 'ACTIVE' ? t('portfolio.empty.no_positions_active') : t('portfolio.empty.no_positions_resolved')}
-          </div>
-        </div>
-      );
-    }
-
     return (
       <div className="overflow-x-auto p-4">
-        {/* 筛选按钮 */}
+        {/* 筛选按钮 - 🔥 修复：始终显示，即使没有持仓 */}
         <div className="mb-4 flex gap-2">
           <button
             onClick={() => setStatusFilter('ACTIVE')}
@@ -301,49 +283,69 @@ export default function WalletPage() {
             {t('portfolio.status.resolved')}
           </button>
         </div>
-        <table className="w-full text-left text-sm text-zinc-400">
-          <thead className="border-b border-zinc-800 text-xs uppercase text-zinc-500 bg-zinc-900/50">
-            <tr>
-              <th className="px-4 py-3 font-medium">{t('portfolio.table.event')}</th>
-              <th className="px-4 py-3 font-medium text-center">{t('portfolio.table.type')}</th>
-              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.shares')}</th>
-              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.avg_price')}</th>
-              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.current_value')}</th>
-              <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.pnl')}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-800/50">
-            {positions.map((pos) => (
-              <tr key={pos.id} className="hover:bg-zinc-800/30 transition-colors">
-                <td className="px-4 py-4 text-zinc-200 max-w-[200px] truncate">
-                  <Link 
-                    href={`/markets/${pos.marketId}`}
-                    className="hover:text-white hover:underline decoration-zinc-500 underline-offset-4 cursor-pointer transition-colors"
-                  >
-                    {pos.event}
-                  </Link>
-                </td>
-                <td className="px-4 py-4 text-center">
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${
-                    pos.type === 'YES' 
-                      ? 'bg-pm-green/20 text-pm-green' 
-                      : 'bg-pm-red/20 text-pm-red'
-                  }`}>
-                    {pos.type}
-                  </span>
-                </td>
-                <td className="px-4 py-4 text-right text-zinc-300 font-mono">{pos.shares.toFixed(2)}</td>
-                <td className="px-4 py-4 text-right font-mono">${pos.avgPrice.toFixed(2)}</td>
-                <td className="px-4 py-4 text-right text-white font-medium font-mono">${pos.value.toFixed(2)}</td>
-                <td className={`px-4 py-4 text-right font-medium font-mono ${
-                  pos.pnl >= 0 ? 'text-pm-green' : 'text-pm-red'
-                }`}>
-                  {pos.pnl >= 0 ? '+' : ''}{pos.pnl.toFixed(2)} ({pos.pnlPercent >= 0 ? '+' : ''}{pos.pnlPercent.toFixed(2)}%)
-                </td>
+
+        {/* 加载状态 */}
+        {isLoadingPositions && (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-zinc-500 text-sm">{t('portfolio.empty.loading')}</div>
+          </div>
+        )}
+
+        {/* 空状态 */}
+        {!isLoadingPositions && positions.length === 0 && (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-zinc-600">
+              {statusFilter === 'ACTIVE' ? t('portfolio.empty.no_positions_active') : t('portfolio.empty.no_positions_resolved')}
+            </div>
+          </div>
+        )}
+
+        {/* 持仓列表 */}
+        {!isLoadingPositions && positions.length > 0 && (
+          <table className="w-full text-left text-sm text-zinc-400">
+            <thead className="border-b border-zinc-800 text-xs uppercase text-zinc-500 bg-zinc-900/50">
+              <tr>
+                <th className="px-4 py-3 font-medium">{t('portfolio.table.event')}</th>
+                <th className="px-4 py-3 font-medium text-center">{t('portfolio.table.type')}</th>
+                <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.shares')}</th>
+                <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.avg_price')}</th>
+                <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.current_value')}</th>
+                <th className="px-4 py-3 font-medium text-right">{t('portfolio.table.pnl')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-zinc-800/50">
+              {positions.map((pos) => (
+                <tr key={pos.id} className="hover:bg-zinc-800/30 transition-colors">
+                  <td className="px-4 py-4 text-zinc-200 max-w-[200px] truncate">
+                    <Link 
+                      href={`/markets/${pos.marketId}`}
+                      className="hover:text-white hover:underline decoration-zinc-500 underline-offset-4 cursor-pointer transition-colors"
+                    >
+                      {pos.event}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${
+                      pos.type === 'YES' 
+                        ? 'bg-pm-green/20 text-pm-green' 
+                        : 'bg-pm-red/20 text-pm-red'
+                    }`}>
+                      {pos.type}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-right text-zinc-300 font-mono">{pos.shares.toFixed(2)}</td>
+                  <td className="px-4 py-4 text-right font-mono">${pos.avgPrice.toFixed(2)}</td>
+                  <td className="px-4 py-4 text-right text-white font-medium font-mono">${pos.value.toFixed(2)}</td>
+                  <td className={`px-4 py-4 text-right font-medium font-mono ${
+                    pos.pnl >= 0 ? 'text-pm-green' : 'text-pm-red'
+                  }`}>
+                    {pos.pnl >= 0 ? '+' : ''}{pos.pnl.toFixed(2)} ({pos.pnlPercent >= 0 ? '+' : ''}{pos.pnlPercent.toFixed(2)}%)
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     );
   };
