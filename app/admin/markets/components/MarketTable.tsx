@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import dayjs from "dayjs";
+import { useState } from "react";
+import { toast } from "sonner";
 
 // 子市场详情接口（后端返回的对象）
 interface SubMarketDetail {
@@ -114,6 +116,147 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
+// 🔥 第二步：流动性管理按钮组件
+function LiquidityButton({ marketId, marketTitle }: { marketId: string; marketTitle: string }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [action, setAction] = useState<'inject' | 'withdraw'>('inject');
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleOpenModal = (actionType: 'inject' | 'withdraw') => {
+    setAction(actionType);
+    setAmount('');
+    setReason('');
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async () => {
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.error("请输入有效的金额");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`/api/admin/markets/${marketId}/liquidity`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          action,
+          amount: amountNum,
+          reason: reason || undefined,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '操作失败');
+      }
+
+      toast.success(action === 'inject' ? '流动性注入成功' : '流动性撤回成功');
+      setIsModalOpen(false);
+      // 刷新页面以更新市场数据
+      window.location.reload();
+    } catch (error) {
+      console.error('流动性操作失败:', error);
+      toast.error(error instanceof Error ? error.message : '操作失败');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex gap-1">
+        <button
+          onClick={() => handleOpenModal('inject')}
+          className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-800 dark:text-purple-400 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+          title="注入流动性"
+        >
+          <span className="material-symbols-outlined text-[16px]">trending_up</span>
+          注入
+        </button>
+        <button
+          onClick={() => handleOpenModal('withdraw')}
+          className="px-3 py-1.5 bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/30 dark:hover:bg-orange-900/50 text-orange-800 dark:text-orange-400 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+          title="撤回流动性"
+        >
+          <span className="material-symbols-outlined text-[16px]">trending_down</span>
+          撤回
+        </button>
+      </div>
+
+      {/* 流动性管理 Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              {action === 'inject' ? '注入流动性' : '撤回流动性'} - {marketTitle}
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  金额 (USD)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  备注（可选）
+                </label>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="请输入备注信息..."
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="flex-1 py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                disabled={isSubmitting}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting || !amount}
+                className={`flex-1 py-2 px-4 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  action === 'inject'
+                    ? 'bg-purple-600 hover:bg-purple-700'
+                    : 'bg-orange-600 hover:bg-orange-700'
+                }`}
+              >
+                {isSubmitting ? "处理中..." : "确认"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // 获取状态显示
 const getStatusDisplay = (status: string) => {
   switch (status) {
@@ -217,7 +360,10 @@ export default function MarketTable({
 
             {/* 市场数据行 */}
             {!isLoading && !error && markets.map((market: any) => {
-              const isAggregated = !showDetails && market.stats;
+              // 🔥 修复：isAggregated 的判断逻辑
+              // 当 showDetails=true 时，后端返回单个市场（不聚合），此时 market.stats 可能仍然存在但应该视为非聚合
+              // 当 showDetails=false 时，后端返回聚合数据，此时 market.stats 存在且应该视为聚合
+              const isAggregated = !showDetails && market.stats && (market.stats.open !== undefined || market.stats.total !== undefined);
               const statusDisplay = getStatusDisplay(market.status);
               const seriesKey = market.templateId || market.id;
               const isExpanded = expandedSeries.has(seriesKey);
@@ -334,7 +480,7 @@ export default function MarketTable({
                       </td>
                     )}
                     <td className="p-4">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2 flex-wrap">
                         {/* 🚀 手动市场：删除"查看场次"按钮 */}
                         {isAggregated && mode === 'factory' && (
                           <button
@@ -347,6 +493,11 @@ export default function MarketTable({
                             </span>
                             {isExpanded ? "收起" : "查看场次"}
                           </button>
+                        )}
+                        {/* 🔥 第二步：流动性管理按钮（仅手动市场且状态为OPEN时显示） */}
+                        {/* 修复：只在详细视图（非聚合）时显示按钮，因为流动性管理是针对单个市场的操作 */}
+                        {mode === 'manual' && !isAggregated && market.status === 'OPEN' && (
+                          <LiquidityButton marketId={market.id} marketTitle={market.title} />
                         )}
                         <Link
                           href={mode === 'factory' 

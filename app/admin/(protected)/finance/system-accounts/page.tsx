@@ -18,11 +18,14 @@ interface SystemAccountsData {
 
 interface Transaction {
   id: string;
+  userId: string;
+  userEmail: string;
   amount: number;
   type: string;
   reason: string | null;
   createdAt: string;
   status: string;
+  balanceAfter: number; // 🔥 第三步：变动后余额
 }
 
 export default function SystemAccountsPage() {
@@ -116,29 +119,47 @@ export default function SystemAccountsPage() {
     fetchAccounts();
   }, []);
 
-  // 获取交易流水
+  // 🔥 第三步：获取交易流水
   useEffect(() => {
     const fetchTransactions = async () => {
       if (!accounts) return;
 
       try {
-        // 获取所有系统账户的交易
-        const accountIds = [
-          accounts.fee.id,
-          accounts.amm.id,
-          accounts.liquidity.id,
-        ].filter((id) => id);
+        // 根据 activeTab 决定查询哪个账户的交易
+        const accountType = activeTab === 'all' ? 'all' : activeTab;
+        
+        const response = await fetch(`/api/admin/system-accounts/transactions?accountType=${accountType}`, {
+          credentials: 'include',
+        });
 
-        if (accountIds.length === 0) {
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          console.error("获取交易流水失败:", result.error);
           setTransactions([]);
           return;
         }
 
-        // 这里需要创建一个新的 API 端点来获取系统账户的交易
-        // 暂时使用空数组，后续可以扩展
-        setTransactions([]);
+        // 根据 activeTab 过滤交易（如果 activeTab 不是 'all'）
+        let filteredTransactions = result.data || [];
+        
+        if (activeTab !== 'all') {
+          const accountEmailMap: Record<string, string> = {
+            fee: 'system.fee@yesno.com',
+            amm: 'system.amm@yesno.com',
+            liquidity: 'system.liquidity@yesno.com',
+          };
+          
+          const targetEmail = accountEmailMap[activeTab];
+          filteredTransactions = filteredTransactions.filter((tx: any) => 
+            tx.userEmail === targetEmail
+          );
+        }
+
+        setTransactions(filteredTransactions);
       } catch (error) {
         console.error("获取交易流水失败:", error);
+        setTransactions([]);
       }
     };
 
@@ -480,9 +501,8 @@ export default function SystemAccountsPage() {
                         {tx.amount >= 0 ? "+" : ""}
                         {formatCurrency(tx.amount)}
                       </td>
-                      <td className="py-3 px-4 text-sm text-right text-gray-900 dark:text-white">
-                        {/* 这里需要计算变动后余额，暂时显示 - */}
-                        -
+                      <td className="py-3 px-4 text-sm text-right text-gray-900 dark:text-white font-medium">
+                        {formatCurrency(tx.balanceAfter)}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
                         {tx.reason || "-"}

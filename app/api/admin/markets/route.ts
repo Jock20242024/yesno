@@ -943,6 +943,7 @@ export async function POST(request: Request) {
       resolutionCriteria,
       feeRate, // 接收手续费率参数
       isHot, // 🔥 接收热门标记
+      initialLiquidity, // 🔥 第一步：接收平台启动资金参数
     } = body;
 
     // 数据验证调试：打印接收到的市场数据
@@ -1074,6 +1075,38 @@ export async function POST(request: Request) {
     const hasHotCategory = hotCategory && validCategoryConnect.some(c => c.id === hotCategory.id);
     const finalIsHot = hasHotCategory ? true : (isHot === true ? true : false);
 
+    // 🔥 第一步：处理流动性注入逻辑
+    const liquidityAmount = initialLiquidity ? parseFloat(String(initialLiquidity)) : 0;
+    const shouldInjectLiquidity = liquidityAmount > 0;
+
+    // 如果指定了流动性注入，检查流动性账户余额
+    if (shouldInjectLiquidity) {
+      const liquidityAccount = await prisma.users.findFirst({
+        where: { email: 'system.liquidity@yesno.com' },
+        select: { id: true, balance: true },
+      });
+
+      if (!liquidityAccount) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: '流动性账户不存在，请先创建系统账户',
+          },
+          { status: 400 }
+        );
+      }
+
+      if (liquidityAccount.balance < liquidityAmount) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `流动性账户余额不足：当前余额 $${liquidityAccount.balance.toFixed(2)}，需要 $${liquidityAmount.toFixed(2)}`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const marketData: any = {
       title: body.title,
       description: body.description || "",
@@ -1087,6 +1120,9 @@ export async function POST(request: Request) {
       manualOffset: 0,
       resolvedOutcome: null,
       isHot: finalIsHot, // 🔥 修复：如果包含热门分类，自动设置为 true
+      // 🔥 第一步：如果指定了流动性注入，初始化 totalYes 和 totalNo（默认 50/50 分配）
+      totalYes: shouldInjectLiquidity ? liquidityAmount * 0.5 : 0,
+      totalNo: shouldInjectLiquidity ? liquidityAmount * 0.5 : 0,
     };
 
     // 🔥 管理员权限：允许管理员手动创建市场
@@ -1109,9 +1145,53 @@ export async function POST(request: Request) {
       console.warn('⚠️ [Market API] 没有有效的分类，创建市场但不关联分类');
     }
 
-    const newMarket = await prisma.markets.create({
-      data: marketData,
+    // 🔥 第一步：使用事务确保市场创建和流动性注入的原子性
+    const result = await prisma.$transaction(async (tx) => {
+      // 创建市场
+      const newMarket = await tx.markets.create({
+        data: marketData,
+      });
+
+      // 如果指定了流动性注入，执行真实扣款和记录流水
+      if (shouldInjectLiquidity) {
+        const liquidityAccount = await tx.users.findFirst({
+          where: { email: 'system.liquidity@yesno.com' },
+        });
+
+        if (!liquidityAccount) {
+          throw new Error('流动性账户不存在');
+        }
+
+        // 从流动性账户扣减余额
+        const updatedAccount = await tx.users.update({
+          where: { id: liquidityAccount.id },
+          data: {
+            balance: {
+              decrement: liquidityAmount, // 使用 decrement 确保原子性
+            },
+          },
+        });
+
+        // 创建 Transaction 记录（负数表示支出）
+        const { randomUUID } = await import('crypto');
+        await tx.transactions.create({
+          data: {
+            id: randomUUID(),
+            userId: liquidityAccount.id,
+            amount: -liquidityAmount, // 负数表示从账户扣减
+            type: 'ADMIN_ADJUSTMENT',
+            reason: `市场创建初始流动性注入 - 市场ID: ${newMarket.id}`,
+            status: 'COMPLETED',
+          },
+        });
+
+        console.log(`✅ [Market API] 流动性注入成功: 市场 ${newMarket.id}, 金额 $${liquidityAmount}, 流动性账户余额: $${updatedAccount.balance}`);
+      }
+
+      return newMarket;
     });
+
+    const newMarket = result;
 
     // 处理 BigInt 序列化并返回
     return new Response(JSON.stringify({ 

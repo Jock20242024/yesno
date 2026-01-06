@@ -189,6 +189,11 @@ export default function MarketCreationPage() {
       const selectedCategory = categories.find(cat => cat.id === selectedCategoryId);
       const categoryName = selectedCategory ? selectedCategory.name : '';
 
+      // 🔥 第一步：解析 initialLiquidity（如果为空字符串则设为 undefined）
+      const initialLiquidityValue = formData.initialLiquidity && formData.initialLiquidity.trim() !== ''
+        ? parseFloat(formData.initialLiquidity)
+        : undefined;
+
       const response = await fetch("/api/admin/markets", {
         method: "POST",
         headers: {
@@ -205,6 +210,7 @@ export default function MarketCreationPage() {
           imageUrl: formData.coverImageUrl || undefined,
           sourceUrl: formData.oracleUrl || undefined,
           feeRate: parseFloat(formData.feeRate) || 0.05,
+          initialLiquidity: initialLiquidityValue, // 🔥 第一步：提交平台启动资金
         }),
       });
 
