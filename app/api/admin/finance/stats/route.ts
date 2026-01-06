@@ -139,14 +139,24 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. 计算累计总注入（LIQUIDITY_INJECTION 汇总，流动性账户的支出）
-    const totalInjected = await prisma.transactions.aggregate({
-      where: {
-        userId: liquidityAccount.id,
-        type: 'LIQUIDITY_INJECTION',
-        amount: { lt: 0 }, // 只统计负数（支出）
-      },
-      _sum: { amount: true },
-    });
+    let totalInjected: { _sum: { amount: number | null } } = { _sum: { amount: null } };
+    try {
+      totalInjected = await prisma.transactions.aggregate({
+        where: {
+          userId: liquidityAccount.id,
+          type: 'LIQUIDITY_INJECTION',
+          amount: { lt: 0 }, // 只统计负数（支出）
+        },
+        _sum: { amount: true },
+      });
+    } catch (error: any) {
+      if (error.message?.includes('LIQUIDITY_INJECTION') || error.message?.includes('enum')) {
+        console.warn('⚠️ [Finance Stats API] TransactionType枚举值不存在，请运行数据库迁移');
+        totalInjected = { _sum: { amount: null } };
+      } else {
+        throw error;
+      }
+    }
 
     // 5. 计算未结算市场的初始注入（RESOLVED 状态市场的 initialLiquidity 总和）
     const unresolvedMarkets = await prisma.markets.findMany({
@@ -242,19 +252,29 @@ export async function GET(request: NextRequest) {
 
     // 查询这些市场的回收记录
     const resolvedMarketIds = resolvedMarkets.map(m => m.id);
-    const resolvedRecoveries = await prisma.transactions.findMany({
-      where: {
-        userId: liquidityAccount.id,
-        type: 'LIQUIDITY_RECOVERY',
-        reason: {
-          contains: resolvedMarketIds.length > 0 ? resolvedMarketIds[0] : '', // 简化查询
+    let resolvedRecoveries: Array<{ amount: number; reason: string | null }> = [];
+    try {
+      resolvedRecoveries = await prisma.transactions.findMany({
+        where: {
+          userId: liquidityAccount.id,
+          type: 'LIQUIDITY_RECOVERY',
+          reason: {
+            contains: resolvedMarketIds.length > 0 ? resolvedMarketIds[0] : '', // 简化查询
+          },
         },
-      },
-      select: {
-        amount: true,
-        reason: true,
-      },
-    });
+        select: {
+          amount: true,
+          reason: true,
+        },
+      });
+    } catch (error: any) {
+      if (error.message?.includes('LIQUIDITY_RECOVERY') || error.message?.includes('enum')) {
+        console.warn('⚠️ [Finance Stats API] TransactionType枚举值不存在，请运行数据库迁移');
+        resolvedRecoveries = [];
+      } else {
+        throw error;
+      }
+    }
 
     // 计算累计盈亏：回收金额 - 初始注入
     let totalResolvedProfitLoss = 0;
