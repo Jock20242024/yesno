@@ -82,12 +82,12 @@ export async function GET(request: NextRequest) {
       todaySpreadProfit = await prisma.transactions.aggregate({
         where: {
           userId: ammAccount.id,
-          type: 'MARKET_PROFIT_LOSS',
+          type: 'MARKET_PROFIT_LOSS' as any, // 🔥 临时类型断言：数据库迁移后移除
           createdAt: { gte: today },
           amount: { gt: 0 }, // 只统计正数（盈利）
         },
         _sum: { amount: true },
-      });
+      }) as { _sum: { amount: number | null } };
     } catch (error: any) {
       // 如果枚举值不存在，记录错误但继续执行
       if (error.message?.includes('MARKET_PROFIT_LOSS') || error.message?.includes('enum')) {
@@ -104,11 +104,11 @@ export async function GET(request: NextRequest) {
       totalRecovered = await prisma.transactions.aggregate({
         where: {
           userId: liquidityAccount.id,
-          type: 'LIQUIDITY_RECOVERY',
+          type: 'LIQUIDITY_RECOVERY' as any, // 🔥 临时类型断言：数据库迁移后移除
           amount: { gt: 0 }, // 只统计正数（收入）
         },
         _sum: { amount: true },
-      });
+      }) as { _sum: { amount: number | null } };
     } catch (error: any) {
       if (error.message?.includes('LIQUIDITY_RECOVERY') || error.message?.includes('enum')) {
         console.warn('⚠️ [Finance Stats API] TransactionType枚举值不存在，请运行数据库迁移');
@@ -124,11 +124,11 @@ export async function GET(request: NextRequest) {
       badDebt = await prisma.transactions.aggregate({
         where: {
           userId: ammAccount.id,
-          type: 'MARKET_PROFIT_LOSS',
+          type: 'MARKET_PROFIT_LOSS' as any, // 🔥 临时类型断言：数据库迁移后移除
           amount: { lt: 0 }, // 只统计负数（亏损）
         },
         _sum: { amount: true },
-      });
+      }) as { _sum: { amount: number | null } };
     } catch (error: any) {
       if (error.message?.includes('MARKET_PROFIT_LOSS') || error.message?.includes('enum')) {
         console.warn('⚠️ [Finance Stats API] TransactionType枚举值不存在，请运行数据库迁移');
@@ -144,11 +144,11 @@ export async function GET(request: NextRequest) {
       totalInjected = await prisma.transactions.aggregate({
         where: {
           userId: liquidityAccount.id,
-          type: 'LIQUIDITY_INJECTION',
+          type: 'LIQUIDITY_INJECTION' as any, // 🔥 临时类型断言：数据库迁移后移除
           amount: { lt: 0 }, // 只统计负数（支出）
         },
         _sum: { amount: true },
-      });
+      }) as { _sum: { amount: number | null } };
     } catch (error: any) {
       if (error.message?.includes('LIQUIDITY_INJECTION') || error.message?.includes('enum')) {
         console.warn('⚠️ [Finance Stats API] TransactionType枚举值不存在，请运行数据库迁移');
@@ -162,17 +162,29 @@ export async function GET(request: NextRequest) {
     const unresolvedMarkets = await prisma.markets.findMany({
       where: {
         status: { in: ['OPEN', 'CLOSED'] }, // 未结算的市场
-        initialLiquidity: { not: null },
       },
       select: {
-        initialLiquidity: true,
+        id: true,
       },
     });
 
-    const unresolvedLiquidity = unresolvedMarkets.reduce(
-      (sum, market) => sum + Number(market.initialLiquidity || 0),
-      0
-    );
+    // 🔥 临时修复：使用 raw query 获取 initialLiquidity（如果字段存在）
+    let unresolvedLiquidity = 0;
+    try {
+      const marketsWithLiquidity = await prisma.$queryRaw<Array<{ initialLiquidity: number | null }>>`
+        SELECT "initialLiquidity" FROM "markets" 
+        WHERE "status" IN ('OPEN', 'CLOSED') 
+        AND "initialLiquidity" IS NOT NULL
+      `;
+      unresolvedLiquidity = marketsWithLiquidity.reduce(
+        (sum, market) => sum + Number(market.initialLiquidity || 0),
+        0
+      );
+    } catch (error: any) {
+      // 如果字段不存在，返回0
+      console.warn('⚠️ [Finance Stats API] initialLiquidity字段不存在，跳过未结算流动性计算');
+      unresolvedLiquidity = 0;
+    }
 
     // 6. 计算净值走势：(AMM余额 + 流动性账户余额 + 未结算市场初始注入) - 累计总注入
     const ammBalance = Number(ammAccount.balance);
@@ -200,7 +212,7 @@ export async function GET(request: NextRequest) {
       dailyProfits = await prisma.transactions.findMany({
         where: {
           userId: ammAccount.id,
-          type: 'MARKET_PROFIT_LOSS',
+          type: 'MARKET_PROFIT_LOSS' as any, // 🔥 临时类型断言：数据库迁移后移除
           createdAt: { gte: sevenDaysAgo },
           amount: { gt: 0 }, // 只统计盈利
         },
@@ -246,18 +258,25 @@ export async function GET(request: NextRequest) {
       },
       select: {
         id: true,
-        initialLiquidity: true,
       },
+    });
+    
+    // 🔥 临时修复：使用 raw query 获取 initialLiquidity
+    const resolvedMarketsWithLiquidity = await prisma.$queryRaw<Array<{ id: string; initialLiquidity: number | null }>>`
+      SELECT id, "initialLiquidity" FROM "markets" WHERE "status" = 'RESOLVED'
+    `.catch(() => {
+      // 如果字段不存在，返回空数组
+      return resolvedMarkets.map(m => ({ id: m.id, initialLiquidity: null }));
     });
 
     // 查询这些市场的回收记录
-    const resolvedMarketIds = resolvedMarkets.map(m => m.id);
+    const resolvedMarketIds = resolvedMarketsWithLiquidity.map(m => m.id);
     let resolvedRecoveries: Array<{ amount: number; reason: string | null }> = [];
     try {
       resolvedRecoveries = await prisma.transactions.findMany({
         where: {
           userId: liquidityAccount.id,
-          type: 'LIQUIDITY_RECOVERY',
+          type: 'LIQUIDITY_RECOVERY' as any, // 🔥 临时类型断言：数据库迁移后移除
           reason: {
             contains: resolvedMarketIds.length > 0 ? resolvedMarketIds[0] : '', // 简化查询
           },
@@ -278,7 +297,7 @@ export async function GET(request: NextRequest) {
 
     // 计算累计盈亏：回收金额 - 初始注入
     let totalResolvedProfitLoss = 0;
-    resolvedMarkets.forEach((market) => {
+    resolvedMarketsWithLiquidity.forEach((market) => {
       const initialLiquidity = Number(market.initialLiquidity || 0);
       const recovery = resolvedRecoveries
         .filter(tx => tx.reason?.includes(market.id))
