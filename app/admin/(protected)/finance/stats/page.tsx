@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { FileText, Download, X, Lightbulb } from "lucide-react";
+import { toPng, toJpeg } from "html-to-image";
 
 interface StatsData {
   todaySpreadProfit: number;
@@ -41,6 +43,10 @@ export default function MarketMakingStatsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isReconciling, setIsReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportData, setReportData] = useState<StatsData | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   // 获取统计数据
   useEffect(() => {
