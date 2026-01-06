@@ -31,23 +31,48 @@ export async function GET(request: NextRequest) {
     const sevenDaysAgo = new Date(today);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // 获取系统账户
-    const [ammAccount, liquidityAccount] = await Promise.all([
-      prisma.users.findFirst({
-        where: { email: 'system.amm@yesno.com' },
-        select: { id: true, balance: true },
-      }),
-      prisma.users.findFirst({
-        where: { email: 'system.liquidity@yesno.com' },
-        select: { id: true, balance: true },
-      }),
-    ]);
+    // 获取或创建系统账户
+    const { randomUUID } = await import('crypto');
+    
+    let ammAccount = await prisma.users.findFirst({
+      where: { email: 'system.amm@yesno.com' },
+      select: { id: true, balance: true },
+    });
 
-    if (!ammAccount || !liquidityAccount) {
-      return NextResponse.json(
-        { success: false, error: '系统账户不存在' },
-        { status: 404 }
-      );
+    let liquidityAccount = await prisma.users.findFirst({
+      where: { email: 'system.liquidity@yesno.com' },
+      select: { id: true, balance: true },
+    });
+
+    // 如果账户不存在，自动创建
+    if (!ammAccount) {
+      ammAccount = await prisma.users.create({
+        data: {
+          id: randomUUID(),
+          email: 'system.amm@yesno.com',
+          balance: 0,
+          isAdmin: false,
+          isBanned: false,
+          provider: 'system',
+          updatedAt: new Date(),
+        },
+        select: { id: true, balance: true },
+      });
+    }
+
+    if (!liquidityAccount) {
+      liquidityAccount = await prisma.users.create({
+        data: {
+          id: randomUUID(),
+          email: 'system.liquidity@yesno.com',
+          balance: 0,
+          isAdmin: false,
+          isBanned: false,
+          provider: 'system',
+          updatedAt: new Date(),
+        },
+        select: { id: true, balance: true },
+      });
     }
 
     // 1. 今日点差收入（MARKET_PROFIT_LOSS 24小时汇总）
