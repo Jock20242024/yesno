@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     // 1. 今日点差收入（MARKET_PROFIT_LOSS 24小时汇总）
     // 🔥 临时修复：如果枚举值不存在，返回0而不是报错
-    let todaySpreadProfit = { _sum: { amount: null } };
+    let todaySpreadProfit: { _sum: { amount: number | null } } = { _sum: { amount: null } };
     try {
       todaySpreadProfit = await prisma.transactions.aggregate({
         where: {
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. 累计回收本金（LIQUIDITY_RECOVERY 汇总，流动性账户的收入）
-    let totalRecovered = { _sum: { amount: null } };
+    let totalRecovered: { _sum: { amount: number | null } } = { _sum: { amount: null } };
     try {
       totalRecovered = await prisma.transactions.aggregate({
         where: {
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. 坏账统计（MARKET_PROFIT_LOSS 负数汇总，表示亏损）
-    let badDebt = { _sum: { amount: null } };
+    let badDebt: { _sum: { amount: number | null } } = { _sum: { amount: null } };
     try {
       badDebt = await prisma.transactions.aggregate({
         where: {
