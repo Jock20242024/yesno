@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { formatUSD } from "@/lib/utils";
 import CommentsTab from "./tabs/CommentsTab";
 import HoldersTab from "./tabs/HoldersTab";
@@ -49,7 +49,7 @@ export default function OrderBook({
     );
   }
 
-  // 🔥 获取真实订单簿数据
+  // 🔥 获取真实订单簿数据（初始加载）
   useEffect(() => {
     if (!marketId || activeTab !== "orderbook") return;
 
@@ -82,6 +82,71 @@ export default function OrderBook({
     };
 
     fetchOrderBook();
+  }, [marketId, activeTab]);
+
+  // 🔥 Pusher实时推送订阅（替换原生WebSocket）
+  useEffect(() => {
+    if (!marketId || activeTab !== "orderbook") return;
+
+    // 动态导入pusher-js（仅在客户端）
+    let pusher: any = null;
+    let channel: any = null;
+
+    const initPusher = async () => {
+      try {
+        const Pusher = (await import('pusher-js')).default;
+        
+        pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY || 'e733fc62c101670f5059', {
+          cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER || 'ap3',
+          forceTLS: true,
+        });
+
+        channel = pusher.subscribe(`market-${marketId}`);
+
+        // 订阅订单簿更新事件
+        channel.bind('orderbook-update', (data: any) => {
+          console.log('📡 [Pusher] 收到订单簿更新:', data);
+          
+          // 更新订单簿UI（只更新前10档）
+          setOrderBookData((prev) => {
+            if (!prev) {
+              return {
+                asks: data.asks || [],
+                bids: data.bids || [],
+                spread: data.spread || 0,
+                currentPrice: data.currentPrice || 0.5,
+              };
+            }
+            
+            // 合并更新（保留原有数据，更新前10档）
+            return {
+              ...prev,
+              asks: [...(data.asks || []), ...prev.asks.slice(10)],
+              bids: [...(data.bids || []), ...prev.bids.slice(10)],
+              spread: data.spread !== undefined ? data.spread : prev.spread,
+              currentPrice: data.currentPrice !== undefined ? data.currentPrice : prev.currentPrice,
+            };
+          });
+        });
+
+        console.log(`✅ [Pusher] 已订阅频道: market-${marketId}`);
+      } catch (error) {
+        console.error('❌ [Pusher] 初始化失败:', error);
+      }
+    };
+
+    initPusher();
+
+    // 清理函数：取消订阅
+    return () => {
+      if (channel) {
+        channel.unbind('orderbook-update');
+        channel.unsubscribe();
+      }
+      if (pusher) {
+        pusher.disconnect();
+      }
+    };
   }, [marketId, activeTab]);
 
   // 转换订单簿数据为表格格式

@@ -581,6 +581,44 @@ export async function POST(request: Request) {
         });
       }
       
+      // 🔥 推送订单簿更新事件（仅在MARKET订单成交后）
+      if (validOrderType === 'MARKET' && result.market) {
+        try {
+          // 获取最新的订单簿数据（包含AMM虚拟订单）
+          const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL 
+            ? `https://${process.env.VERCEL_URL || 'www.yesnoex.com'}`
+            : 'http://localhost:3000';
+          
+          const orderbookResponse = await fetch(`${baseUrl}/api/markets/${marketId}/orderbook`, {
+            cache: 'no-store',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (orderbookResponse.ok) {
+            const orderbookResult = await orderbookResponse.json();
+            if (orderbookResult.success && orderbookResult.data) {
+              // 推送前10档深度
+              const top10Asks = orderbookResult.data.asks.slice(0, 10);
+              const top10Bids = orderbookResult.data.bids.slice(0, 10);
+              
+              const { triggerOrderbookUpdate } = await import('@/lib/pusher');
+              await triggerOrderbookUpdate(marketId, {
+                asks: top10Asks,
+                bids: top10Bids,
+                spread: orderbookResult.data.spread,
+                currentPrice: orderbookResult.data.currentPrice,
+                ammLiquidity: orderbookResult.data.ammLiquidity,
+              });
+            }
+          }
+        } catch (pusherError) {
+          // Pusher推送失败不影响订单创建
+          console.error('❌ [Orders API] Pusher推送失败:', pusherError);
+        }
+      }
+      
       // 返回创建成功的订单信息和更新后的用户余额
       return NextResponse.json({
         success: true,
