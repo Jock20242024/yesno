@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { formatUSD } from "@/lib/utils";
 import CommentsTab from "./tabs/CommentsTab";
 import HoldersTab from "./tabs/HoldersTab";
