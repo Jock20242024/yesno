@@ -44,7 +44,6 @@ export default function SystemAccountsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<{
-    hasAnomaly: boolean;
     accounts: Array<{
       accountType: string;
       email: string;
@@ -58,6 +57,7 @@ export default function SystemAccountsPage() {
       totalTransactionSum: number;
       totalDifference: number;
       isOverallBalanced: boolean;
+      hasAnomaly: boolean; // 🔥 修复：添加 hasAnomaly 属性
     };
   } | null>(null);
 
