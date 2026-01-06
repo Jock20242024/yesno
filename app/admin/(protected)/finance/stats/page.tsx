@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface StatsData {
   todaySpreadProfit: number;
@@ -109,104 +110,32 @@ export default function MarketMakingStatsPage() {
     return `${(value * 100).toFixed(2)}%`;
   };
 
-  // 绘制简单折线图
-  const renderSimpleChart = (data: Array<{ date: string; profit: number }>) => {
-    if (!data || data.length === 0) return null;
+  // 格式化图表数据
+  const formatChartData = (data: Array<{ date: string; profit: number }>) => {
+    return data.map((d) => ({
+      date: new Date(d.date).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }),
+      profit: d.profit,
+      fullDate: d.date,
+    }));
+  };
 
-    const maxProfit = Math.max(...data.map(d => d.profit), 1);
-    const chartHeight = 200;
-    const chartWidth = 600;
-    const padding = 40;
-    const innerWidth = chartWidth - padding * 2;
-    const innerHeight = chartHeight - padding * 2;
-
-    const points = data.map((d, i) => {
-      const x = padding + (i / (data.length - 1 || 1)) * innerWidth;
-      const y = padding + innerHeight - (d.profit / maxProfit) * innerHeight;
-      return { x, y, profit: d.profit, date: d.date };
-    });
-
-    const pathData = points
-      .map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`))
-      .join(" ");
-
-    return (
-      <div className="w-full overflow-x-auto">
-        <svg width={chartWidth} height={chartHeight} className="border border-gray-700 rounded-lg">
-          {/* 网格线 */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const y = padding + innerHeight - ratio * innerHeight;
-            return (
-              <line
-                key={ratio}
-                x1={padding}
-                y1={y}
-                x2={chartWidth - padding}
-                y2={y}
-                stroke="#374151"
-                strokeWidth={1}
-                strokeDasharray="2,2"
-              />
-            );
-          })}
-
-          {/* 折线 */}
-          <path
-            d={pathData}
-            fill="none"
-            stroke="#3b82f6"
-            strokeWidth={2}
-          />
-
-          {/* 数据点 */}
-          {points.map((p, i) => (
-            <g key={i}>
-              <circle cx={p.x} cy={p.y} r={4} fill="#3b82f6" />
-              <title>
-                {new Date(p.date).toLocaleDateString("zh-CN")}: {formatCurrency(p.profit)}
-              </title>
-            </g>
-          ))}
-
-          {/* X轴标签 */}
-          {points.map((p, i) => {
-            if (i % 2 === 0) {
-              return (
-                <text
-                  key={i}
-                  x={p.x}
-                  y={chartHeight - 10}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fill="#9ca3af"
-                >
-                  {new Date(p.date).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}
-                </text>
-              );
-            }
-            return null;
-          })}
-
-          {/* Y轴标签 */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const y = padding + innerHeight - ratio * innerHeight;
-            const value = maxProfit * ratio;
-            return (
-              <text
-                key={ratio}
-                x={padding - 10}
-                y={y + 4}
-                textAnchor="end"
-                fontSize="10"
-                fill="#9ca3af"
-              >
-                {formatCurrency(value)}
-              </text>
-            );
-          })}
-        </svg>
-      </div>
-    );
+  // 自定义Tooltip
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-[#1f2937] border border-[#374151] rounded-lg p-3 shadow-lg">
+          <p className="text-white text-sm font-medium mb-1">
+            {payload[0].payload.fullDate
+              ? new Date(payload[0].payload.fullDate).toLocaleDateString("zh-CN")
+              : ""}
+          </p>
+          <p className="text-blue-400 text-sm">
+            收益: <span className="font-bold">{formatCurrency(payload[0].value)}</span>
+          </p>
+        </div>
+      );
+    }
+    return null;
   };
 
   if (isLoading) {
@@ -318,7 +247,34 @@ export default function MarketMakingStatsPage() {
               </span>
             </div>
           </div>
-          {renderSimpleChart(stats.sevenDaysTrend)}
+          <div className="w-full h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={formatChartData(stats.sevenDaysTrend)}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis
+                  dataKey="date"
+                  stroke="#9ca3af"
+                  fontSize={12}
+                  tickLine={{ stroke: "#9ca3af" }}
+                />
+                <YAxis
+                  stroke="#9ca3af"
+                  fontSize={12}
+                  tickLine={{ stroke: "#9ca3af" }}
+                  tickFormatter={(value) => formatCurrency(value)}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Line
+                  type="monotone"
+                  dataKey="profit"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  dot={{ fill: "#3b82f6", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* 对账状态 */}
