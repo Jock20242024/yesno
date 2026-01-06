@@ -158,16 +158,96 @@ export async function GET(
       currentPrice = Number(market.totalYes || 0) / totalAmount;
     }
 
+    // 🔥 8. 添加AMM虚拟订单（自动补全盘口）
+    // 如果真实挂单不足，自动显示由AMM生成的虚拟挂单
+    const { calculateAMMDepth } = await import('@/lib/engine/match');
+    const ammDepth = calculateAMMDepth(
+      Number(market.totalYes || 0),
+      Number(market.totalNo || 0),
+      [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+    );
+
+    // 将AMM深度转换为虚拟订单
+    const ammAsks: OrderBookEntry[] = [];
+    const ammBids: OrderBookEntry[] = [];
+
+    for (const depthPoint of ammDepth) {
+      if (depthPoint.depth > 0) {
+        const entry: OrderBookEntry = {
+          price: depthPoint.price,
+          quantity: depthPoint.depth,
+          total: depthPoint.depth * depthPoint.price,
+          orderCount: 0, // AMM虚拟订单，订单数为0
+        };
+
+        if (depthPoint.outcome === Outcome.YES) {
+          // YES订单：买单（Bids）
+          ammBids.push(entry);
+        } else {
+          // NO订单：卖单（Asks），需要转换为YES卖出价格
+          const yesSellPrice = 1 - depthPoint.price;
+          ammAsks.push({
+            ...entry,
+            price: yesSellPrice,
+          });
+        }
+      }
+    }
+
+    // 合并真实订单和AMM虚拟订单
+    // 对于每个价格档位，如果真实订单存在，优先显示真实订单；否则显示AMM虚拟订单
+    const mergedBids = new Map<number, OrderBookEntry>();
+    const mergedAsks = new Map<number, OrderBookEntry>();
+
+    // 先添加真实订单
+    for (const bid of bids) {
+      mergedBids.set(bid.price, bid);
+    }
+    for (const ask of asks) {
+      mergedAsks.set(ask.price, ask);
+    }
+
+    // 再添加AMM虚拟订单（如果该价格档位没有真实订单）
+    for (const ammBid of ammBids) {
+      if (!mergedBids.has(ammBid.price)) {
+        mergedBids.set(ammBid.price, { ...ammBid, orderCount: -1 }); // -1 表示AMM虚拟订单
+      }
+    }
+    for (const ammAsk of ammAsks) {
+      if (!mergedAsks.has(ammAsk.price)) {
+        mergedAsks.set(ammAsk.price, { ...ammAsk, orderCount: -1 }); // -1 表示AMM虚拟订单
+      }
+    }
+
+    // 排序并转换为数组
+    const finalBids = Array.from(mergedBids.values())
+      .sort((a, b) => b.price - a.price)
+      .slice(0, 20); // 限制显示数量
+
+    const finalAsks = Array.from(mergedAsks.values())
+      .sort((a, b) => a.price - b.price)
+      .slice(0, 20); // 限制显示数量
+
+    // 重新计算价差（基于合并后的订单）
+    const finalSpread = finalAsks.length > 0 && finalBids.length > 0 
+      ? Math.max(0, finalAsks[0].price - finalBids[0].price)
+      : spread;
+
     return NextResponse.json({
       success: true,
       data: {
-        asks, // 卖单列表（按价格从低到高）
-        bids, // 买单列表（按价格从高到低）
-        spread,
+        asks: finalAsks, // 卖单列表（包含AMM虚拟订单）
+        bids: finalBids, // 买单列表（包含AMM虚拟订单）
+        spread: finalSpread,
         currentPrice,
         marketId: market_id,
-        totalBids: bids.reduce((sum, bid) => sum + bid.quantity, 0),
-        totalAsks: asks.reduce((sum, ask) => sum + ask.quantity, 0),
+        totalBids: finalBids.reduce((sum, bid) => sum + bid.quantity, 0),
+        totalAsks: finalAsks.reduce((sum, ask) => sum + ask.quantity, 0),
+        ammLiquidity: { // 🔥 新增：AMM流动性数据
+          totalYes: Number(market.totalYes || 0),
+          totalNo: Number(market.totalNo || 0),
+          k: Number(market.totalYes || 0) * Number(market.totalNo || 0),
+        },
       },
     });
   } catch (error) {

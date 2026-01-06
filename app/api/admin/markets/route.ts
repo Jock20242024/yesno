@@ -1211,14 +1211,19 @@ export async function POST(request: Request) {
           },
         });
 
-        // 🔥 漏洞2修复：更新市场的totalYes和totalNo（使用精确计算的值）
-        await tx.markets.update({
-          where: { id: newMarket.id },
-          data: {
-            totalYes: calculatedYes,
-            totalNo: calculatedNo,
-          },
-        });
+            // 🔥 漏洞2修复：更新市场的totalYes和totalNo（使用精确计算的值）
+            // 🔥 计算AMM恒定乘积常数 K = totalYes * totalNo
+            const ammK = calculatedYes * calculatedNo;
+            
+            await tx.markets.update({
+              where: { id: newMarket.id },
+              data: {
+                totalYes: calculatedYes,
+                totalNo: calculatedNo,
+                ammK: ammK, // 🔥 记录AMM恒定乘积常数
+                initialLiquidity: liquidityAmount, // 🔥 记录初始注入金额（用于结算时本金回收校准）
+              },
+            });
 
         // 创建 Transaction 记录（LP账户：负数表示支出）
         const { randomUUID } = await import('crypto');

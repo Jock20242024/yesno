@@ -165,19 +165,25 @@ export default function OrderBook({
                   {orderBookData.asks
                     .slice()
                     .reverse() // 反转数组，使价格最高的卖单显示在最上面
-                    .map((order, index) => (
+                    .map((order: any, index: number) => (
                       <tr
                         key={`sell-${index}`}
-                        className="hover:bg-pm-card-hover transition-colors cursor-pointer"
+                        className={`hover:bg-pm-card-hover transition-colors cursor-pointer ${
+                          (order as any).orderCount === -1 ? 'opacity-60' : '' // 🔥 AMM虚拟订单半透明显示
+                        }`}
                         onClick={() => {
                           // 🔥 点击填充价格：触发回调，将价格传递给父组件
                           if (onPriceSelect) {
                             onPriceSelect(order.price);
                           }
                         }}
+                        title={(order as any).orderCount === -1 ? 'AMM虚拟订单（系统流动性）' : ''}
                       >
                         <td className="py-2.5 px-6 font-mono text-pm-red">
                           {formatUSD(order.price)}
+                          {(order as any).orderCount === -1 && (
+                            <span className="ml-2 text-xs text-pm-text-dim">(AMM)</span>
+                          )}
                         </td>
                         <td className="py-2.5 px-6 text-right text-white font-mono">
                           {order.quantity.toLocaleString()}
@@ -199,28 +205,34 @@ export default function OrderBook({
                     </td>
                   </tr>
                   {/* 买单（从高到低显示） */}
-                  {orderBookData.bids.map((order, index) => (
-                    <tr
-                      key={`buy-${index}`}
-                      className="hover:bg-pm-card-hover transition-colors cursor-pointer"
-                      onClick={() => {
-                        // 🔥 点击填充价格：触发回调，将价格传递给父组件
-                        if (onPriceSelect) {
-                          onPriceSelect(order.price);
-                        }
-                      }}
-                    >
-                      <td className="py-2.5 px-6 font-mono text-pm-green">
-                        {formatUSD(order.price)}
-                      </td>
-                      <td className="py-2.5 px-6 text-right text-white font-mono">
-                        {order.quantity.toLocaleString()}
-                      </td>
-                      <td className="py-2.5 px-6 text-right text-pm-text-dim font-mono">
-                        {formatUSD(order.total)}
-                      </td>
-                    </tr>
-                  ))}
+                  {orderBookData.bids.map((order: any, index: number) => (
+                      <tr
+                        key={`buy-${index}`}
+                        className={`hover:bg-pm-card-hover transition-colors cursor-pointer ${
+                          (order as any).orderCount === -1 ? 'opacity-60' : '' // 🔥 AMM虚拟订单半透明显示
+                        }`}
+                        onClick={() => {
+                          // 🔥 点击填充价格：触发回调，将价格传递给父组件
+                          if (onPriceSelect) {
+                            onPriceSelect(order.price);
+                          }
+                        }}
+                        title={(order as any).orderCount === -1 ? 'AMM虚拟订单（系统流动性）' : ''}
+                      >
+                        <td className="py-2.5 px-6 font-mono text-pm-green">
+                          {formatUSD(order.price)}
+                          {(order as any).orderCount === -1 && (
+                            <span className="ml-2 text-xs text-pm-text-dim">(AMM)</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-6 text-right text-white font-mono">
+                          {order.quantity.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-6 text-right text-pm-text-dim font-mono">
+                          {formatUSD(order.total)}
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
               </div>

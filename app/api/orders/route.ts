@@ -310,58 +310,35 @@ export async function POST(request: Request) {
         let executionPrice = 0; // 🔥 实际成交价格（用于 Position 的 avgPrice）
         
         if (validOrderType === 'MARKET') {
-          // MARKET 订单：先计算成交价格和份额，然后更新 Market
-          // 计算当前市场价格（基于更新前的 Market 状态）
+          // 🔥 混合撮合引擎：MARKET订单使用CPMM恒定乘积公式（Delta中性对冲）
+          // 1. 获取市场当前状态
           const currentTotalYes = market.totalYes || 0;
           const currentTotalNo = market.totalNo || 0;
-          const currentTotalVolume = currentTotalYes + currentTotalNo;
+          const currentAmmK = (market as any).ammK || (currentTotalYes * currentTotalNo);
           
-          // 🔥 修复：空池处理（参考 Polymarket 设计，允许在空池中交易）
-          // 如果市场总交易量为 0，使用默认价格 0.5（50%）
-          if (currentTotalVolume <= 0) {
-
-            executionPrice = 0.5; // 默认价格 50%
-          } else {
-            // 🔥 实际成交价格（基于更新前的 Market 状态，这是用户实际买入的价格）
-            executionPrice = outcomeSelection === Outcome.YES
-              ? (currentTotalYes / currentTotalVolume)
-              : (currentTotalNo / currentTotalVolume);
-          }
+          // 2. 使用CPMM计算价格和份额（Delta中性对冲）
+          const { calculateCPMMPrice } = await import('@/lib/engine/match');
+          const cpmmResult = calculateCPMMPrice(
+            currentTotalYes,
+            currentTotalNo,
+            outcomeSelection as Outcome,
+            netAmount
+          );
           
-          // 🔥 修复：防止价格为 0 或无效值
-          if (executionPrice <= 0 || !isFinite(executionPrice)) {
-            throw new Error(`Invalid market price calculated: ${executionPrice}`);
-          }
+          calculatedShares = cpmmResult.shares;
+          executionPrice = cpmmResult.executionPrice;
           
-          // 🔥 计算获得的份额（使用实际成交价格）
-          calculatedShares = netAmount / executionPrice;
-          
-          // 🔥 修复：验证份额计算是否有效
-          if (!isFinite(calculatedShares) || calculatedShares <= 0) {
-            throw new Error(`Invalid shares calculated: ${calculatedShares}`);
-          }
-          
-          // 然后更新 Market 的交易量和价格
-          // 🔥 修复：只更新 internalVolume（内部交易量），不覆盖 externalVolume
+          // 3. 更新Market（使用CPMM计算后的新值）
           const marketInternalVolumeCents = Math.round(((market as any).internalVolume || 0) * PRECISION_MULTIPLIER);
-          const marketTotalYesCents = Math.round(market.totalYes * PRECISION_MULTIPLIER);
-          const marketTotalNoCents = Math.round(market.totalNo * PRECISION_MULTIPLIER);
-          
-          // 内部交易量累加（只累加用户下注的金额）
           const newInternalVolumeCents = marketInternalVolumeCents + amountCents;
           const newInternalVolume = newInternalVolumeCents / PRECISION_MULTIPLIER;
           
-          const newTotalYesCents = outcomeSelection === Outcome.YES 
-            ? marketTotalYesCents + netAmountCents
-            : marketTotalYesCents;
-          const newTotalNoCents = outcomeSelection === Outcome.NO 
-            ? marketTotalNoCents + netAmountCents
-            : marketTotalNoCents;
+          // 🔥 使用CPMM计算后的新totalYes和totalNo
+          const newTotalYes = cpmmResult.newTotalYes;
+          const newTotalNo = cpmmResult.newTotalNo;
+          const newAmmK = cpmmResult.k;
           
-          const newTotalYes = newTotalYesCents / PRECISION_MULTIPLIER;
-          const newTotalNo = newTotalNoCents / PRECISION_MULTIPLIER;
-          
-          // 🔥 同时更新 totalVolume 保持向后兼容（使用 calculateDisplayVolume 计算）
+          // 🔥 同时更新 totalVolume 保持向后兼容
           const { calculateDisplayVolume } = await import('@/lib/marketUtils');
           const displayVolume = calculateDisplayVolume({
             source: (market as any).source || 'INTERNAL',
@@ -373,14 +350,40 @@ export async function POST(request: Request) {
           const prismaMarket = await tx.markets.update({
             where: { id: marketId },
             data: {
-              internalVolume: newInternalVolume, // 🔥 只更新内部交易量
-              totalVolume: displayVolume, // 更新展示交易量（向后兼容）
+              internalVolume: newInternalVolume,
+              totalVolume: displayVolume,
               totalYes: newTotalYes,
               totalNo: newTotalNo,
+              ammK: newAmmK, // 🔥 更新AMM恒定乘积常数
             },
           });
-          // 🔥 类型转换：Prisma 返回的 Market 类型与自定义 Market 类型不完全匹配
+          
           updatedMarket = prismaMarket as any;
+          
+          // 🔥 4. 记录AMM做市盈亏（Delta中性对冲产生的点差收益）
+          // 计算点差收益：用户支付的价格 - AMM成本价格
+          const currentTotalVolume = currentTotalYes + currentTotalNo;
+          const ammCostPrice = currentTotalVolume > 0
+            ? (outcomeSelection === Outcome.YES 
+                ? currentTotalYes / currentTotalVolume
+                : currentTotalNo / currentTotalVolume)
+            : 0.5;
+          
+          const spreadProfit = (executionPrice - ammCostPrice) * calculatedShares;
+          
+          if (Math.abs(spreadProfit) > 0.01) {
+            // 记录做市盈亏（正数=盈利，负数=亏损）
+            await tx.transactions.create({
+              data: {
+                id: randomUUID(),
+                userId: ammAccount.id,
+                amount: spreadProfit,
+                type: 'MARKET_PROFIT_LOSS',
+                reason: `AMM做市点差收益 - 市场: ${market.title} (${marketId}), 用户买入: ${outcomeSelection}, 数量: ${calculatedShares.toFixed(4)}, 点差: $${spreadProfit.toFixed(2)}`,
+                status: TransactionStatus.COMPLETED,
+              },
+            });
+          }
         } else {
           // LIMIT 订单：不更新 Market（因为还未成交）
           // Market 数据保持不变

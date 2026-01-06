@@ -343,8 +343,19 @@ export async function executeSettlement(
       }
 
       // 🔥 新增：流动性回收逻辑（将"死钱"变回"活水"）
-      // 1. 计算市场的初始流动性（totalYes + totalNo）
-      const initialLiquidity = Number(market.totalYes || 0) + Number(market.totalNo || 0);
+      // 1. 计算市场的初始流动性（优先使用initialLiquidity字段，否则使用totalYes + totalNo）
+      const marketWithLiquidity = await tx.markets.findUnique({
+        where: { id: marketId },
+        select: {
+          totalYes: true,
+          totalNo: true,
+          initialLiquidity: true, // 🔥 优先使用initialLiquidity字段
+        },
+      });
+      
+      const initialLiquidity = marketWithLiquidity?.initialLiquidity 
+        ? Number(marketWithLiquidity.initialLiquidity)
+        : (Number(market.totalYes || 0) + Number(market.totalNo || 0));
       
       // 2. 如果市场有初始流动性，执行回收
       if (initialLiquidity > 0) {

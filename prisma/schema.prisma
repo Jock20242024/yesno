@@ -185,6 +185,8 @@ model markets {
   totalYes          Float               @default(0.0)
   totalNo           Float               @default(0.0)
   feeRate           Float               @default(0.05)
+  ammK              Float? // 🔥 新增：AMM恒定乘积常数 K = totalYes * totalNo
+  initialLiquidity  Float? // 🔥 新增：初始注入流动性金额（用于结算时本金回收校准）
   category          String?
   categorySlug      String?
   createdAt         DateTime            @default(now())

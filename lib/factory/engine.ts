@@ -1535,11 +1535,16 @@ export async function createMarketFromTemplate(
             });
 
             // 🔥 漏洞2修复：更新市场的totalYes和totalNo（使用精确计算的值）
+            // 🔥 计算AMM恒定乘积常数 K = totalYes * totalNo
+            const ammK = calculatedYes * calculatedNo;
+            
             await tx.markets.update({
               where: { id: createdMarket.id },
               data: {
                 totalYes: calculatedYes,
                 totalNo: calculatedNo,
+                ammK: ammK, // 🔥 记录AMM恒定乘积常数
+                initialLiquidity: DEFAULT_FACTORY_LIQUIDITY, // 🔥 记录初始注入金额（用于结算时本金回收校准）
               },
             });
 
