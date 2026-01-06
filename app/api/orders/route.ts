@@ -581,42 +581,90 @@ export async function POST(request: Request) {
         });
       }
       
-      // 🔥 推送订单簿更新事件（仅在MARKET订单成交后）
+      // 🔥 推送订单簿更新事件（仅在MARKET订单成交后，异步执行不阻塞响应）
       if (validOrderType === 'MARKET' && result.market) {
-        try {
-          // 获取最新的订单簿数据（包含AMM虚拟订单）
-          const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL 
-            ? `https://${process.env.VERCEL_URL || 'www.yesnoex.com'}`
-            : 'http://localhost:3000';
-          
-          const orderbookResponse = await fetch(`${baseUrl}/api/markets/${marketId}/orderbook`, {
-            cache: 'no-store',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          if (orderbookResponse.ok) {
-            const orderbookResult = await orderbookResponse.json();
-            if (orderbookResult.success && orderbookResult.data) {
-              // 推送前10档深度
-              const top10Asks = orderbookResult.data.asks.slice(0, 10);
-              const top10Bids = orderbookResult.data.bids.slice(0, 10);
+        // 异步执行，不阻塞响应
+        (async () => {
+          try {
+            // 直接使用内部函数获取订单簿数据，避免HTTP请求
+            const { prisma } = await import('@/lib/prisma');
+            const market = await prisma.markets.findUnique({
+              where: { id: marketId },
+              select: {
+                totalYes: true,
+                totalNo: true,
+                ammK: true,
+              },
+            });
+
+            if (market) {
+              // 获取PENDING限价单
+              const pendingOrders = await prisma.orders.findMany({
+                where: {
+                  marketId: marketId,
+                  status: 'PENDING',
+                  orderType: 'LIMIT',
+                  limitPrice: { not: null },
+                },
+                select: {
+                  outcomeSelection: true,
+                  limitPrice: true,
+                  amount: true,
+                  filledAmount: true,
+                },
+              });
+
+              // 构建订单簿数据（简化版，只包含前10档）
+              const { calculateAMMDepth } = await import('@/lib/engine/match');
+              const ammDepth = calculateAMMDepth(
+                Number(market.totalYes || 0),
+                Number(market.totalNo || 0),
+                [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+              );
+
+              // 转换为订单簿格式
+              const asks: any[] = [];
+              const bids: any[] = [];
               
+              for (const depthPoint of ammDepth.slice(0, 10)) {
+                if (depthPoint.depth > 0) {
+                  const entry = {
+                    price: depthPoint.outcome === Outcome.YES ? depthPoint.price : (1 - depthPoint.price),
+                    quantity: depthPoint.depth,
+                    total: depthPoint.depth * depthPoint.price,
+                    orderCount: -1, // AMM虚拟订单
+                  };
+                  
+                  if (depthPoint.outcome === Outcome.YES) {
+                    bids.push(entry);
+                  } else {
+                    asks.push(entry);
+                  }
+                }
+              }
+
+              const totalLiquidity = Number(market.totalYes || 0) + Number(market.totalNo || 0);
+              const currentPrice = totalLiquidity > 0 ? Number(market.totalYes || 0) / totalLiquidity : 0.5;
+
+              // 推送订单簿更新
               const { triggerOrderbookUpdate } = await import('@/lib/pusher');
               await triggerOrderbookUpdate(marketId, {
-                asks: top10Asks,
-                bids: top10Bids,
-                spread: orderbookResult.data.spread,
-                currentPrice: orderbookResult.data.currentPrice,
-                ammLiquidity: orderbookResult.data.ammLiquidity,
+                asks: asks.slice(0, 10),
+                bids: bids.slice(0, 10),
+                spread: asks.length > 0 && bids.length > 0 ? Math.max(0, asks[0].price - bids[0].price) : 0,
+                currentPrice,
+                ammLiquidity: {
+                  totalYes: Number(market.totalYes || 0),
+                  totalNo: Number(market.totalNo || 0),
+                  k: Number(market.ammK || 0),
+                },
               });
             }
+          } catch (pusherError) {
+            // Pusher推送失败不影响订单创建
+            console.error('❌ [Orders API] Pusher推送失败:', pusherError);
           }
-        } catch (pusherError) {
-          // Pusher推送失败不影响订单创建
-          console.error('❌ [Orders API] Pusher推送失败:', pusherError);
-        }
+        })();
       }
       
       // 返回创建成功的订单信息和更新后的用户余额
