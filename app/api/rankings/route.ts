@@ -24,21 +24,37 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
 
-    // 获取所有用户（排除系统账户和管理员账户）
-    const allUsers = await DBService.getAllUsers();
+    // 🔥 直接从数据库查询，排除系统账户和管理员账户
     const systemAccountEmails = [
       'system.amm@yesno.com',
       'system.fee@yesno.com',
       'system.liquidity@yesno.com',
     ];
     
-    // 🔥 过滤：排除系统账户、管理员账户、provider为'system'的账户
-    const regularUsers = allUsers.filter(
-      (user) => 
-        !systemAccountEmails.includes(user.email) && // 排除系统账户邮箱
-        !(user as any).isAdmin && // 排除管理员账户
-        (user as any).provider !== 'system' // 排除系统创建的账户
-    );
+    // 直接查询普通用户（排除系统账户和管理员账户）
+    const dbUsers = await prisma.users.findMany({
+      where: {
+        email: {
+          notIn: systemAccountEmails,
+        },
+        isAdmin: false,
+        provider: {
+          not: 'system',
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    
+    // 转换为排行榜需要的格式
+    const regularUsers = dbUsers.map((dbUser) => ({
+      id: dbUser.id,
+      email: dbUser.email,
+      passwordHash: dbUser.passwordHash || '',
+      balance: dbUser.balance,
+      isAdmin: dbUser.isAdmin,
+      isBanned: dbUser.isBanned,
+      createdAt: dbUser.createdAt.toISOString(),
+    }));
 
     // 🔥 计算时间范围过滤条件
     const now = new Date();
