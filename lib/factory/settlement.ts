@@ -343,22 +343,26 @@ export async function executeSettlement(
       }
 
       // 🔥 新增：流动性回收逻辑（将"死钱"变回"活水"）
-      // 1. 计算市场的初始流动性（优先使用initialLiquidity字段，否则使用totalYes + totalNo）
+      // 1. 计算市场的实际占用AMM余额（包括点差收益）
+      // 🔥 修复：回收该市场实际占用的所有AMM余额（totalYes + totalNo），而不仅仅是initialLiquidity
+      // 这样才能确保点差收益也被回收，避免残留在AMM账户
       const marketWithLiquidity = await tx.markets.findUnique({
         where: { id: marketId },
         select: {
           totalYes: true,
           totalNo: true,
-          initialLiquidity: true, // 🔥 优先使用initialLiquidity字段
+          initialLiquidity: true, // 用于记录初始注入金额（用于盈亏计算）
         },
       });
       
+      // 实际占用的AMM余额 = 当前市场的totalYes + totalNo（包括点差收益）
+      const actualAmmBalance = Number(marketWithLiquidity?.totalYes || 0) + Number(marketWithLiquidity?.totalNo || 0);
       const initialLiquidity = marketWithLiquidity?.initialLiquidity 
         ? Number(marketWithLiquidity.initialLiquidity)
-        : (Number(market.totalYes || 0) + Number(market.totalNo || 0));
+        : actualAmmBalance; // 如果没有记录initialLiquidity，使用实际余额作为初始值
       
-      // 2. 如果市场有初始流动性，执行回收
-      if (initialLiquidity > 0) {
+      // 2. 如果市场有实际占用余额，执行回收
+      if (actualAmmBalance > 0) {
         // 获取系统账户
         const ammAccount = await tx.users.findFirst({
           where: { email: 'system.amm@yesno.com' },
@@ -370,12 +374,11 @@ export async function executeSettlement(
         
         if (ammAccount && liquidityAccount) {
           // 3. 计算回收金额
-          // 🔥 关键逻辑：回收金额 = AMM余额 - 已发放的用户奖金
-          // 由于用户奖金是从订单池（用户下注资金）中支付的，不占用AMM余额
-          // 所以：回收金额 = min(初始流动性, 当前AMM余额)
-          // 如果AMM余额不足（可能被其他市场占用），则回收全部可用余额
+          // 🔥 修复：回收金额 = 该市场实际占用的AMM余额（totalYes + totalNo）
+          // 这包括初始注入金额 + 点差收益，确保所有资金都被回收
           const currentAmmBalance = Number(ammAccount.balance);
-          const recoverableAmount = Math.min(initialLiquidity, currentAmmBalance);
+          // 回收金额不能超过AMM账户当前余额（防止其他市场占用导致余额不足）
+          const recoverableAmount = Math.min(actualAmmBalance, currentAmmBalance);
           
           if (recoverableAmount > 0) {
             // 4. 执行资金划转：从AMM账户扣减，转回流动性账户
@@ -404,7 +407,7 @@ export async function executeSettlement(
                 userId: ammAccount.id,
                 amount: -recoverableAmount,
                 type: 'LIQUIDITY_RECOVERY',
-                reason: `市场 ${marketId} 结算后流动性回收 - 初始注入: $${initialLiquidity.toFixed(2)}, 回收金额: $${recoverableAmount.toFixed(2)}`,
+                reason: `市场 ${marketId} 结算后流动性回收 - 实际占用: $${actualAmmBalance.toFixed(2)}, 初始注入: $${initialLiquidity.toFixed(2)}, 回收金额: $${recoverableAmount.toFixed(2)}`,
                 status: 'COMPLETED',
               },
             });
@@ -416,13 +419,14 @@ export async function executeSettlement(
                 userId: liquidityAccount.id,
                 amount: recoverableAmount,
                 type: 'LIQUIDITY_RECOVERY',
-                reason: `市场 ${marketId} 结算后流动性回收 - 初始注入: $${initialLiquidity.toFixed(2)}, 回收金额: $${recoverableAmount.toFixed(2)}`,
+                reason: `市场 ${marketId} 结算后流动性回收 - 实际占用: $${actualAmmBalance.toFixed(2)}, 初始注入: $${initialLiquidity.toFixed(2)}, 回收金额: $${recoverableAmount.toFixed(2)}`,
                 status: 'COMPLETED',
               },
             });
             
             // 7. 计算做市盈亏
             // 做市盈亏 = 回收金额 - 初始注入金额
+            // 如果回收金额 > 初始注入金额，说明盈利（点差收益）
             // 如果回收金额 < 初始注入金额，说明亏损（坏账）
             const marketProfitLoss = recoverableAmount - initialLiquidity;
             

@@ -1455,7 +1455,16 @@ export async function createMarketFromTemplate(
     // 🔥 漏洞4修复：工厂市场创建时也要真实注入流动性
     // 全局默认注入额度（可通过环境变量配置，默认 $500）
     const DEFAULT_FACTORY_LIQUIDITY = parseFloat(process.env.DEFAULT_FACTORY_LIQUIDITY || '500');
-    const shouldInjectLiquidity = DEFAULT_FACTORY_LIQUIDITY > 0;
+    // 🔥 修复3：极端价格保护 - 设置最小初始流动性（防止K值过小导致滑点过大）
+    const MIN_INITIAL_LIQUIDITY = parseFloat(process.env.MIN_INITIAL_LIQUIDITY || '100');
+    
+    // 如果默认流动性小于最小值，使用最小值（防止极端价格）
+    const actualLiquidity = Math.max(DEFAULT_FACTORY_LIQUIDITY, MIN_INITIAL_LIQUIDITY);
+    const shouldInjectLiquidity = actualLiquidity > 0;
+    
+    if (DEFAULT_FACTORY_LIQUIDITY < MIN_INITIAL_LIQUIDITY) {
+      console.warn(`⚠️ [FactoryEngine] 默认流动性 $${DEFAULT_FACTORY_LIQUIDITY} 小于最小值 $${MIN_INITIAL_LIQUIDITY}，已自动调整为 $${actualLiquidity}（防止极端价格）`);
+    }
 
     // 10. 使用事务确保市场创建和流动性注入的原子性
     const newMarket = await prisma.$transaction(async (tx) => {
@@ -1466,8 +1475,8 @@ export async function createMarketFromTemplate(
           id: randomUUID(),
           updatedAt: new Date(),
           // 🔥 漏洞4修复：如果启用流动性注入，初始化 totalYes 和 totalNo（默认 50/50）
-          totalYes: shouldInjectLiquidity ? DEFAULT_FACTORY_LIQUIDITY * 0.5 : 0,
-          totalNo: shouldInjectLiquidity ? DEFAULT_FACTORY_LIQUIDITY * 0.5 : 0,
+          totalYes: shouldInjectLiquidity ? actualLiquidity * 0.5 : 0,
+          totalNo: shouldInjectLiquidity ? actualLiquidity * 0.5 : 0,
         },
       });
 
@@ -1483,9 +1492,9 @@ export async function createMarketFromTemplate(
           console.warn(`⚠️ [FactoryEngine] 流动性账户不存在，跳过流动性注入。市场 ${createdMarket.id} 将没有初始流动性。`);
         } else {
           // 检查余额
-          if (liquidityAccount.balance < DEFAULT_FACTORY_LIQUIDITY) {
+          if (liquidityAccount.balance < actualLiquidity) {
             // 🔥 漏洞4修复：如果余额不足，记录错误但不阻止市场创建（允许空头创建）
-            console.error(`❌ [FactoryEngine] 流动性账户余额不足：当前余额 $${liquidityAccount.balance.toFixed(2)}，需要 $${DEFAULT_FACTORY_LIQUIDITY.toFixed(2)}。市场 ${createdMarket.id} 将没有初始流动性。`);
+            console.error(`❌ [FactoryEngine] 流动性账户余额不足：当前余额 $${liquidityAccount.balance.toFixed(2)}，需要 $${actualLiquidity.toFixed(2)}。市场 ${createdMarket.id} 将没有初始流动性。`);
           } else {
             // 🔥 漏洞1修复：获取或创建AMM账户
             let ammAccount = await tx.users.findFirst({
@@ -1510,16 +1519,16 @@ export async function createMarketFromTemplate(
             // 默认 50/50 分配
             const yesProb = 0.5;
             // 先计算Yes（保留2位小数）
-            const calculatedYes = Math.floor(DEFAULT_FACTORY_LIQUIDITY * yesProb * 100) / 100;
+            const calculatedYes = Math.floor(actualLiquidity * yesProb * 100) / 100;
             // No = 总额 - Yes（确保总额绝对等于注入金额）
-            const calculatedNo = DEFAULT_FACTORY_LIQUIDITY - calculatedYes;
+            const calculatedNo = actualLiquidity - calculatedYes;
 
             // 🔥 漏洞1修复：从流动性账户扣减余额
             const updatedLiquidityAccount = await tx.users.update({
               where: { id: liquidityAccount.id },
               data: {
                 balance: {
-                  decrement: DEFAULT_FACTORY_LIQUIDITY,
+                  decrement: actualLiquidity,
                 },
               },
             });
@@ -1529,7 +1538,7 @@ export async function createMarketFromTemplate(
               where: { id: ammAccount.id },
               data: {
                 balance: {
-                  increment: DEFAULT_FACTORY_LIQUIDITY,
+                  increment: actualLiquidity,
                 },
               },
             });
@@ -1544,7 +1553,7 @@ export async function createMarketFromTemplate(
                 totalYes: calculatedYes,
                 totalNo: calculatedNo,
                 ammK: ammK, // 🔥 记录AMM恒定乘积常数
-                initialLiquidity: DEFAULT_FACTORY_LIQUIDITY, // 🔥 记录初始注入金额（用于结算时本金回收校准）
+                initialLiquidity: actualLiquidity, // 🔥 记录初始注入金额（用于结算时本金回收校准）
               },
             });
 
@@ -1553,7 +1562,7 @@ export async function createMarketFromTemplate(
               data: {
                 id: randomUUID(),
                 userId: liquidityAccount.id,
-                amount: -DEFAULT_FACTORY_LIQUIDITY,
+                amount: -actualLiquidity,
                 type: 'ADMIN_ADJUSTMENT',
                 reason: `工厂市场创建初始流动性注入 - 市场ID: ${createdMarket.id}`,
                 status: 'COMPLETED',
@@ -1565,14 +1574,14 @@ export async function createMarketFromTemplate(
               data: {
                 id: randomUUID(),
                 userId: ammAccount.id,
-                amount: DEFAULT_FACTORY_LIQUIDITY,
+                amount: actualLiquidity,
                 type: 'ADMIN_ADJUSTMENT',
                 reason: `工厂市场创建初始流动性注入 - 市场ID: ${createdMarket.id}`,
                 status: 'COMPLETED',
               },
             });
 
-            console.log(`✅ [FactoryEngine] 流动性注入成功: 市场 ${createdMarket.id}, 金额 $${DEFAULT_FACTORY_LIQUIDITY}, LP账户余额: $${updatedLiquidityAccount.balance}, AMM账户余额: $${updatedAmmAccount.balance}`);
+            console.log(`✅ [FactoryEngine] 流动性注入成功: 市场 ${createdMarket.id}, 金额 $${actualLiquidity}, LP账户余额: $${updatedLiquidityAccount.balance}, AMM账户余额: $${updatedAmmAccount.balance}`);
           }
         }
       }

@@ -1077,6 +1077,20 @@ export async function POST(request: Request) {
 
     // 🔥 第一步：处理流动性注入逻辑
     const liquidityAmount = initialLiquidity ? parseFloat(String(initialLiquidity)) : 0;
+    // 🔥 修复3：极端价格保护 - 设置最小初始流动性（防止K值过小导致滑点过大）
+    const MIN_INITIAL_LIQUIDITY = parseFloat(process.env.MIN_INITIAL_LIQUIDITY || '100');
+    
+    // 如果指定了流动性注入，检查是否满足最小值要求
+    if (liquidityAmount > 0 && liquidityAmount < MIN_INITIAL_LIQUIDITY) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `初始流动性 $${liquidityAmount.toFixed(2)} 小于最小值 $${MIN_INITIAL_LIQUIDITY.toFixed(2)}。为防止极端价格和滑点过大，请至少注入 $${MIN_INITIAL_LIQUIDITY.toFixed(2)}`,
+        },
+        { status: 400 }
+      );
+    }
+    
     const shouldInjectLiquidity = liquidityAmount > 0;
 
     // 如果指定了流动性注入，检查流动性账户余额

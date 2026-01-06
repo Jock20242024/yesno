@@ -91,6 +91,7 @@ export default function OrderBook({
     // 动态导入pusher-js（仅在客户端）
     let pusher: any = null;
     let channel: any = null;
+    let lastSequenceId = 0; // 🔥 修复竞态条件：记录最后处理的序列号
 
     const initPusher = async () => {
       try {
@@ -105,7 +106,17 @@ export default function OrderBook({
 
         // 订阅订单簿更新事件
         channel.bind('orderbook-update', (data: any) => {
-          console.log('📡 [Pusher] 收到订单簿更新:', data);
+          // 🔥 修复竞态条件：检查序列号，丢弃旧消息
+          const sequenceId = data.sequenceId || 0;
+          const timestamp = data.timestamp || 0;
+          
+          if (sequenceId <= lastSequenceId) {
+            console.warn(`⚠️ [Pusher] 收到旧消息，已丢弃: sequenceId=${sequenceId}, lastSequenceId=${lastSequenceId}`);
+            return; // 丢弃旧消息，避免盘口价格"反复横跳"
+          }
+          
+          lastSequenceId = sequenceId;
+          console.log(`📡 [Pusher] 收到订单簿更新: sequenceId=${sequenceId}, timestamp=${timestamp}`);
           
           // 更新订单簿UI（只更新前10档）
           setOrderBookData((prev) => {

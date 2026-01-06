@@ -29,6 +29,9 @@ export function getPusherServer() {
   return pusherServer;
 }
 
+// 🔥 全局序列号生成器（防止竞态条件）
+let globalSequenceId = 0;
+
 /**
  * 推送订单簿更新事件
  * 
@@ -56,16 +59,23 @@ export async function triggerOrderbookUpdate(
       return;
     }
 
+    // 🔥 修复竞态条件：生成递增的序列号和精确的时间戳
+    globalSequenceId++;
+    const sequenceId = globalSequenceId;
+    const timestamp = Date.now(); // 使用毫秒级时间戳，更精确
+
     await pusher.trigger(
       `market-${marketId}`, // 频道名称
       'orderbook-update',   // 事件名称
       {
-        timestamp: new Date().toISOString(),
+        sequenceId, // 🔥 序列号：前端用于丢弃旧消息
+        timestamp,  // 🔥 时间戳：毫秒级，用于排序
+        timestampISO: new Date().toISOString(), // 保留ISO格式用于日志
         ...orderbookData,
       }
     );
 
-    console.log(`✅ [Pusher] 订单簿更新已推送: market-${marketId}`);
+    console.log(`✅ [Pusher] 订单簿更新已推送: market-${marketId}, sequenceId=${sequenceId}`);
   } catch (error) {
     console.error('❌ [Pusher] 推送订单簿更新失败:', error);
   }
