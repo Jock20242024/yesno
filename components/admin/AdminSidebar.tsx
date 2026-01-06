@@ -120,7 +120,7 @@ export default function AdminSidebar() {
             <Link
               href="/admin/finance/stats"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                pathname === "/admin/finance/stats"
+                pathname?.startsWith("/admin/finance/stats")
                   ? "bg-primary text-white shadow-sm hover:bg-blue-600"
                   : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
               }`}
