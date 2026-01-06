@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     }
 
     if (type === 'active') {
-      // 活跃持仓：Position status = OPEN
+      // 活跃持仓：Position status = OPEN，且市场未结算
       whereClause.status = 'OPEN';
     } else if (type === 'history') {
       // 已结束持仓：查询所有 Position（包括 OPEN 和 CLOSED）
