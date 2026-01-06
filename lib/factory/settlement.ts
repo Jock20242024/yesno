@@ -82,7 +82,7 @@ export async function executeSettlement(
     // 🔥 性能优化：删除高频日志（结算扫描每30秒执行一次）
     // console.log(`⚖️ [Settlement] 开始结算市场: ${marketId}`);
 
-    // 1. 获取市场信息
+    // 1. 获取市场信息（包含流动性数据）
     const market = await prisma.markets.findUnique({
       where: { id: marketId },
       select: {
@@ -93,6 +93,8 @@ export async function executeSettlement(
         isFactory: true,
         closingDate: true,
         resolvedOutcome: true,
+        totalYes: true, // 🔥 新增：用于计算初始流动性
+        totalNo: true,  // 🔥 新增：用于计算初始流动性
       },
     });
 
@@ -340,12 +342,117 @@ export async function executeSettlement(
         }
       }
 
-      // 更新市场状态
+      // 🔥 新增：流动性回收逻辑（将"死钱"变回"活水"）
+      // 1. 计算市场的初始流动性（totalYes + totalNo）
+      const initialLiquidity = Number(market.totalYes || 0) + Number(market.totalNo || 0);
+      
+      // 2. 如果市场有初始流动性，执行回收
+      if (initialLiquidity > 0) {
+        // 获取系统账户
+        const ammAccount = await tx.users.findFirst({
+          where: { email: 'system.amm@yesno.com' },
+        });
+        
+        const liquidityAccount = await tx.users.findFirst({
+          where: { email: 'system.liquidity@yesno.com' },
+        });
+        
+        if (ammAccount && liquidityAccount) {
+          // 3. 计算回收金额
+          // 🔥 关键逻辑：回收金额 = AMM余额 - 已发放的用户奖金
+          // 由于用户奖金是从订单池（用户下注资金）中支付的，不占用AMM余额
+          // 所以：回收金额 = min(初始流动性, 当前AMM余额)
+          // 如果AMM余额不足（可能被其他市场占用），则回收全部可用余额
+          const currentAmmBalance = Number(ammAccount.balance);
+          const recoverableAmount = Math.min(initialLiquidity, currentAmmBalance);
+          
+          if (recoverableAmount > 0) {
+            // 4. 执行资金划转：从AMM账户扣减，转回流动性账户
+            await tx.users.update({
+              where: { id: ammAccount.id },
+              data: {
+                balance: {
+                  decrement: recoverableAmount,
+                },
+              },
+            });
+            
+            await tx.users.update({
+              where: { id: liquidityAccount.id },
+              data: {
+                balance: {
+                  increment: recoverableAmount,
+                },
+              },
+            });
+            
+            // 5. 创建Transaction记录（AMM账户：支出）
+            await tx.transactions.create({
+              data: {
+                id: randomUUID(),
+                userId: ammAccount.id,
+                amount: -recoverableAmount,
+                type: 'LIQUIDITY_RECOVERY',
+                reason: `市场 ${marketId} 结算后流动性回收 - 初始注入: $${initialLiquidity.toFixed(2)}, 回收金额: $${recoverableAmount.toFixed(2)}`,
+                status: 'COMPLETED',
+              },
+            });
+            
+            // 6. 创建Transaction记录（流动性账户：收入）
+            await tx.transactions.create({
+              data: {
+                id: randomUUID(),
+                userId: liquidityAccount.id,
+                amount: recoverableAmount,
+                type: 'LIQUIDITY_RECOVERY',
+                reason: `市场 ${marketId} 结算后流动性回收 - 初始注入: $${initialLiquidity.toFixed(2)}, 回收金额: $${recoverableAmount.toFixed(2)}`,
+                status: 'COMPLETED',
+              },
+            });
+            
+            // 7. 计算做市盈亏
+            // 做市盈亏 = 回收金额 - 初始注入金额
+            // 如果回收金额 < 初始注入金额，说明亏损（坏账）
+            const marketProfitLoss = recoverableAmount - initialLiquidity;
+            
+            if (Math.abs(marketProfitLoss) > 0.01) {
+              // 8. 记录做市盈亏（只有盈亏超过0.01才记录，避免精度误差）
+              await tx.transactions.create({
+                data: {
+                  id: randomUUID(),
+                  userId: ammAccount.id,
+                  amount: marketProfitLoss,
+                  type: 'MARKET_PROFIT_LOSS',
+                  reason: `市场 ${marketId} 做市盈亏（${finalOutcome} 胜） - 初始注入: $${initialLiquidity.toFixed(2)}, 回收: $${recoverableAmount.toFixed(2)}, 盈亏: $${marketProfitLoss > 0 ? '+' : ''}${marketProfitLoss.toFixed(2)}`,
+                  status: 'COMPLETED',
+                },
+              });
+            }
+          } else if (initialLiquidity > 0 && currentAmmBalance <= 0) {
+            // 🔥 特殊情况：如果AMM余额不足（可能被其他市场占用或已亏损），记录坏账
+            const badDebt = initialLiquidity;
+            await tx.transactions.create({
+              data: {
+                id: randomUUID(),
+                userId: ammAccount.id,
+                amount: -badDebt,
+                type: 'MARKET_PROFIT_LOSS',
+                reason: `市场 ${marketId} 结算后坏账 - 初始注入: $${initialLiquidity.toFixed(2)}, AMM余额不足，无法回收`,
+                status: 'COMPLETED',
+              },
+            });
+          }
+        }
+      }
+      
+      // 更新市场状态并清零流动性数据
       await tx.markets.update({
         where: { id: marketId },
         data: {
           status: MarketStatus.RESOLVED,
           resolvedOutcome: finalOutcome,
+          totalYes: 0, // 🔥 清零流动性数据
+          totalNo: 0,  // 🔥 清零流动性数据
         },
       });
     });
