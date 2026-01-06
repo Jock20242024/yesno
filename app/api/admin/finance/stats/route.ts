@@ -76,35 +76,67 @@ export async function GET(request: NextRequest) {
     }
 
     // 1. 今日点差收入（MARKET_PROFIT_LOSS 24小时汇总）
-    const todaySpreadProfit = await prisma.transactions.aggregate({
-      where: {
-        userId: ammAccount.id,
-        type: 'MARKET_PROFIT_LOSS',
-        createdAt: { gte: today },
-        amount: { gt: 0 }, // 只统计正数（盈利）
-      },
-      _sum: { amount: true },
-    });
+    // 🔥 临时修复：如果枚举值不存在，返回0而不是报错
+    let todaySpreadProfit = { _sum: { amount: null } };
+    try {
+      todaySpreadProfit = await prisma.transactions.aggregate({
+        where: {
+          userId: ammAccount.id,
+          type: 'MARKET_PROFIT_LOSS',
+          createdAt: { gte: today },
+          amount: { gt: 0 }, // 只统计正数（盈利）
+        },
+        _sum: { amount: true },
+      });
+    } catch (error: any) {
+      // 如果枚举值不存在，记录错误但继续执行
+      if (error.message?.includes('MARKET_PROFIT_LOSS') || error.message?.includes('enum')) {
+        console.warn('⚠️ [Finance Stats API] TransactionType枚举值不存在，请运行数据库迁移');
+        todaySpreadProfit = { _sum: { amount: null } };
+      } else {
+        throw error; // 其他错误继续抛出
+      }
+    }
 
     // 2. 累计回收本金（LIQUIDITY_RECOVERY 汇总，流动性账户的收入）
-    const totalRecovered = await prisma.transactions.aggregate({
-      where: {
-        userId: liquidityAccount.id,
-        type: 'LIQUIDITY_RECOVERY',
-        amount: { gt: 0 }, // 只统计正数（收入）
-      },
-      _sum: { amount: true },
-    });
+    let totalRecovered = { _sum: { amount: null } };
+    try {
+      totalRecovered = await prisma.transactions.aggregate({
+        where: {
+          userId: liquidityAccount.id,
+          type: 'LIQUIDITY_RECOVERY',
+          amount: { gt: 0 }, // 只统计正数（收入）
+        },
+        _sum: { amount: true },
+      });
+    } catch (error: any) {
+      if (error.message?.includes('LIQUIDITY_RECOVERY') || error.message?.includes('enum')) {
+        console.warn('⚠️ [Finance Stats API] TransactionType枚举值不存在，请运行数据库迁移');
+        totalRecovered = { _sum: { amount: null } };
+      } else {
+        throw error;
+      }
+    }
 
     // 3. 坏账统计（MARKET_PROFIT_LOSS 负数汇总，表示亏损）
-    const badDebt = await prisma.transactions.aggregate({
-      where: {
-        userId: ammAccount.id,
-        type: 'MARKET_PROFIT_LOSS',
-        amount: { lt: 0 }, // 只统计负数（亏损）
-      },
-      _sum: { amount: true },
-    });
+    let badDebt = { _sum: { amount: null } };
+    try {
+      badDebt = await prisma.transactions.aggregate({
+        where: {
+          userId: ammAccount.id,
+          type: 'MARKET_PROFIT_LOSS',
+          amount: { lt: 0 }, // 只统计负数（亏损）
+        },
+        _sum: { amount: true },
+      });
+    } catch (error: any) {
+      if (error.message?.includes('MARKET_PROFIT_LOSS') || error.message?.includes('enum')) {
+        console.warn('⚠️ [Finance Stats API] TransactionType枚举值不存在，请运行数据库迁移');
+        badDebt = { _sum: { amount: null } };
+      } else {
+        throw error;
+      }
+    }
 
     // 4. 计算累计总注入（LIQUIDITY_INJECTION 汇总，流动性账户的支出）
     const totalInjected = await prisma.transactions.aggregate({
@@ -153,19 +185,29 @@ export async function GET(request: NextRequest) {
     const capitalEfficiency = ammBalance > 0 ? (todayAmmVolume / ammBalance) : 0;
 
     // 8. 近7天收益走势（每日点差收入）
-    const dailyProfits = await prisma.transactions.findMany({
-      where: {
-        userId: ammAccount.id,
-        type: 'MARKET_PROFIT_LOSS',
-        createdAt: { gte: sevenDaysAgo },
-        amount: { gt: 0 }, // 只统计盈利
-      },
-      select: {
-        amount: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    let dailyProfits: Array<{ amount: number; createdAt: Date }> = [];
+    try {
+      dailyProfits = await prisma.transactions.findMany({
+        where: {
+          userId: ammAccount.id,
+          type: 'MARKET_PROFIT_LOSS',
+          createdAt: { gte: sevenDaysAgo },
+          amount: { gt: 0 }, // 只统计盈利
+        },
+        select: {
+          amount: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+    } catch (error: any) {
+      if (error.message?.includes('MARKET_PROFIT_LOSS') || error.message?.includes('enum')) {
+        console.warn('⚠️ [Finance Stats API] TransactionType枚举值不存在，请运行数据库迁移');
+        dailyProfits = [];
+      } else {
+        throw error;
+      }
+    }
 
     // 按日期分组汇总
     const dailyProfitMap = new Map<string, number>();
