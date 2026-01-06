@@ -42,6 +42,24 @@ export default function SystemAccountsPage() {
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState<{
+    hasAnomaly: boolean;
+    accounts: Array<{
+      accountType: string;
+      email: string;
+      currentBalance: number;
+      transactionSum: number;
+      difference: number;
+      isBalanced: boolean;
+    }>;
+    summary: {
+      totalCurrentBalance: number;
+      totalTransactionSum: number;
+      totalDifference: number;
+      isOverallBalanced: boolean;
+    };
+  } | null>(null);
 
   // 获取系统账户数据
   useEffect(() => {
@@ -176,6 +194,47 @@ export default function SystemAccountsPage() {
     }).format(amount);
   };
 
+  // 🔥 一键对账函数
+  const handleReconcile = async () => {
+    setIsReconciling(true);
+    setReconcileResult(null);
+    
+    try {
+      const response = await fetch("/api/admin/system-accounts/reconcile", {
+        credentials: "include",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "对账失败");
+      }
+
+      setReconcileResult(result.data);
+
+      // 🔥 如果存在异常，弹出红色警告
+      if (result.data.summary.hasAnomaly) {
+        toast.error("账目存在异常，请核查流水！", {
+          duration: 10000, // 显示10秒
+          style: {
+            backgroundColor: '#ef4444',
+            color: '#ffffff',
+            border: '2px solid #dc2626',
+          },
+        });
+      } else {
+        toast.success("对账通过，账目平衡", {
+          duration: 3000,
+        });
+      }
+    } catch (error) {
+      console.error("对账失败:", error);
+      toast.error(error instanceof Error ? error.message : "对账失败");
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
   // 打开操作 Modal
   const openModal = (
     accountType: "fee" | "amm" | "liquidity",
@@ -278,14 +337,98 @@ export default function SystemAccountsPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          系统账户资金监控
-        </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          管理手续费账户、AMM 资金池和流动性账户
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            系统账户资金监控
+          </h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            管理手续费账户、AMM 资金池和流动性账户
+          </p>
+        </div>
+        {/* 🔥 一键对账按钮 */}
+        <button
+          onClick={handleReconcile}
+          disabled={isReconciling}
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
+            {isReconciling ? "hourglass_empty" : "balance"}
+          </span>
+          {isReconciling ? "对账中..." : "一键对账"}
+        </button>
       </div>
+
+      {/* 🔥 对账结果警告 */}
+      {reconcileResult && reconcileResult.summary.hasAnomaly && (
+        <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-500 dark:border-red-600 rounded-xl p-6">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-red-600 dark:text-red-400" style={{ fontSize: 32 }}>
+              warning
+            </span>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-red-900 dark:text-red-300 mb-2">
+                账目存在异常，请核查流水！
+              </h3>
+              <div className="space-y-2 text-sm text-red-800 dark:text-red-200">
+                <p>
+                  <strong>总体差异：</strong>
+                  {formatCurrency(reconcileResult.summary.totalDifference)}
+                </p>
+                <p>
+                  <strong>当前余额总和：</strong>
+                  {formatCurrency(reconcileResult.summary.totalCurrentBalance)}
+                </p>
+                <p>
+                  <strong>交易流水总和：</strong>
+                  {formatCurrency(reconcileResult.summary.totalTransactionSum)}
+                </p>
+                <div className="mt-4">
+                  <p className="font-semibold mb-2">账户明细：</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    {reconcileResult.accounts.map((account) => {
+                      if (!account.isBalanced) {
+                        return (
+                          <li key={account.accountType}>
+                            <strong>{account.accountType}</strong> ({account.email}): 
+                            余额 {formatCurrency(account.currentBalance)} - 
+                            流水 {formatCurrency(account.transactionSum)} = 
+                            <span className="font-bold text-red-600 dark:text-red-400">
+                              {" "}差异 {formatCurrency(account.difference)}
+                            </span>
+                          </li>
+                        );
+                      }
+                      return null;
+                    })}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 对账结果正常提示 */}
+      {reconcileResult && !reconcileResult.summary.hasAnomaly && (
+        <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-500 dark:border-green-600 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-green-600 dark:text-green-400" style={{ fontSize: 24 }}>
+              check_circle
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-green-900 dark:text-green-300">
+                对账通过，账目平衡
+              </p>
+              <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                余额总和：{formatCurrency(reconcileResult.summary.totalCurrentBalance)} | 
+                流水总和：{formatCurrency(reconcileResult.summary.totalTransactionSum)} | 
+                差异：{formatCurrency(reconcileResult.summary.totalDifference)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 账户卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
