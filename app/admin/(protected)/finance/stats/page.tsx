@@ -54,13 +54,23 @@ export default function MarketMakingStatsPage() {
         const result = await response.json();
 
         if (!response.ok || !result.success) {
-          throw new Error(result.error || "获取统计数据失败");
+          const errorMessage = result.error || "获取统计数据失败";
+          console.error("获取统计数据失败:", errorMessage);
+          toast.error(errorMessage);
+          // 如果是因为系统账户不存在，显示更友好的提示
+          if (errorMessage.includes("系统账户不存在")) {
+            toast.info("系统正在自动创建账户，请稍后刷新页面");
+          }
+          throw new Error(errorMessage);
         }
 
         setStats(result.data);
       } catch (error: any) {
         console.error("获取统计数据失败:", error);
-        toast.error(error.message || "获取统计数据失败");
+        // 不重复显示toast，因为上面已经显示过了
+        if (!error.message?.includes("获取统计数据失败")) {
+          toast.error(error.message || "获取统计数据失败");
+        }
       } finally {
         setIsLoading(false);
       }
