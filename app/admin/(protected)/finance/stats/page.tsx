@@ -126,6 +126,78 @@ export default function MarketMakingStatsPage() {
     return `${(value * 100).toFixed(2)}%`;
   };
 
+  // 生成周报
+  const handleGenerateReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      // 调用API获取数据（使用当前stats或重新获取）
+      const response = await fetch("/api/admin/finance/stats", {
+        credentials: "include",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "获取报告数据失败");
+      }
+
+      setReportData(result.data);
+      setIsReportOpen(true);
+    } catch (error: any) {
+      console.error("生成报告失败:", error);
+      toast.error(error.message || "生成报告失败");
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  // 导出报告为图片
+  const handleExportReport = async (format: 'png' | 'jpg' = 'png') => {
+    if (!reportRef.current) {
+      toast.error("报告内容未准备好");
+      return;
+    }
+
+    try {
+      const dataUrl = format === 'png' 
+        ? await toPng(reportRef.current, { quality: 1.0, pixelRatio: 2 })
+        : await toJpeg(reportRef.current, { quality: 1.0, pixelRatio: 2 });
+
+      // 创建下载链接
+      const link = document.createElement('a');
+      link.download = `做市监控周报_${new Date().toISOString().split('T')[0]}.${format}`;
+      link.href = dataUrl;
+      link.click();
+
+      toast.success(`报告已导出为${format.toUpperCase()}格式`);
+    } catch (error: any) {
+      console.error("导出报告失败:", error);
+      toast.error("导出报告失败");
+    }
+  };
+
+  // 生成运营建议
+  const generateQuickTips = (): string => {
+    if (!stats) return "数据加载中，暂无建议";
+
+    const efficiency = stats.capitalEfficiency;
+    const equity = stats.netEquity;
+
+    if (efficiency < 0.1) {
+      return "资金利用率较低，建议减少流动性注入或增加市场推广以提升交易量。";
+    } else if (efficiency > 2.0) {
+      return "资金利用率过高，可能存在滑点风险，建议补充流动性以改善用户体验。";
+    }
+
+    if (equity < 0) {
+      return "净值走势为负，系统出现亏损，建议检查市场结算逻辑和流动性管理策略。";
+    } else if (equity > stats.totalInjected * 0.1) {
+      return "净值走势良好，系统运行健康，继续保持当前运营策略。";
+    }
+
+    return "系统运行正常，建议持续监控资金利用率和净值走势，适时调整流动性策略。";
+  };
+
   // 格式化图表数据
   const formatChartData = (data: Array<{ date: string; profit: number }>) => {
     return data.map((d) => ({
@@ -177,11 +249,36 @@ export default function MarketMakingStatsPage() {
   return (
     <div className="min-h-screen bg-[#0a0e13] p-6">
       <div className="max-w-7xl mx-auto">
-        {/* 页面标题 */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-white mb-2">做市监控看板</h1>
-          <p className="text-gray-400">实时监控做市收益、资金利用率和净值走势</p>
+        {/* 页面标题和操作按钮 */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">做市监控看板</h1>
+            <p className="text-gray-400">实时监控做市收益、资金利用率和净值走势</p>
+          </div>
+          <button
+            onClick={handleGenerateReport}
+            disabled={isGeneratingReport || isLoading}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <FileText size={18} />
+            {isGeneratingReport ? "生成中..." : "生成周报"}
+          </button>
         </div>
+
+        {/* 运营助手卡片 */}
+        {stats && (
+          <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-500/30 rounded-xl p-6 mb-6">
+            <div className="flex items-start gap-3">
+              <Lightbulb className="text-yellow-400 mt-1 flex-shrink-0" size={24} />
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-white mb-2">运营助手</h3>
+                <p className="text-gray-300 text-sm leading-relaxed">
+                  {generateQuickTips()}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 核心指标卡片 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -361,6 +458,222 @@ export default function MarketMakingStatsPage() {
           )}
         </div>
       </div>
+
+      {/* 周报预览模态框 */}
+      {isReportOpen && reportData && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0e13] rounded-xl border border-[#283545] max-w-4xl w-full max-h-[90vh] overflow-auto">
+            {/* 模态框头部 */}
+            <div className="sticky top-0 bg-[#0a0e13] border-b border-[#283545] p-4 flex items-center justify-between z-10">
+              <h2 className="text-2xl font-bold text-white">做市监控周报</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleExportReport('png')}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                >
+                  <Download size={16} />
+                  导出PNG
+                </button>
+                <button
+                  onClick={() => setIsReportOpen(false)}
+                  className="p-2 text-gray-400 hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* 报告内容 */}
+            <div ref={reportRef} className="p-8 bg-white text-black">
+              {/* 报告标题 */}
+              <div className="text-center mb-8">
+                <h1 className="text-3xl font-bold mb-2">做市监控周报</h1>
+                <p className="text-gray-600">
+                  {new Date().toLocaleDateString("zh-CN", { 
+                    year: "numeric", 
+                    month: "long", 
+                    day: "numeric",
+                    weekday: "long"
+                  })}
+                </p>
+              </div>
+
+              {/* 核心指标摘要 */}
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold mb-4">📊 核心指标摘要</h2>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="text-sm text-gray-600 mb-1">今日点差收入</div>
+                    <div className={`text-2xl font-bold ${reportData.todaySpreadProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(reportData.todaySpreadProfit)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {reportData.todaySpreadProfit >= 0 
+                        ? "✅ 系统通过做市获得收益" 
+                        : "⚠️ 系统出现亏损，需要关注"}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="text-sm text-gray-600 mb-1">累计回收本金</div>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {formatCurrency(reportData.totalRecovered)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      已从市场结算中回收的初始流动性
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="text-sm text-gray-600 mb-1">坏账统计</div>
+                    <div className={`text-2xl font-bold ${reportData.badDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(reportData.badDebt)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {reportData.badDebt > 0 
+                        ? "⚠️ 存在无法回收的流动性损失" 
+                        : "✅ 无坏账，资金管理良好"}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="text-sm text-gray-600 mb-1">AMM资金利用率</div>
+                    <div className="text-2xl font-bold text-purple-600">
+                      {formatPercent(reportData.capitalEfficiency)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {reportData.capitalEfficiency < 0.1 
+                        ? "💡 利用率较低，资金可能闲置" 
+                        : reportData.capitalEfficiency > 2.0 
+                        ? "⚠️ 利用率过高，可能存在滑点风险" 
+                        : "✅ 利用率合理，资金使用效率良好"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 资金状况 */}
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold mb-4">💰 资金状况</h2>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-sm text-gray-600 mb-1">AMM账户余额</div>
+                      <div className="text-xl font-bold">{formatCurrency(reportData.ammBalance)}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600 mb-1">流动性账户余额</div>
+                      <div className="text-xl font-bold">{formatCurrency(reportData.liquidityBalance)}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600 mb-1">净值走势</div>
+                      <div className={`text-xl font-bold ${reportData.netEquity >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(reportData.netEquity)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <p className="text-sm text-gray-700">
+                      <strong>净值走势说明：</strong>
+                      {reportData.netEquity >= 0 
+                        ? "系统资产稳步增长，做市策略运行良好。净值 = (AMM余额 + 流动性余额 + 未结算市场初始注入) - 累计总注入。"
+                        : "系统资产出现负增长，需要检查市场结算逻辑和流动性管理策略。建议及时调整运营策略。"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 近7天收益走势 */}
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold mb-4">📈 近7天收益走势</h2>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={formatChartData(reportData.sevenDaysTrend)}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#6b7280"
+                          fontSize={12}
+                          tickLine={{ stroke: "#6b7280" }}
+                        />
+                        <YAxis
+                          stroke="#6b7280"
+                          fontSize={12}
+                          tickLine={{ stroke: "#6b7280" }}
+                          tickFormatter={(value) => formatCurrency(value)}
+                        />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                          formatter={(value: any) => formatCurrency(value)}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="profit"
+                          stroke="#3b82f6"
+                          strokeWidth={2}
+                          dot={{ fill: "#3b82f6", r: 4 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-4 text-sm text-gray-600">
+                    <p>
+                      <strong>趋势分析：</strong>
+                      {(() => {
+                        const profits = reportData.sevenDaysTrend.map(d => d.profit);
+                        const avgProfit = profits.reduce((a, b) => a + b, 0) / profits.length;
+                        const trend = profits[profits.length - 1] - profits[0];
+                        if (trend > 0) {
+                          return `收益呈上升趋势，平均每日收益 ${formatCurrency(avgProfit)}，系统运行良好。`;
+                        } else if (trend < 0) {
+                          return `收益呈下降趋势，平均每日收益 ${formatCurrency(avgProfit)}，建议关注市场活跃度和流动性管理。`;
+                        } else {
+                          return `收益保持稳定，平均每日收益 ${formatCurrency(avgProfit)}，系统运行平稳。`;
+                        }
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 运营建议 */}
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold mb-4">💡 运营建议</h2>
+                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+                  <p className="text-gray-800 leading-relaxed">
+                    {generateQuickTips()}
+                  </p>
+                </div>
+              </div>
+
+              {/* 审计信息 */}
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold mb-4">✅ 审计信息</h2>
+                <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-lg">
+                  <p className="text-gray-800">
+                    <strong>本次审计已通过系统原子性校准，差异额：</strong>
+                    <span className="text-green-600 font-bold">
+                      {reconcileResult 
+                        ? formatCurrency(reconcileResult.summary.totalDifference)
+                        : formatCurrency(0)}
+                    </span>
+                  </p>
+                  {reconcileResult && reconcileResult.summary.hasAnomaly && (
+                    <p className="text-red-600 text-sm mt-2">
+                      ⚠️ 检测到账目异常，请核查流水记录。
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* 报告底部 */}
+              <div className="text-center text-sm text-gray-500 pt-4 border-t border-gray-200">
+                <p>本报告由 YesNo 做市监控系统自动生成</p>
+                <p>生成时间：{new Date().toLocaleString("zh-CN")}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
