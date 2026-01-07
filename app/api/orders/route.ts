@@ -437,6 +437,7 @@ export async function POST(request: Request) {
           status: safeOrderStatus, // 🔥 订单状态：MARKET='FILLED', LIMIT='PENDING'
           orderType: validOrderType, // 🔥 订单类型：'MARKET' 或 'LIMIT'
           filledAmount: safeFilledAmount, // 🔥 已成交数量：MARKET=calculatedShares, LIMIT=0
+          updatedAt: new Date(), // 🔥 修复：添加必需的 updatedAt 字段
         };
 
         // 🔥 核心修复：只有 LIMIT 订单才设置 limitPrice，MARKET 订单必须为 null

@@ -631,15 +631,24 @@ export async function GET(
       status: serializedMarket.status,
     };
     
+    // 🔥 修复：description 字段允许为空字符串，不作为缺失字段
     const missingCriticalFields = Object.entries(criticalFields)
-      .filter(([key, value]) => value === undefined || value === null || value === '')
+      .filter(([key, value]) => {
+        // description 字段允许为空字符串，不作为缺失字段
+        if (key === 'description') {
+          return value === undefined || value === null;
+        }
+        return value === undefined || value === null || value === '';
+      })
       .map(([key]) => key);
     
     if (missingCriticalFields.length > 0) {
       console.error('❌ [Market Detail API] 强制校验失败：缺少关键字段:', missingCriticalFields);
       // 为缺失的字段设置默认值
       if (!serializedMarket.title) serializedMarket.title = '未知市场';
-      if (!serializedMarket.description) serializedMarket.description = '';
+      if (serializedMarket.description === undefined || serializedMarket.description === null) {
+        serializedMarket.description = '';
+      }
       if (!serializedMarket.endTime) serializedMarket.endTime = new Date().toISOString();
       if (serializedMarket.volume === undefined) serializedMarket.volume = 0;
       if (serializedMarket.yesPercent === undefined) serializedMarket.yesPercent = 50;
