@@ -207,6 +207,19 @@ export default function MarketDetailPage() {
     // 过滤出当前市场的持仓（API 已经过滤了，但为了安全再检查一次）
     const marketPositions = positionsData.filter((pos: any) => pos.marketId === id);
     
+    // 🔥 修复：确保 costBasis 字段被正确传递
+    if (marketPositions.length > 0) {
+      const pos = marketPositions[0];
+      return {
+        shares: pos.shares,
+        avgPrice: pos.avgPrice,
+        currentPrice: pos.currentPrice,
+        outcome: pos.outcome === 'YES' ? 'yes' : 'no',
+        costBasis: pos.costBasis, // 🔥 新增：传递实际投入金额
+        actualInvestedAmount: pos.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
+      };
+    }
+    
     if (marketPositions.length === 0) {
 
       return null;
