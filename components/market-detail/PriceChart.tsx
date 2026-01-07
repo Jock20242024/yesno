@@ -256,6 +256,45 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
       isPositive: changePercent >= 0,
     };
   }, [allChartData, currentValue]);
+
+  // 🔥 新增：计算 NO 的24小时价格变化百分比
+  const noPriceChange24h = useMemo(() => {
+    if (!allNoChartData || allNoChartData.length === 0) {
+      return null;
+    }
+    
+    const now = Date.now();
+    const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+    
+    let price24hAgo: number | null = null;
+    let minTimeDiff = Infinity;
+    
+    for (const point of allNoChartData) {
+      const timeDiff = Math.abs(point.timestamp - twentyFourHoursAgo);
+      if (timeDiff < minTimeDiff && point.timestamp <= twentyFourHoursAgo) {
+        minTimeDiff = timeDiff;
+        price24hAgo = point.value;
+      }
+    }
+    
+    if (price24hAgo === null && allNoChartData.length > 0) {
+      const firstPoint = allNoChartData[0];
+      if (firstPoint.timestamp <= twentyFourHoursAgo) {
+        price24hAgo = firstPoint.value;
+      }
+    }
+    
+    if (price24hAgo === null) {
+      return null;
+    }
+    
+    const changePercent = ((currentNoValue - price24hAgo) / price24hAgo) * 100;
+    
+    return {
+      percent: changePercent,
+      isPositive: changePercent >= 0,
+    };
+  }, [allNoChartData, currentNoValue]);
   
   // 🔥 动态获取用户时区（使用浏览器本地时区，不硬编码）
   const userTimeZone = typeof window !== 'undefined' 
