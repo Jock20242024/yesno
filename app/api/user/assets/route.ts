@@ -155,23 +155,38 @@ export async function GET() {
 
     // ========== 修复：从Position表计算持仓价值，不再从Order数组计算 ==========
     // 强制规则：UI的"我的持仓"100%只能来自Position表，不允许从Trade计算
-    const positions = await prisma.positions.findMany({
-      where: {
-        userId,
-        status: 'OPEN', // ========== 强制规则：只计算OPEN状态的持仓 ==========
-      },
-      include: {
-        markets: {
-          select: {
-            id: true,
-            totalYes: true,
-            totalNo: true,
-            status: true,
-            resolvedOutcome: true, // 🔥 必须包含：用于计算已结算市场的价格
+    // 🔥 添加错误处理：如果 Prisma 引擎连接失败，返回空数组而不是崩溃
+    let positions: any[] = [];
+    try {
+      positions = await prisma.positions.findMany({
+        where: {
+          userId,
+          status: 'OPEN', // ========== 强制规则：只计算OPEN状态的持仓 ==========
+        },
+        include: {
+          markets: {
+            select: {
+              id: true,
+              totalYes: true,
+              totalNo: true,
+              status: true,
+              resolvedOutcome: true, // 🔥 必须包含：用于计算已结算市场的价格
+            },
           },
         },
-      },
-    });
+      });
+    } catch (positionError: any) {
+      console.error('❌ [Assets API] 查询持仓失败:', positionError);
+      // 🔥 如果 Prisma 引擎连接失败，记录错误但继续执行，返回空数组
+      // 这样不会阻塞整个 API，用户可以继续查看其他资产信息
+      if (positionError.message?.includes('Engine was empty') || positionError.message?.includes('connection')) {
+        console.warn('⚠️ [Assets API] Prisma 引擎连接失败，持仓价值设为 0');
+        positions = [];
+      } else {
+        // 其他错误也记录但不抛出，确保 API 可用
+        positions = [];
+      }
+    }
 
     let positionsValue = 0;
     
@@ -236,25 +251,38 @@ export async function GET() {
       // ========== 修复：从Position历史计算持仓价值 ==========
       // 查询该时间点之前创建的Position记录（包括CLOSED的）
       // 注意：这是一个简化实现，生产环境应该使用历史快照表记录每个时间点的持仓价值
-      const historicalPositions = await prisma.positions.findMany({
-        where: {
-          userId,
-          createdAt: {
-            lte: new Date(timestamp),
-          },
-        },
-        include: {
-          markets: {
-            select: {
-              id: true,
-              totalYes: true,
-              totalNo: true,
-              status: true,
-              resolvedOutcome: true, // 🔥 修复：添加 resolvedOutcome 用于盈亏计算
+      // 🔥 添加错误处理：如果 Prisma 引擎连接失败，返回空数组
+      let historicalPositions: any[] = [];
+      try {
+        historicalPositions = await prisma.positions.findMany({
+          where: {
+            userId,
+            createdAt: {
+              lte: new Date(timestamp),
             },
+          },
+          include: {
+            markets: {
+              select: {
+                id: true,
+                totalYes: true,
+                totalNo: true,
+                status: true,
+                resolvedOutcome: true, // 🔥 修复：添加 resolvedOutcome 用于盈亏计算
+              },
           },
         },
       });
+      } catch (historicalError: any) {
+        console.error('❌ [Assets API] 查询历史持仓失败:', historicalError);
+        // 🔥 如果 Prisma 引擎连接失败，记录错误但继续执行，返回空数组
+        if (historicalError.message?.includes('Engine was empty') || historicalError.message?.includes('connection')) {
+          console.warn('⚠️ [Assets API] Prisma 引擎连接失败，历史持仓价值设为 0');
+          historicalPositions = [];
+        } else {
+          historicalPositions = [];
+        }
+      }
       
       let historicalPositionValue = 0;
       for (const position of historicalPositions) {

@@ -17,7 +17,10 @@ interface CategoryPageProps {
  * 如果找不到分类，返回 404 页面
  */
 export default async function CategoryPage({ params }: CategoryPageProps) {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  
+  // 🔥 修复：解码 URL 编码的 slug（例如 %E7%AA%81%E5%8F%91 -> 突发）
+  const slug = decodeURIComponent(rawSlug);
 
   // 🔥 恢复数据库子分类设计：移除硬编码的筛选配置判断
   // 所有子分类都从数据库读取，不需要硬编码判断
