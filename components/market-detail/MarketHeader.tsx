@@ -348,17 +348,48 @@ export default function MarketHeader({ event, status = "open", result = null, cl
                 const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/markets/${event.id}`;
                 const shareText = `${marketTitle} - ${shareUrl}`;
                 
-                if (navigator.share) {
-                  // 移动端使用原生分享
-                  await navigator.share({
-                    title: marketTitle,
-                    text: marketTitle,
-                    url: shareUrl,
-                  });
-                } else {
-                  // 桌面端复制到剪贴板
+                // 🔥 修复：检查是否支持原生分享（移动端）
+                if (navigator.share && typeof navigator.share === 'function') {
+                  try {
+                    // 移动端使用原生分享
+                    await navigator.share({
+                      title: marketTitle,
+                      text: marketTitle,
+                      url: shareUrl,
+                    });
+                    // 如果分享成功，不显示 toast（原生分享会自己处理）
+                    return;
+                  } catch (shareError: any) {
+                    // 如果用户取消分享，不显示错误
+                    if (shareError.name === 'AbortError') {
+                      return;
+                    }
+                    // 其他错误，继续尝试复制到剪贴板
+                    console.warn('⚠️ [MarketHeader] 原生分享失败，尝试复制到剪贴板:', shareError);
+                  }
+                }
+                
+                // 桌面端或原生分享失败时，复制到剪贴板
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
                   await navigator.clipboard.writeText(shareText);
                   toast.success(t('market.chart.share_success'));
+                } else {
+                  // 降级方案：使用传统的复制方法
+                  const textArea = document.createElement('textarea');
+                  textArea.value = shareText;
+                  textArea.style.position = 'fixed';
+                  textArea.style.opacity = '0';
+                  document.body.appendChild(textArea);
+                  textArea.select();
+                  try {
+                    document.execCommand('copy');
+                    toast.success(t('market.chart.share_success'));
+                  } catch (fallbackError) {
+                    console.error('❌ [MarketHeader] 降级复制也失败:', fallbackError);
+                    toast.error(t('market.chart.share_error'));
+                  } finally {
+                    document.body.removeChild(textArea);
+                  }
                 }
               } catch (error) {
                 console.error('❌ [MarketHeader] 分享失败:', error);
