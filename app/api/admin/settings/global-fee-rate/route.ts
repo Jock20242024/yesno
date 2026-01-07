@@ -79,26 +79,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 使用 upsert 确保全局手续费率存在
-    await prisma.global_stats.upsert({
+    // 🔥 修复：先查找是否存在，然后使用 update 或 create
+    const existing = await prisma.global_stats.findFirst({
       where: {
         label: GLOBAL_FEE_RATE_KEY,
-      },
-      update: {
-        value: feeRateNum,
-        updatedAt: new Date(),
-      },
-      create: {
-        id: require('crypto').randomUUID(),
-        label: GLOBAL_FEE_RATE_KEY,
-        value: feeRateNum,
-        unit: '%',
         isActive: true,
-        sortOrder: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
       },
     });
+
+    if (existing) {
+      // 如果存在，更新
+      await prisma.global_stats.update({
+        where: {
+          id: existing.id,
+        },
+        data: {
+          value: feeRateNum,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      // 如果不存在，创建
+      await prisma.global_stats.create({
+        data: {
+          id: require('crypto').randomUUID(),
+          label: GLOBAL_FEE_RATE_KEY,
+          value: feeRateNum,
+          unit: '%',
+          isActive: true,
+          sortOrder: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,
