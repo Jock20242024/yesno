@@ -916,18 +916,29 @@ export async function GET(request: NextRequest) {
     
     console.error('❌ [Admin Markets GET] ===============================');
 
+    // 🔥 返回更详细的错误信息
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isPrismaError = error?.code === 'P2022' || error?.meta?.column;
+    const isDatabaseFieldError = errorMessage?.includes('does not exist') || errorMessage?.includes('column') || errorMessage?.includes('ammK') || errorMessage?.includes('initialLiquidity');
+
     return NextResponse.json(
       {
         success: false,
-        error: 'Internal server error',
+        error: isDatabaseFieldError 
+          ? '数据库字段不存在，请检查迁移是否完成。如果已执行迁移，请等待几分钟让变更生效。' 
+          : 'Internal server error',
         // 开发环境下返回详细错误信息
-        ...(process.env.NODE_ENV === 'development' && error instanceof Error
-          ? { 
-              details: error.message, 
-              stack: error.stack,
-              name: error.name,
-            }
-          : {}),
+        ...(process.env.NODE_ENV === 'development' && {
+          details: errorMessage,
+          isDatabaseError: isPrismaError || isDatabaseFieldError,
+          hint: isDatabaseFieldError ? '请执行 SQL 迁移添加 ammK 和 initialLiquidity 字段，或等待迁移生效' : undefined,
+          code: error?.code,
+          meta: error?.meta,
+          ...(error instanceof Error && {
+            stack: error.stack,
+            name: error.name,
+          }),
+        }),
       },
       { status: 500 }
     );
