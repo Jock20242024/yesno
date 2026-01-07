@@ -244,6 +244,8 @@ export default function MarketDetailPage() {
       avgPrice: number;
       currentPrice: number;
       outcome: "yes" | "no";
+      costBasis?: number; // 🔥 新增：实际投入金额
+      actualInvestedAmount?: number; // 🔥 新增：实际投入金额（用于调试）
     } | null = null;
     
     if (hasYesPosition && hasNoPosition) {
@@ -254,6 +256,8 @@ export default function MarketDetailPage() {
           avgPrice: yesPosition.avgPrice,
           currentPrice: displayYesPercent / 100,
           outcome: "yes",
+          costBasis: yesPosition.costBasis, // 🔥 新增：传递实际投入金额
+          actualInvestedAmount: yesPosition.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
         };
       } else {
         mainPosition = {
@@ -261,6 +265,8 @@ export default function MarketDetailPage() {
           avgPrice: noPosition.avgPrice,
           currentPrice: displayNoPercent / 100,
           outcome: "no",
+          costBasis: noPosition.costBasis, // 🔥 新增：传递实际投入金额
+          actualInvestedAmount: noPosition.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
         };
       }
     } else if (hasYesPosition) {
@@ -269,6 +275,8 @@ export default function MarketDetailPage() {
         avgPrice: yesPosition.avgPrice,
         currentPrice: displayYesPercent / 100,
         outcome: "yes",
+        costBasis: yesPosition.costBasis, // 🔥 新增：传递实际投入金额
+        actualInvestedAmount: yesPosition.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
       };
     } else if (hasNoPosition) {
       mainPosition = {
@@ -276,9 +284,11 @@ export default function MarketDetailPage() {
         avgPrice: noPosition.avgPrice,
         currentPrice: displayNoPercent / 100,
         outcome: "no",
+        costBasis: noPosition.costBasis, // 🔥 新增：传递实际投入金额
+        actualInvestedAmount: noPosition.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
       };
     }
-
+    
     return mainPosition;
   }, [positionsData, id, displayYesPercent, displayNoPercent]);
 
