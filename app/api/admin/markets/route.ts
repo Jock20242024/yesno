@@ -1212,13 +1212,14 @@ export async function POST(request: Request) {
       totalNo: shouldInjectLiquidity ? liquidityAmount * 0.5 : 0,
     };
 
-    // 🔥 修正 prisma.markets.create 调用：根据 MarketCategory 中间表结构，使用 create 语法
-    // 参考 scripts/seed-pending-markets.ts 的实现方式
-    // MarketCategory 表的字段是 categoryId，不是嵌套的 category 对象
+    // 🔥 修正 prisma.markets.create 调用：根据 market_categories 中间表结构，使用 create 语法
+    // Prisma schema 中定义的关系是 market_categories，不是 categories
     if (validCategoryConnect.length > 0) {
-      marketData.categories = {
+      marketData.market_categories = {
         create: validCategoryConnect.map(c => ({
+          id: crypto.randomUUID(), // 🔥 必须提供 id 字段
           categoryId: c.id, // 🔥 直接使用 categoryId 字段，不需要嵌套 connect
+          createdAt: new Date(),
         })),
       };
 
