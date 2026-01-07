@@ -404,7 +404,10 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
         </div>
         <div id="chart-container" className="w-full bg-[#0a0b0d] relative outline-none flex-1" style={{ height: `${height}px`, minHeight: `${height}px`, maxHeight: `${height}px`, outline: 'none' }} tabIndex={-1}>
           <ResponsiveContainer width="100%" height={height} className="outline-none">
-            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }} className="outline-none">
+            <AreaChart data={chartData.map((point, index) => ({
+              ...point,
+              noValue: noChartData[index]?.value ?? (1 - point.value),
+            }))} margin={{ top: 5, right: 5, left: 5, bottom: 5 }} className="outline-none">
               <defs>
                 <linearGradient id="colorYes" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#22c55e" stopOpacity={0.2} />
@@ -461,7 +464,7 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
                   x={chartData[chartData.length - 1]?.time} 
                   stroke="#ef4444" 
                   strokeDasharray="5 5"
-                  label={{ value: "结算点", position: "top", fill: "#ef4444" }}
+                  label={{ value: language === 'zh' ? "结算点" : "Settlement", position: "top", fill: "#ef4444" }}
                 />
               )}
             </AreaChart>
