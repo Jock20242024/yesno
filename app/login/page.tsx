@@ -66,9 +66,14 @@ function LoginForm() {
 
       if (!res.success) {
         // 🔥 修复：检查是否是 Google 用户尝试使用密码登录
+        // 🔥 修复：检查是否是管理员尝试通过前端入口登录
         let errorMessage = res.error || t('auth.login.error');
         
-        if (res.error === 'GOOGLE_USER_MUST_USE_OAUTH' || res.error?.includes('GOOGLE_USER')) {
+        if (res.error === 'ADMIN_MUST_USE_ADMIN_LOGIN' || res.error?.includes('ADMIN_MUST_USE')) {
+          errorMessage = '管理员账户只能通过管理员登录入口登录，请访问 /admin/login';
+          toast.error(errorMessage);
+          return;
+        } else if (res.error === 'GOOGLE_USER_MUST_USE_OAUTH' || res.error?.includes('GOOGLE_USER')) {
           errorMessage = t('auth.login.error_google_user') || '此账号使用 Google 登录注册，请使用 Google 登录按钮登录';
         } else if (res.error === 'CredentialsSignin') {
           errorMessage = t('auth.login.error_credentials');

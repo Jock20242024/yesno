@@ -136,7 +136,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // 🔥 处理错误信息
         let errorMessage = '登录失败';
         
-        if (result.error === 'CredentialsSignin') {
+        if (result.error === 'ADMIN_MUST_USE_ADMIN_LOGIN' || result.error?.includes('ADMIN_MUST_USE')) {
+          errorMessage = '管理员账户只能通过管理员登录入口登录，请访问 /admin/login';
+        } else if (result.error === 'CredentialsSignin') {
           errorMessage = '邮箱或密码错误';
         } else if (result.error === 'GOOGLE_USER_MUST_USE_OAUTH') {
           errorMessage = '此账号使用 Google 登录注册，请使用 Google 登录按钮登录';

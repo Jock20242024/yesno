@@ -31,9 +31,11 @@ export default function AdminLoginPage() {
       
       // 🔥 关键修复：直接使用 NextAuth 的 signIn 方法
       // 这会自动创建 session 并设置 next-auth.session-token cookie
+      // 🔥 修复：传递 adminLogin 标记，标识这是管理员登录
       const result = await signIn('credentials', {
         email: email,
         password: password,
+        adminLogin: true, // 🔥 标记这是管理员登录
         redirect: false, // 不自动跳转，手动控制
       });
 

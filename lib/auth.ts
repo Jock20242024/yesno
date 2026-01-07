@@ -70,9 +70,10 @@ export const authOptions: NextAuthConfig = {
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        adminLogin: { label: "Admin Login", type: "text" } // 🔥 隐藏字段，用于标识管理员登录
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
@@ -93,6 +94,29 @@ export const authOptions: NextAuthConfig = {
 
           if (!user) {
             return null;
+          }
+
+          // 🔥 修复：检查用户是否是管理员
+          // 如果是管理员，检查登录来源（通过检查 request 中的 headers）
+          if (user.isAdmin === true) {
+            // 尝试从 request 中获取 referer 或 origin 来判断登录来源
+            const referer = (request as any)?.headers?.get?.('referer') || '';
+            const origin = (request as any)?.headers?.get?.('origin') || '';
+            
+            // 如果是从前端登录页面（/login）调用的，拒绝登录
+            // 管理员只能通过 /admin/login 登录
+            if (referer.includes('/login') && !referer.includes('/admin/login')) {
+              throw new Error("ADMIN_MUST_USE_ADMIN_LOGIN");
+            }
+            // 如果 origin 包含前端域名但不包含 /admin/login，也拒绝
+            if (origin && !referer.includes('/admin/login') && !origin.includes('/admin')) {
+              // 检查是否是前端登录页面的调用
+              // 通过检查是否有 callbackUrl 参数来判断
+              const callbackUrl = (request as any)?.query?.callbackUrl || '';
+              if (!callbackUrl.includes('/admin')) {
+                throw new Error("ADMIN_MUST_USE_ADMIN_LOGIN");
+              }
+            }
           }
 
           // 检查用户是否是通过 Google 注册的
@@ -123,8 +147,9 @@ export const authOptions: NextAuthConfig = {
             balance: user.balance || 0,
           };
         } catch (error: any) {
-          // 如果是 Google 用户的特殊错误，重新抛出以便前端处理
-          if (error.message === "GOOGLE_USER_MUST_USE_OAUTH") {
+          // 如果是特殊错误，重新抛出以便前端处理
+          if (error.message === "GOOGLE_USER_MUST_USE_OAUTH" || 
+              error.message === "ADMIN_MUST_USE_ADMIN_LOGIN") {
             throw error;
           }
           // 只在开发环境记录错误
