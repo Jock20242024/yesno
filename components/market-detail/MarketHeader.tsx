@@ -357,20 +357,11 @@ export default function MarketHeader({ event, status = "open", result = null, cl
                 } else {
                   // 桌面端复制到剪贴板
                   await navigator.clipboard.writeText(shareText);
-                  // 显示成功提示（可以使用 toast 库）
-                  if (typeof window !== 'undefined' && (window as any).toast) {
-                    (window as any).toast.success(t('market.chart.share_success'));
-                  } else {
-                    alert(t('market.chart.share_success'));
-                  }
+                  toast.success(t('market.chart.share_success'));
                 }
               } catch (error) {
                 console.error('❌ [MarketHeader] 分享失败:', error);
-                if (typeof window !== 'undefined' && (window as any).toast) {
-                  (window as any).toast.error(t('market.chart.share_error'));
-                } else {
-                  alert(t('market.chart.share_error'));
-                }
+                toast.error(t('market.chart.share_error'));
               }
             }}
             className="flex-shrink-0 p-2 rounded-lg bg-pm-card border border-pm-border hover:bg-pm-card-hover transition-colors text-pm-text-dim hover:text-white"

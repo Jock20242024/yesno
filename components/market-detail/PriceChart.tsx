@@ -173,9 +173,14 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
 
   // 🔥 使用真实数据：优先使用传入的 data，如果没有则使用默认数据
   const currentValue = yesPercent / 100;
+  const currentNoValue = noPercent !== undefined ? noPercent / 100 : (1 - currentValue);
   const allChartData = data && data.length > 0 
     ? data 
     : getDefaultChartData(currentValue);
+  // 🔥 新增：NO 数据（如果没有传入，则从 YES 数据计算）
+  const allNoChartData = noData && noData.length > 0 
+    ? noData 
+    : allChartData.map(point => ({ ...point, value: 1 - point.value }));
   const isResolved = marketStatus === "closed" && marketResult !== null;
   
   // 🔥 新增：根据时间范围过滤数据
@@ -521,13 +526,24 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
               strokeWidth={2}
               fill="url(#colorYes)"
               dot={false}
+              name={t('market.chart.yes')}
+            />
+            {/* 🔥 新增：NO K线 */}
+            <Area
+              type="monotone"
+              dataKey="noValue"
+              stroke="#ef4444"
+              strokeWidth={2}
+              fill="url(#colorNo)"
+              dot={false}
+              name={t('market.chart.no')}
             />
             {isResolved && (
               <ReferenceLine
                 x={chartData[resolvedTimeIndex]?.time}
                 stroke="#ef4444"
                 strokeDasharray="5 5"
-                label={{ value: "结算点", position: "top", fill: "#ef4444" }}
+                label={{ value: language === 'zh' ? "结算点" : "Settlement", position: "top", fill: "#ef4444" }}
               />
             )}
           </AreaChart>
