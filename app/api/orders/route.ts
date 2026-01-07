@@ -563,10 +563,50 @@ export async function POST(request: Request) {
             avgPrice: updatedPosition.avgPrice,
             status: updatedPosition.status,
           } : null,
+          // 🔥 保存 calculatedShares 和 executionPrice 用于事务后的做市盈亏记录
+          calculatedShares: calculatedShares,
+          executionPrice: executionPrice,
         };
       });
       
       const { updatedUser, updatedMarket, newOrder, updatedPosition, calculatedShares, executionPrice } = result;
+
+      // 🔥 修复：在事务成功后，记录做市盈亏（移到事务外，避免事务中止）
+      if (validOrderType === 'MARKET' && updatedMarket && calculatedShares && executionPrice) {
+        try {
+          const currentTotalYes = market.totalYes || 0;
+          const currentTotalNo = market.totalNo || 0;
+          const currentTotalVolume = currentTotalYes + currentTotalNo;
+          const ammCostPrice = currentTotalVolume > 0
+            ? (outcomeSelection === Outcome.YES 
+                ? currentTotalYes / currentTotalVolume
+                : currentTotalNo / currentTotalVolume)
+            : 0.5;
+          
+          // 使用从事务中返回的值
+          const spreadProfit = (executionPrice - ammCostPrice) * calculatedShares;
+          
+          if (Math.abs(spreadProfit) > 0.01) {
+            // 在事务外记录做市盈亏，如果失败不影响订单
+            await prisma.transactions.create({
+              data: {
+                id: randomUUID(),
+                userId: ammAccount.id,
+                amount: spreadProfit,
+                type: 'MARKET_PROFIT_LOSS' as any,
+                reason: `AMM做市点差收益 - 市场: ${market.title} (${marketId}), 用户买入: ${outcomeSelection}, 数量: ${calculatedShares.toFixed(4)}, 点差: $${spreadProfit.toFixed(2)}`,
+                status: TransactionStatus.COMPLETED,
+              },
+            }).catch((error: any) => {
+              // 如果枚举值不存在或其他错误，记录警告但不影响订单
+              console.warn('⚠️ [Orders API] 做市盈亏记录失败（不影响订单）:', error.message);
+            });
+          }
+        } catch (error: any) {
+          // 记录错误但不影响订单创建
+          console.warn('⚠️ [Orders API] 计算做市盈亏失败（不影响订单）:', error.message);
+        }
+      }
 
       // 🔥 返佣分发：只有在 MARKET 订单成交后才分发返佣
       if (validOrderType === 'MARKET' && newOrder.status === 'FILLED') {
