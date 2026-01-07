@@ -143,13 +143,6 @@ export async function GET(request: NextRequest) {
       // 🔥 修复：持仓总投入应该基于实际投入金额，而不是 shares * avgPrice
       // avgPrice 是加权平均价格，用于计算盈亏，但不代表实际投入成本
       // 实际投入成本 = 所有已成交订单的净投资额（amount - feeDeducted）
-      // 但为了简化，我们先用 shares * avgPrice 作为近似值
-      // 更准确的方法是：从订单记录中计算该持仓对应的所有订单的净投资额
-      
-      // 临时方案：使用 shares * avgPrice（这是当前UI显示的方式）
-      // 但我们需要验证这个值是否与实际投入一致
-      const cost = Number(position.shares) * Number(position.avgPrice);
-      totalPositionCost += cost;
       
       // 🔥 新增：计算该持仓对应的实际投入金额（从订单记录）
       // 查找该市场、该方向的已成交订单
@@ -160,6 +153,12 @@ export async function GET(request: NextRequest) {
       const actualInvestedAmount = positionOrders.reduce((sum, order) => {
         return sum + (Number(order.amount || 0) - Number(order.feeDeducted || 0));
       }, 0);
+      
+      // 🔥 保留 shares * avgPrice 作为对比值（用于验证）
+      const costByAvgPrice = Number(position.shares) * Number(position.avgPrice);
+      
+      // 🔥 使用实际投入金额作为总投入成本
+      totalPositionCost += actualInvestedAmount;
 
       // 计算当前价格
       let currentPrice = 0;
