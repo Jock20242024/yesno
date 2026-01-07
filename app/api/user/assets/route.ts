@@ -158,6 +158,9 @@ export async function GET() {
     // 🔥 添加错误处理：如果 Prisma 引擎连接失败，返回空数组而不是崩溃
     let positions: any[] = [];
     try {
+      // 🔥 确保 Prisma 引擎已连接
+      await prisma.$connect();
+      
       positions = await prisma.positions.findMany({
         where: {
           userId,
@@ -179,7 +182,9 @@ export async function GET() {
       console.error('❌ [Assets API] 查询持仓失败:', positionError);
       // 🔥 如果 Prisma 引擎连接失败，记录错误但继续执行，返回空数组
       // 这样不会阻塞整个 API，用户可以继续查看其他资产信息
-      if (positionError.message?.includes('Engine was empty') || positionError.message?.includes('connection')) {
+      if (positionError.message?.includes('Engine was empty') || 
+          positionError.message?.includes('Engine is not yet connected') ||
+          positionError.message?.includes('connection')) {
         console.warn('⚠️ [Assets API] Prisma 引擎连接失败，持仓价值设为 0');
         positions = [];
       } else {
@@ -254,6 +259,9 @@ export async function GET() {
       // 🔥 添加错误处理：如果 Prisma 引擎连接失败，返回空数组
       let historicalPositions: any[] = [];
       try {
+        // 🔥 确保 Prisma 引擎已连接
+        await prisma.$connect();
+        
         historicalPositions = await prisma.positions.findMany({
           where: {
             userId,
@@ -276,7 +284,9 @@ export async function GET() {
       } catch (historicalError: any) {
         console.error('❌ [Assets API] 查询历史持仓失败:', historicalError);
         // 🔥 如果 Prisma 引擎连接失败，记录错误但继续执行，返回空数组
-        if (historicalError.message?.includes('Engine was empty') || historicalError.message?.includes('connection')) {
+        if (historicalError.message?.includes('Engine was empty') || 
+            historicalError.message?.includes('Engine is not yet connected') ||
+            historicalError.message?.includes('connection')) {
           console.warn('⚠️ [Assets API] Prisma 引擎连接失败，历史持仓价值设为 0');
           historicalPositions = [];
         } else {
