@@ -256,6 +256,33 @@ export async function GET() {
     const totalBalance = availableBalance + frozenBalance + positionsValue;
 
     // ========== STEP 3: 深度日志埋点 - TotalBalance 计算后（最终返回前）==========
+    // 🔥 审计日志：记录详细的资产计算信息
+    console.log(`💰 [Assets API] 用户 ${userId} 资产计算:`, {
+      availableBalance,
+      frozenBalance,
+      positionsValue,
+      totalBalance,
+      positionsCount: positions.length,
+      positionsDetail: positions.map(p => ({
+        marketId: p.marketId,
+        outcome: p.outcome,
+        shares: Number(p.shares),
+        avgPrice: Number(p.avgPrice),
+        cost: Number(p.shares) * Number(p.avgPrice),
+        currentPrice: calculatePositionPrice(p.outcome as 'YES' | 'NO', {
+          status: p.markets.status,
+          resolvedOutcome: p.markets.resolvedOutcome,
+          totalYes: p.markets.totalYes || 0,
+          totalNo: p.markets.totalNo || 0,
+        }),
+        value: Number(p.shares) * calculatePositionPrice(p.outcome as 'YES' | 'NO', {
+          status: p.markets.status,
+          resolvedOutcome: p.markets.resolvedOutcome,
+          totalYes: p.markets.totalYes || 0,
+          totalNo: p.markets.totalNo || 0,
+        }),
+      })),
+    });
 
     // 6. 计算历史资产（用于计算收益）
     // 获取不同时间点的订单和交易记录

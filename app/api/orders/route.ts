@@ -446,6 +446,18 @@ export async function POST(request: Request) {
         // 🔥 2. 记录 Transaction 流水（三条记录）
         // 🔥 修复：在事务中，如果任何操作失败，立即抛出错误，不要继续执行
         // 2.1 用户交易记录：扣除总金额
+        // 🔥 审计日志：记录详细的资金变动信息
+        console.log(`💰 [Orders API] 用户 ${userId} 下单 ${orderId}:`, {
+          amount: amountNum,
+          feeDeducted: feeDeducted,
+          netAmount: netAmount,
+          outcomeSelection,
+          orderType: validOrderType,
+          marketId: marketId,
+          userBalanceBefore: user.balance,
+          userBalanceAfter: newBalance,
+        });
+        
         await tx.transactions.create({
           data: {
             id: randomUUID(),
