@@ -3,6 +3,7 @@ import { DBService } from '@/lib/dbService'; // 🔥 修复：使用正确的 db
 import { Market, MarketStatus, Outcome } from '@/types/data';
 import { prisma } from '@/lib/prisma';
 import { verifyAdminAccess, createUnauthorizedResponse } from '@/lib/adminAuth';
+import { executeTransaction } from '@/lib/prismaTransaction';
 import { aggregateMarketsByTemplate, countUniqueMarketSeries } from '@/lib/marketAggregation';
 import dayjs from '@/lib/dayjs';
 
