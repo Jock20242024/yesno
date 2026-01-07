@@ -406,7 +406,7 @@ export default function MarketDetailPage() {
           {/* 左侧区域 */}
           <div className="flex-1 lg:flex-[2] space-y-4 w-full">
             {/* K线图 */}
-            <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative mb-8">
+            <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative mb-8 z-0">
               <PriceChart
                 yesPercent={displayYesPercent}
                 marketStatus={marketStatus}
@@ -436,7 +436,7 @@ export default function MarketDetailPage() {
 
             {/* 我的持仓面板 */}
             {userPositionData && (
-              <div className="mb-4">
+              <div className="mb-4 relative z-20">
                 <UserPositionCard
                   position={userPositionData}
                   onSell={() => {
@@ -463,6 +463,12 @@ export default function MarketDetailPage() {
                 endDate={new Date(marketData.endTime).toISOString().split("T")[0]}
                 userOrders={(marketData as any).userOrders || []}
                 marketId={marketData.id}
+                onPriceSelect={(price) => {
+                  // 🔥 修复：点击订单簿价格时，填充到交易区并切换到限价模式
+                  if (tradeSidebarRef.current) {
+                    tradeSidebarRef.current.setLimitPriceAndSwitch(price);
+                  }
+                }}
               />
             </div>
           </div>

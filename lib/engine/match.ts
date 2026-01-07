@@ -267,14 +267,22 @@ export function calculateAMMDepth(
   const depth: Array<{ price: number; depth: number; outcome: Outcome }> = [];
 
   for (const price of priceLevels) {
-    // 计算在该价格下可以买入多少
+    // 🔥 修复：计算在该价格下可以买入多少份额
+    // 使用固定测试金额计算深度，但total应该基于实际可成交金额
     const testAmount = 100; // 测试金额
     const outcome = price <= 0.5 ? Outcome.NO : Outcome.YES;
     
     try {
       const result = calculateCPMMPrice(totalYes, totalNo, outcome, testAmount);
-      const depthAtPrice = (testAmount / result.executionPrice) * (result.executionPrice / price);
-      depth.push({ price, depth: depthAtPrice, outcome });
+      // 计算在该价格下可以买入的份额数
+      const sharesAtPrice = testAmount / price;
+      // total应该是实际可成交金额，而不是固定的100
+      const actualTotal = sharesAtPrice * price;
+      depth.push({ 
+        price, 
+        depth: sharesAtPrice, // 深度是份额数
+        outcome 
+      });
     } catch (error) {
       depth.push({ price, depth: 0, outcome });
     }

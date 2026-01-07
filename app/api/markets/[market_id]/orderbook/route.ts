@@ -87,45 +87,48 @@ export async function GET(
         continue; // 跳过无效的限价
       }
 
-      // 计算剩余数量（shares）
-      const remainingAmount = order.amount - (order.filledAmount || 0);
-      const remainingQuantity = remainingAmount / limitPrice; // shares = amount / price
+      // 🔥 修复：计算剩余数量（shares）和剩余金额
+      // 对于LIMIT订单，filledAmount是已成交的份额数，不是金额
+      const filledShares = order.filledAmount || 0;
+      const orderShares = order.amount / limitPrice; // 订单总份额 = 订单金额 / 限价
+      const remainingShares = orderShares - filledShares; // 剩余份额
+      const remainingAmount = remainingShares * limitPrice; // 剩余金额 = 剩余份额 * 限价
 
-      if (remainingQuantity <= 0) {
+      if (remainingShares <= 0 || remainingAmount <= 0) {
         continue; // 跳过已完全成交的订单
       }
 
       // 根据 outcomeSelection 分类到买单或卖单
       if (order.outcomeSelection === 'YES') {
-        // 买单（Bids）：购买 YES
+        // 买单（Bids）：购买 YES（绿色显示）
         const existing = bidMap.get(limitPrice);
         if (existing) {
-          existing.quantity += remainingQuantity;
+          existing.quantity += remainingShares;
           existing.total += remainingAmount;
           existing.orderCount += 1;
         } else {
           bidMap.set(limitPrice, {
             price: limitPrice,
-            quantity: remainingQuantity,
+            quantity: remainingShares,
             total: remainingAmount,
             orderCount: 1,
           });
         }
       } else if (order.outcomeSelection === 'NO') {
-        // 卖单（Asks）：卖出 NO（相当于买入 YES 的反向操作）
+        // 卖单（Asks）：卖出 NO（红色显示）
         // 对于 NO 订单，我们需要将其转换为 YES 卖出价格
         // NO 价格 + YES 价格 = 1，所以 YES 卖出价格 = 1 - NO 价格
         const yesSellPrice = 1 - limitPrice;
         
         const existing = askMap.get(yesSellPrice);
         if (existing) {
-          existing.quantity += remainingQuantity;
+          existing.quantity += remainingShares;
           existing.total += remainingAmount;
           existing.orderCount += 1;
         } else {
           askMap.set(yesSellPrice, {
             price: yesSellPrice,
-            quantity: remainingQuantity,
+            quantity: remainingShares,
             total: remainingAmount,
             orderCount: 1,
           });
