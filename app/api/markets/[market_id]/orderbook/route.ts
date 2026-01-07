@@ -228,8 +228,9 @@ export async function GET(
       .sort((a, b) => b.price - a.price)
       .slice(0, 20); // 限制显示数量
 
+    // 🔥 修复：asks按价格从高到低排序（与前端显示一致）
     const finalAsks = Array.from(mergedAsks.values())
-      .sort((a, b) => a.price - b.price)
+      .sort((a, b) => b.price - a.price) // 从高到低
       .slice(0, 20); // 限制显示数量
 
     // 重新计算价差（基于合并后的订单）
