@@ -3,6 +3,7 @@ import { auth } from "@/lib/authExport";
 import { DBService } from '@/lib/dbService';
 import { prisma } from '@/lib/prisma';
 import { calculatePositionPrice } from '@/lib/utils/valuation';
+import { ensurePrismaConnected, executePrismaQuery } from '@/lib/prismaConnection'; // 🔥 引入 Prisma 连接工具
 
 /**
  * 获取用户资产汇总 API
