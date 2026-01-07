@@ -8,6 +8,7 @@ import { useSession } from "next-auth/react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useLanguage } from "@/i18n/LanguageContext";
 import LiveWallet from "@/components/user/LiveWallet";
+import LiveAvailableBalance from "@/components/user/LiveAvailableBalance";
 
 export default function Navbar() {
   const router = useRouter();
@@ -231,7 +232,7 @@ export default function Navbar() {
                     <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1" suppressHydrationWarning>
                       {mounted ? t('layout.header.available') : 'Available'}
                     </span>
-                    <LiveWallet className="text-poly-green group-hover:text-primary transition-colors" />
+                    <LiveAvailableBalance className="text-poly-green group-hover:text-primary transition-colors" />
                   </div>
                 </Link>
                 <div className="flex items-center gap-2">
