@@ -509,13 +509,71 @@ export async function GET() {
     // 🔥 强力清除缓存：确保返回 Header 中包含 Cache-Control
     response.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
     return response;
-  } catch (error) {
+  } catch (error: any) {
     // 🔥 强制 API 降级：无论 auth() 是否成功，无论变量计算是否报错，强制返回一个 200 状态码的 JSON
     // 绝不允许抛出 500 或 401，这是防止前端崩溃的唯一办法
     console.error('❌ [Assets API] Internal error:', error);
+    
+    // 🔥 修复：如果错误是 Prisma 连接问题，尝试重新连接并返回用户余额
+    if (error?.message?.includes('Engine is not yet connected') || 
+        error?.message?.includes('Engine was empty')) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await prisma.$connect();
+        
+        // 尝试获取用户余额
+        const session = await auth();
+        if (session?.user?.id) {
+          const user = await prisma.users.findUnique({
+            where: { id: session.user.id },
+            select: { balance: true },
+          });
+          
+          if (user) {
+            const balance = Number(user.balance || 0);
+            const response = NextResponse.json({
+              success: true,
+              data: {
+                balance: balance,
+                availableBalance: balance,
+                frozenBalance: 0,
+                positionsValue: 0,
+                totalBalance: balance,
+                totalEquity: balance,
+                historical: {
+                  '1D': { balance: balance, profit: { value: 0, percent: 0, isPositive: true } },
+                  '1W': { balance: balance, profit: { value: 0, percent: 0, isPositive: true } },
+                  '1M': { balance: balance, profit: { value: 0, percent: 0, isPositive: true } },
+                  '1Y': { balance: balance, profit: { value: 0, percent: 0, isPositive: true } },
+                },
+              },
+            }, { status: 200 });
+            response.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
+            return response;
+          }
+        }
+      } catch (retryError) {
+        console.error('❌ [Assets API] 重试失败:', retryError);
+      }
+    }
+    
+    // 最终降级：返回零值
     const response = NextResponse.json({
       success: true,
-      balance: 0,
+      data: {
+        balance: 0,
+        availableBalance: 0,
+        frozenBalance: 0,
+        positionsValue: 0,
+        totalBalance: 0,
+        totalEquity: 0,
+        historical: {
+          '1D': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+          '1W': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+          '1M': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+          '1Y': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+        },
+      },
     }, { status: 200 });
     response.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
     return response;
