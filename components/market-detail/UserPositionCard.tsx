@@ -9,6 +9,8 @@ interface UserPosition {
   avgPrice: number;
   currentPrice: number;
   outcome: "yes" | "no";
+  costBasis?: number; // 🔥 新增：实际投入金额（从订单记录计算）
+  actualInvestedAmount?: number; // 🔥 新增：实际投入金额（用于调试）
 }
 
 interface UserPositionCardProps {
@@ -45,7 +47,10 @@ export default function UserPositionCard({
   // 计算价值和盈亏
   // 对于输家，当前价值强制为 $0.00
   const currentValue = isLoser ? 0 : position.shares * position.currentPrice;
-  const totalCost = position.shares * position.avgPrice;
+  // 🔥 修复：优先使用 costBasis（实际投入金额），如果没有则使用 shares * avgPrice
+  const totalCost = position.costBasis && position.costBasis > 0 
+    ? position.costBasis 
+    : position.shares * position.avgPrice;
   const pnl = currentValue - totalCost;
   // 对于输家，盈亏百分比强制为 -100%
   const pnlPercent = isLoser ? -100 : (totalCost > 0 ? (pnl / totalCost) * 100 : 0);

@@ -135,8 +135,69 @@ export async function GET(request: Request) {
     }
 
     // 5. 计算当前市场价格和价值
+    // 🔥 修复：从订单记录计算实际投入金额，而不是使用 shares * avgPrice
+    // 获取所有已成交订单（用于计算实际投入金额）
+    let filledOrders: any[] = [];
+    try {
+      await prisma.$connect();
+      filledOrders = await prisma.orders.findMany({
+        where: {
+          userId,
+          status: {
+            in: ['FILLED'],
+          },
+        },
+        select: {
+          id: true,
+          marketId: true,
+          outcomeSelection: true,
+          amount: true,
+          feeDeducted: true,
+        },
+      });
+    } catch (orderError: any) {
+      console.error('❌ [Positions API] 查询订单失败:', orderError);
+      if (orderError.message?.includes('Engine is not yet connected') || 
+          orderError.message?.includes('Engine was empty')) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+          filledOrders = await prisma.orders.findMany({
+            where: {
+              userId,
+              status: {
+                in: ['FILLED'],
+              },
+            },
+            select: {
+              id: true,
+              marketId: true,
+              outcomeSelection: true,
+              amount: true,
+              feeDeducted: true,
+            },
+          });
+        } catch (retryError) {
+          console.error('❌ [Positions API] 重试查询订单失败:', retryError);
+          filledOrders = []; // 降级：返回空数组
+        }
+      } else {
+        filledOrders = []; // 降级：返回空数组
+      }
+    }
+
     // 🔥 重构：使用统一的 calculatePositionValue 工具函数
     const positionsWithValue = filteredPositions.map((position) => {
+      // 🔥 修复：计算该持仓对应的实际投入金额（从订单记录）
+      const positionOrders = filledOrders.filter(order => 
+        order.marketId === position.marketId && 
+        order.outcomeSelection === position.outcome
+      );
+      const actualInvestedAmount = positionOrders.reduce((sum, order) => {
+        return sum + (Number(order.amount || 0) - Number(order.feeDeducted || 0));
+      }, 0);
+      
+      // 使用实际投入金额作为成本基础，而不是 shares * avgPrice
       const valuation = calculatePositionValue(
         {
           shares: position.shares,
@@ -151,6 +212,11 @@ export async function GET(request: Request) {
         }
       );
 
+      // 🔥 修复：使用实际投入金额作为 costBasis，如果无法从订单计算，则使用 shares * avgPrice 作为降级
+      const costBasis = actualInvestedAmount > 0 ? actualInvestedAmount : valuation.costBasis;
+      const profitLoss = valuation.currentValue - costBasis;
+      const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
+
       return {
         id: position.id,
         marketId: position.marketId,
@@ -162,12 +228,14 @@ export async function GET(request: Request) {
         avgPrice: position.avgPrice,
         currentPrice: valuation.currentPrice,
         currentValue: valuation.currentValue,
-        costBasis: valuation.costBasis,
-        profitLoss: valuation.profitLoss,
-        profitLossPercent: valuation.profitLossPercent,
+        costBasis: costBasis, // 🔥 修复：使用实际投入金额
+        profitLoss: profitLoss, // 🔥 修复：基于实际投入金额计算盈亏
+        profitLossPercent: profitLossPercent, // 🔥 修复：基于实际投入金额计算盈亏百分比
         status: position.status,
         createdAt: position.createdAt.toISOString(),
         updatedAt: position.updatedAt.toISOString(),
+        // 🔥 新增：实际投入金额（用于调试和验证）
+        actualInvestedAmount: actualInvestedAmount,
       };
     });
 
