@@ -142,29 +142,6 @@ export async function GET() {
       }, { status: 503 });
     }
 
-    if (!user) {
-
-      const response = NextResponse.json({
-        success: true,
-        data: {
-          balance: 0,
-          availableBalance: 0,
-          frozenBalance: 0,
-          positionsValue: 0,
-          totalBalance: 0,
-          totalEquity: 0,
-          historical: {
-            '1D': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-            '1W': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-            '1M': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-            '1Y': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-          },
-        },
-      }, { status: 200 });
-      response.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
-      return response;
-    }
-
     // 🔥 余额字段保护：使用 ?? 0 确保即使字段为 null，也能稳定得到数字 0
     const availableBalance = user.balance ?? 0;
 
