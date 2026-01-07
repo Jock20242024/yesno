@@ -556,6 +556,22 @@ export async function POST(request: Request) {
             const newShares = existingPosition.shares + calculatedShares;
             const newAvgPrice = (existingPosition.shares * existingPosition.avgPrice + calculatedShares * executionPrice) / newShares;
             
+            // 🔥 新增：详细日志记录，用于调试持仓计算问题
+            console.log(`💰 [Orders API] 更新现有持仓:`, {
+              marketId,
+              outcome: outcomeSelection,
+              existingShares: existingPosition.shares,
+              existingAvgPrice: existingPosition.avgPrice,
+              newOrderShares: calculatedShares,
+              newOrderExecutionPrice: executionPrice,
+              newTotalShares: newShares,
+              newAvgPrice: newAvgPrice,
+              // 🔥 验证：检查 shares * avgPrice 是否接近实际投入金额
+              costByShares: newShares * newAvgPrice,
+              actualInvested: netAmount,
+              difference: Math.abs(newShares * newAvgPrice - netAmount),
+            });
+            
             updatedPosition = await tx.positions.update({
               where: { id: existingPosition.id },
               data: {
@@ -568,6 +584,20 @@ export async function POST(request: Request) {
             // 🔥 使用 executionPrice（实际成交价格）作为 avgPrice
             // 🔥 使用 UUID 格式（与 schema 定义一致：@id @default(uuid())）
             const positionId = randomUUID();
+            
+            // 🔥 新增：详细日志记录，用于调试持仓计算问题
+            console.log(`💰 [Orders API] 创建新持仓:`, {
+              marketId,
+              outcome: outcomeSelection,
+              shares: calculatedShares,
+              avgPrice: executionPrice,
+              netAmount: netAmount,
+              // 🔥 验证：检查 shares * avgPrice 是否接近实际投入金额
+              costByShares: calculatedShares * executionPrice,
+              actualInvested: netAmount,
+              difference: Math.abs(calculatedShares * executionPrice - netAmount),
+            });
+            
             updatedPosition = await tx.positions.create({
               data: {
                 id: positionId,

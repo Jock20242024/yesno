@@ -154,6 +154,25 @@ export async function GET(request: NextRequest) {
         return sum + (Number(order.amount || 0) - Number(order.feeDeducted || 0));
       }, 0);
       
+      // 🔥 新增：详细日志记录，用于调试持仓计算问题
+      console.log(`💰 [User Audit] 持仓计算详情:`, {
+        marketId: position.marketId,
+        marketTitle: position.markets.title,
+        outcome: position.outcome,
+        positionShares: Number(position.shares),
+        positionAvgPrice: Number(position.avgPrice),
+        costByAvgPrice: Number(position.shares) * Number(position.avgPrice),
+        actualInvestedAmount: actualInvestedAmount,
+        orderCount: positionOrders.length,
+        orders: positionOrders.map(order => ({
+          orderId: order.id,
+          amount: Number(order.amount || 0),
+          feeDeducted: Number(order.feeDeducted || 0),
+          netAmount: Number(order.amount || 0) - Number(order.feeDeducted || 0),
+        })),
+        difference: Math.abs(Number(position.shares) * Number(position.avgPrice) - actualInvestedAmount),
+      });
+      
       // 🔥 保留 shares * avgPrice 作为对比值（用于验证）
       const costByAvgPrice = Number(position.shares) * Number(position.avgPrice);
       
