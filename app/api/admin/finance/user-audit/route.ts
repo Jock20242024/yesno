@@ -221,6 +221,14 @@ export async function GET(request: NextRequest) {
         actualInvestedAmount: actualInvestedAmount,
         costVsInvestedDifference: Math.abs(costByAvgPrice - actualInvestedAmount),
         isCostCorrect: Math.abs(costByAvgPrice - actualInvestedAmount) <= 0.01,
+        // 🔥 新增：订单详情（用于调试）
+        orderCount: positionOrders.length,
+        orders: positionOrders.map(order => ({
+          orderId: order.id,
+          amount: Number(order.amount || 0),
+          feeDeducted: Number(order.feeDeducted || 0),
+          netAmount: Number(order.amount || 0) - Number(order.feeDeducted || 0),
+        })),
       };
     });
 
