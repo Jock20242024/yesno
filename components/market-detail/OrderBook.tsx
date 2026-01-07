@@ -257,8 +257,6 @@ export default function OrderBook({
                       >
                         <td className="py-2.5 px-6 font-mono text-pm-red">
                           {formatUSD(order.price)}
-                          {(order as any).orderCount === -1 && (
-                          )}
                         </td>
                         <td className="py-2.5 px-6 text-right text-white font-mono">
                           {order.quantity.toLocaleString()}
@@ -296,8 +294,6 @@ export default function OrderBook({
                       >
                         <td className="py-2.5 px-6 font-mono text-pm-green">
                           {formatUSD(order.price)}
-                          {(order as any).orderCount === -1 && (
-                          )}
                         </td>
                         <td className="py-2.5 px-6 text-right text-white font-mono">
                           {order.quantity.toLocaleString()}
