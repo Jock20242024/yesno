@@ -227,12 +227,12 @@ export async function GET(
     // 排序并转换为数组
     const finalBids = Array.from(mergedBids.values())
       .sort((a, b) => b.price - a.price)
-      .slice(0, 20); // 限制显示数量
+      .slice(0, 5); // 🔥 修复：只显示5档
 
     // 🔥 修复：asks按价格从高到低排序（与前端显示一致）
     const finalAsks = Array.from(mergedAsks.values())
       .sort((a, b) => b.price - a.price) // 从高到低
-      .slice(0, 20); // 限制显示数量
+      .slice(0, 5); // 🔥 修复：只显示5档
 
     // 重新计算价差（基于合并后的订单）
     const finalSpread = finalAsks.length > 0 && finalBids.length > 0 

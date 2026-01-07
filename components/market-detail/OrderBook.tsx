@@ -129,11 +129,11 @@ export default function OrderBook({
               };
             }
             
-            // 合并更新（保留原有数据，更新前10档）
+            // 合并更新（保留原有数据，更新前5档）
             return {
               ...prev,
-              asks: [...(data.asks || []), ...prev.asks.slice(10)],
-              bids: [...(data.bids || []), ...prev.bids.slice(10)],
+              asks: [...(data.asks || []), ...prev.asks.slice(5)],
+              bids: [...(data.bids || []), ...prev.bids.slice(5)],
               spread: data.spread !== undefined ? data.spread : prev.spread,
               currentPrice: data.currentPrice !== undefined ? data.currentPrice : prev.currentPrice,
             };

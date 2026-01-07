@@ -813,19 +813,62 @@ export async function POST(request: Request) {
               const totalLiquidity = Number(market.totalYes || 0) + Number(market.totalNo || 0);
               const currentPrice = totalLiquidity > 0 ? Number(market.totalYes || 0) / totalLiquidity : 0.5;
 
-              // 推送订单簿更新
-              const { triggerOrderbookUpdate } = await import('@/lib/pusher');
-              await triggerOrderbookUpdate(marketId, {
-                asks: asks.slice(0, 10),
-                bids: bids.slice(0, 10),
-                spread: asks.length > 0 && bids.length > 0 ? Math.max(0, asks[0].price - bids[0].price) : 0,
-                currentPrice,
-                ammLiquidity: {
-                  totalYes: Number(market.totalYes || 0),
-                  totalNo: Number(market.totalNo || 0),
-                  k: Number(market.ammK || 0),
+              // 🔥 修复：重新查询市场数据，确保使用最新的 totalYes/totalNo
+              const updatedMarket = await prisma.markets.findUnique({
+                where: { id: marketId },
+                select: {
+                  totalYes: true,
+                  totalNo: true,
+                  ammK: true,
                 },
               });
+
+              if (updatedMarket) {
+                // 重新计算AMM深度（使用更新后的市场数据）
+                const updatedAmmDepth = calculateAMMDepth(
+                  Number(updatedMarket.totalYes || 0),
+                  Number(updatedMarket.totalNo || 0),
+                  [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+                );
+
+                // 重新转换为订单簿格式
+                const updatedAsks: any[] = [];
+                const updatedBids: any[] = [];
+                
+                for (const depthPoint of updatedAmmDepth.slice(0, 5)) {
+                  if (depthPoint.depth > 0) {
+                    const entry = {
+                      price: depthPoint.outcome === Outcome.YES ? depthPoint.price : (1 - depthPoint.price),
+                      quantity: depthPoint.depth,
+                      total: depthPoint.depth * depthPoint.price,
+                      orderCount: -1, // AMM虚拟订单
+                    };
+                    
+                    if (depthPoint.outcome === Outcome.YES) {
+                      updatedBids.push(entry);
+                    } else {
+                      updatedAsks.push(entry);
+                    }
+                  }
+                }
+
+                const updatedTotalLiquidity = Number(updatedMarket.totalYes || 0) + Number(updatedMarket.totalNo || 0);
+                const updatedCurrentPrice = updatedTotalLiquidity > 0 ? Number(updatedMarket.totalYes || 0) / updatedTotalLiquidity : 0.5;
+
+                // 推送订单簿更新（使用更新后的市场数据）
+                const { triggerOrderbookUpdate } = await import('@/lib/pusher');
+                await triggerOrderbookUpdate(marketId, {
+                  asks: updatedAsks.slice(0, 5), // 🔥 修复：只推送5档
+                  bids: updatedBids.slice(0, 5), // 🔥 修复：只推送5档
+                  spread: updatedAsks.length > 0 && updatedBids.length > 0 ? Math.max(0, updatedAsks[0].price - updatedBids[0].price) : 0,
+                  currentPrice: updatedCurrentPrice,
+                  ammLiquidity: {
+                    totalYes: Number(updatedMarket.totalYes || 0),
+                    totalNo: Number(updatedMarket.totalNo || 0),
+                    k: Number(updatedMarket.ammK || 0),
+                  },
+                });
+              }
             }
           } catch (pusherError) {
             // Pusher推送失败不影响订单创建
