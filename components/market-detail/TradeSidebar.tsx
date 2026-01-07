@@ -399,9 +399,11 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     }
     
     // 🔥 使用预估成交价计算份额（AMM 公式自然决定价格）
-    estShares = netInvest > 0 && estimatedExecutionPrice > 0
+    // 🔥 修复：限制shares精度，避免3333333等无限小数
+    const rawShares = netInvest > 0 && estimatedExecutionPrice > 0
       ? netInvest / estimatedExecutionPrice
       : 0;
+    estShares = Math.round(rawShares * 10000) / 10000; // 保留4位小数
     estReturn = estShares * 1.0; // 潜在回报 = 份额 * $1（假设获胜）
   } else if (activeTab === "buy" && amountNum > 0 && calcPrice > 0 && orderType === 'LIMIT') {
     // 限价单：使用限价计算，不计算价格影响
