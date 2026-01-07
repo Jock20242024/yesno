@@ -209,13 +209,48 @@ export async function POST(request: Request) {
     // 浮点数精度：使用高精度计算，将金额转换为整数（分）进行计算，避免浮点数精度问题
     const PRECISION_MULTIPLIER = 100; // 将美元转换为分（cents）
     
+    // 🔥 修复：手续费优先级：市场级别手续费优先，如果没有则使用全局手续费
+    // 1. 优先使用市场的手续费率（如果市场设置了）
+    // 2. 如果市场手续费率为 null 或 0，则使用全局手续费率
+    let effectiveFeeRate = market.feeRate || 0;
+    
+    if (effectiveFeeRate <= 0) {
+      // 从 global_stats 表获取全局手续费率
+      try {
+        const globalFeeRate = await prisma.global_stats.findFirst({
+          where: {
+            label: 'GLOBAL_FEE_RATE',
+            isActive: true,
+          },
+          select: {
+            value: true,
+          },
+        });
+        
+        if (globalFeeRate?.value !== undefined && globalFeeRate.value > 0) {
+          effectiveFeeRate = globalFeeRate.value;
+          console.log(`💰 [Orders API] 使用全局手续费率: ${(effectiveFeeRate * 100).toFixed(2)}%`);
+        } else {
+          // 如果全局手续费率也未设置，使用默认值 0.05 (5%)
+          effectiveFeeRate = 0.05;
+          console.log(`💰 [Orders API] 使用默认手续费率: 5%`);
+        }
+      } catch (error) {
+        console.error('❌ [Orders API] 获取全局手续费率失败:', error);
+        // 降级：使用默认值 0.05
+        effectiveFeeRate = 0.05;
+      }
+    } else {
+      console.log(`💰 [Orders API] 使用市场手续费率: ${(effectiveFeeRate * 100).toFixed(2)}%`);
+    }
+    
     // 将金额转换为整数（分）进行计算
     const amountCents = Math.round(amountNum * PRECISION_MULTIPLIER);
-    const feeDeductedCents = Math.round(amountNum * market.feeRate * PRECISION_MULTIPLIER);
+    const feeDeductedCents = Math.round(amountNum * effectiveFeeRate * PRECISION_MULTIPLIER);
     const netAmountCents = amountCents - feeDeductedCents;
     
     // 计算手续费（用于返回）
-    const feeDeducted = amountNum * market.feeRate;
+    const feeDeducted = amountNum * effectiveFeeRate;
     const netAmount = amountNum - feeDeducted;
     
     // 🔥 获取系统账户（在事务外检查，避免事务内查询失败）

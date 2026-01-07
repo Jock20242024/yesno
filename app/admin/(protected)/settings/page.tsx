@@ -1,11 +1,88 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 
 export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState<"commission" | "security">("commission");
   const [commissionRate, setCommissionRate] = useState("");
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // 🔥 新增：加载全局手续费率
+  useEffect(() => {
+    const loadGlobalFeeRate = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch('/api/admin/settings/global-fee-rate');
+        const result = await response.json();
+        if (result.success && result.data?.feeRate !== undefined) {
+          // 转换为百分比显示（例如：0.05 -> 5）
+          setCommissionRate((result.data.feeRate * 100).toFixed(2));
+        }
+      } catch (error) {
+        console.error('❌ [Settings] 加载全局手续费率失败:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (activeTab === "commission") {
+      loadGlobalFeeRate();
+    }
+  }, [activeTab]);
+
+  // 🔥 新增：保存全局手续费率
+  const handleSaveSettings = async () => {
+    if (!commissionRate || isNaN(parseFloat(commissionRate))) {
+      toast.error('请输入有效的手续费率');
+      return;
+    }
+
+    const feeRateNum = parseFloat(commissionRate);
+    if (feeRateNum < 0 || feeRateNum > 100) {
+      toast.error('手续费率必须在 0% 到 100% 之间');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      // 转换为小数（例如：5 -> 0.05）
+      const feeRateDecimal = feeRateNum / 100;
+      
+      const response = await fetch('/api/admin/settings/global-fee-rate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ feeRate: feeRateDecimal }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast.success('设置已保存', {
+          description: `全局手续费率已设置为 ${feeRateNum}%`,
+        });
+      } else {
+        toast.error('保存失败', {
+          description: result.error || '未知错误',
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ [Settings] 保存全局手续费率失败:', error);
+      toast.error('保存失败', {
+        description: error.message || '网络错误',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 🔥 新增：重置为默认值
+  const handleReset = () => {
+    setCommissionRate('5.00'); // 默认 5%
+  };
 
   return (
     <div className="mx-auto max-w-[1200px] flex flex-col gap-6">
@@ -63,18 +140,29 @@ export default function AdminSettingsPage() {
                         min="0"
                         max="100"
                         step="0.01"
-                        className="block w-full px-4 py-2.5 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white placeholder-[#9da8b9] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm"
-                        placeholder="例如：2.5"
+                        disabled={isLoading}
+                        className="block w-full px-4 py-2.5 border border-[#d1d5db] dark:border-[#3e4e63] rounded-lg bg-white dark:bg-[#101822] text-[#111418] dark:text-white placeholder-[#9da8b9] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        placeholder={isLoading ? "加载中..." : "例如：2.5"}
                       />
                       <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-[#637588] dark:text-[#9da8b9] text-sm">%</span>
                     </div>
-                    <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">设置平台从每笔交易中收取的佣金比例（占位符）</p>
+                    <p className="text-xs text-[#637588] dark:text-[#9da8b9] mt-1">
+                      设置平台从每笔交易中收取的全局手续费比例。如果市场创建时未指定手续费率，将使用此全局设置。
+                    </p>
                   </div>
                   <div className="flex gap-4 pt-4">
-                    <button className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm text-sm font-medium">
-                      保存设置
+                    <button 
+                      onClick={handleSaveSettings}
+                      disabled={isSaving || isLoading}
+                      className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSaving ? '保存中...' : '保存设置'}
                     </button>
-                    <button className="px-6 py-3 bg-white dark:bg-[#101822] border border-[#d1d5db] dark:border-[#3e4e63] text-[#111418] dark:text-white rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-[#283545] transition-colors text-sm font-medium">
+                    <button 
+                      onClick={handleReset}
+                      disabled={isSaving || isLoading}
+                      className="px-6 py-3 bg-white dark:bg-[#101822] border border-[#d1d5db] dark:border-[#3e4e63] text-[#111418] dark:text-white rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-[#283545] transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       重置
                     </button>
                   </div>
