@@ -127,7 +127,15 @@ export async function GET(request: NextRequest) {
 
             // 🚀 查询市场（与后台使用相同的字段）
             // 🔥 修复：添加错误处理，捕获连接错误
-            let markets = [];
+            let markets: Array<{
+              id: string;
+              templateId: string | null;
+              title: string;
+              period: number | null;
+              closingDate: Date;
+              status: string;
+              isFactory: boolean | null;
+            }> = [];
             try {
               markets = await prisma.markets.findMany({
                 where: whereCondition,
@@ -186,7 +194,15 @@ export async function GET(request: NextRequest) {
                   };
 
                   // 🔥 修复：添加错误处理，捕获连接错误
-                  let childMarkets = [];
+                  let childMarkets: Array<{
+                    id: string;
+                    templateId: string | null;
+                    title: string;
+                    period: number | null;
+                    closingDate: Date;
+                    status: string;
+                    isFactory: boolean | null;
+                  }> = [];
                   try {
                     childMarkets = await prisma.markets.findMany({
                       where: childWhereCondition,
