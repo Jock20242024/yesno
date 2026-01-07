@@ -279,17 +279,32 @@ export default function MarketDetailPage() {
     return mainPosition;
   }, [positionsData, id, displayYesPercent, displayNoPercent]);
 
-  // 生成图表数据（使用安全默认值）
+  // 🔥 修复：优先使用API返回的真实历史价格数据，如果没有则生成基于当前价格的模拟数据
   const priceData = useMemo(() => {
+    // 如果API返回了历史价格数据，直接使用
+    if ((marketData as any)?.priceHistory && Array.isArray((marketData as any).priceHistory) && (marketData as any).priceHistory.length > 0) {
+      return (marketData as any).priceHistory.map((point: any) => ({
+        time: point.time || new Date(point.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+        value: point.value || point.price || 0.5,
+        timestamp: point.timestamp || Date.now(),
+      }));
+    }
+    
+    // 如果没有历史数据，生成基于当前价格的模拟波动数据（用于展示）
     const data = [];
     const now = Date.now();
     const hours = 24;
     const baseValue = marketData ? (marketData.yesPercent / 100 || 0.5) : 0.5;
     
+    // 🔥 修复：生成更真实的波动曲线，而不是直线
     for (let i = hours; i >= 0; i--) {
       const time = new Date(now - i * 60 * 60 * 1000);
-      const variation = (Math.sin(i / 3) * 0.1) + (Math.random() * 0.05);
-      const value = Math.max(0.3, Math.min(0.9, baseValue + variation));
+      // 使用正弦波和随机波动生成更真实的曲线
+      const timeProgress = i / hours; // 0 到 1
+      const sineWave = Math.sin(timeProgress * Math.PI * 2) * 0.1; // 正弦波动
+      const randomVariation = (Math.random() - 0.5) * 0.1; // 随机波动
+      const trend = (baseValue - 0.5) * (1 - timeProgress * 0.3); // 趋势回归
+      const value = Math.max(0.01, Math.min(0.99, baseValue + sineWave + randomVariation + trend));
       
       data.push({
         time: time.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
