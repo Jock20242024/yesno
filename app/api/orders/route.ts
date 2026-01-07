@@ -3,6 +3,7 @@ import { DBService } from '@/lib/dbService';
 import { MarketStatus, Outcome } from '@/types/data';
 import { requireAuth } from '@/lib/auth/utils';
 import { prisma } from '@/lib/prisma';
+import { executeTransaction } from '@/lib/prismaTransaction';
 import { TransactionType, TransactionStatus, PositionStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { distributeCommission } from '@/lib/services/commission';
@@ -263,9 +264,9 @@ export async function POST(request: Request) {
 
     }
 
-    // 使用 Prisma 事务确保原子性
+    // 🔥 优化：使用统一的事务工具函数，提高交易速度并处理连接问题
     try {
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await executeTransaction(async (tx) => {
         // 🔥 1. 资金划转：用户扣除总金额，系统账户增加对应金额
         const userBalanceCents = Math.round(user.balance * PRECISION_MULTIPLIER);
         const newBalanceCents = userBalanceCents - amountCents;

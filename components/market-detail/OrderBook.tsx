@@ -237,10 +237,10 @@ export default function OrderBook({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-pm-border">
-                  {/* 卖单（从高到低显示，但实际排序是从低到高） */}
+                  {/* 卖单（从高到低显示） */}
                   {orderBookData.asks
                     .slice()
-                    .reverse() // 反转数组，使价格最高的卖单显示在最上面
+                    .sort((a, b) => b.price - a.price) // 🔥 修复：按价格从高到低排序，移除reverse()
                     .map((order: any, index: number) => (
                       <tr
                         key={`sell-${index}`}

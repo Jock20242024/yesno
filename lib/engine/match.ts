@@ -127,8 +127,11 @@ export function calculateCPMMPrice(
     console.warn(`⚠️ [CPMM] K值变化超过0.01: 原始K=${k}, 新K=${newK}, 差值=${kDiff}`);
   }
 
+  // 🔥 修复：限制shares精度，避免3333333等无限小数
+  const roundedShares = Math.round(shares * 10000) / 10000; // 保留4位小数
+  
   return {
-    shares: Math.max(0, shares),
+    shares: Math.max(0, roundedShares),
     newTotalYes: Math.max(0, newTotalYes),
     newTotalNo: Math.max(0, newTotalNo),
     executionPrice: Math.max(0.01, Math.min(0.99, executionPrice)),

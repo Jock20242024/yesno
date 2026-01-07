@@ -406,9 +406,11 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
   } else if (activeTab === "buy" && amountNum > 0 && calcPrice > 0 && orderType === 'LIMIT') {
     // 限价单：使用限价计算，不计算价格影响
     const netInvest = amountNum * (1 - FEE_RATE);
-    estShares = netInvest > 0 && calcPrice > 0
+    // 🔥 修复：限制shares精度，避免3333333等无限小数
+    const rawShares = netInvest > 0 && calcPrice > 0
       ? netInvest / calcPrice
       : 0;
+    estShares = Math.round(rawShares * 10000) / 10000; // 保留4位小数
     estReturn = estShares * 1.0;
     estimatedExecutionPrice = limitPriceNum; // 限价单的成交价就是限价
     priceImpact = 0;
@@ -1258,7 +1260,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
                 <div className="flex justify-between items-baseline">
                   <span className="text-pm-text-dim text-sm">{t('market.trade.estimated_shares')}</span>
                   <span className="text-2xl font-bold text-white font-mono tabular-nums">
-                    {estShares > 0 ? estShares.toFixed(4) : "0.0000"}
+                    {estShares > 0 ? parseFloat(estShares.toFixed(4)).toString() : "0.0000"}
                   </span>
                 </div>
               </div>
