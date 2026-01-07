@@ -1121,7 +1121,14 @@ export async function POST(request: Request) {
       }
     }
 
+    // 🔥 管理员权限：允许管理员手动创建市场
+    // 为新市场生成 id 和 templateId（使用 manual- 前缀标识手动创建）
+    const crypto = await import('crypto');
+    const marketId = crypto.randomUUID();
+    const templateId = `manual-${crypto.randomUUID()}`;
+
     const marketData: any = {
+      id: marketId, // 🔥 修复：必须提供 id 字段
       title: body.title,
       description: body.description || "",
       closingDate: new Date(body.closingDate || endTime),
@@ -1134,16 +1141,11 @@ export async function POST(request: Request) {
       manualOffset: 0,
       resolvedOutcome: null,
       isHot: finalIsHot, // 🔥 修复：如果包含热门分类，自动设置为 true
+      templateId: templateId,
       // 🔥 第一步：如果指定了流动性注入，初始化 totalYes 和 totalNo（默认 50/50 分配）
       totalYes: shouldInjectLiquidity ? liquidityAmount * 0.5 : 0,
       totalNo: shouldInjectLiquidity ? liquidityAmount * 0.5 : 0,
     };
-
-    // 🔥 管理员权限：允许管理员手动创建市场
-    // 为新市场生成 templateId（使用 manual- 前缀标识手动创建）
-    const crypto = await import('crypto');
-    const templateId = `manual-${crypto.randomUUID()}`;
-    marketData.templateId = templateId;
 
     // 🔥 修正 prisma.markets.create 调用：根据 MarketCategory 中间表结构，使用 create 语法
     // 参考 scripts/seed-pending-markets.ts 的实现方式
