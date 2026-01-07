@@ -582,7 +582,7 @@ export async function POST(request: Request) {
         };
       });
       
-      const { updatedUser, updatedMarket, newOrder, updatedPosition, calculatedShares, executionPrice } = result;
+      const { updatedUser, updatedMarket, newOrder, updatedPosition, calculatedShares, executionPrice, orderDetails } = result;
 
       // 🔥 新增：详细日志记录，用于调试持仓计算问题
       if (validOrderType === 'MARKET' && calculatedShares && executionPrice) {
@@ -593,21 +593,19 @@ export async function POST(request: Request) {
           outcome: outcomeSelection,
           amount: amountNum,
           feeDeducted,
-          netAmount,
+          netAmount: orderDetails?.netAmount || netAmount,
           calculatedShares,
           executionPrice,
-          positionBefore: existingPosition ? {
-            shares: existingPosition.shares,
-            avgPrice: existingPosition.avgPrice,
-          } : null,
+          positionBefore: orderDetails?.existingPositionBefore || null,
           positionAfter: updatedPosition ? {
             shares: updatedPosition.shares,
             avgPrice: updatedPosition.avgPrice,
           } : null,
-          // 🔥 验证：shares * avgPrice 应该接近实际投入金额
+          // 🔥 验证：shares * avgPrice 应该接近实际投入金额（累计）
+          // 注意：这里只验证单笔订单，累计验证需要在所有订单完成后进行
           costByShares: updatedPosition ? updatedPosition.shares * updatedPosition.avgPrice : 0,
-          actualInvested: netAmount,
-          difference: updatedPosition ? Math.abs(updatedPosition.shares * updatedPosition.avgPrice - netAmount) : 0,
+          actualInvested: orderDetails?.netAmount || netAmount,
+          difference: updatedPosition ? Math.abs(updatedPosition.shares * updatedPosition.avgPrice - (orderDetails?.netAmount || netAmount)) : 0,
         });
       }
 
