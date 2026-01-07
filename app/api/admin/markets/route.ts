@@ -120,13 +120,63 @@ export async function GET(request: NextRequest) {
         console.error(`⚠️ [Admin Markets GET] 维护任务失败: ${maintenanceError.message}，继续执行查询`);
       }
       
-      // 🔥 查询所有市场（现在 ammK 和 initialLiquidity 字段已存在于数据库中）
-      const dbMarketsAll = await prisma.markets.findMany({
-        where: whereCondition,
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
+      // 🔥 查询所有市场（使用 try-catch 处理可能的字段不存在错误）
+      let dbMarketsAll: any[] = [];
+      try {
+        dbMarketsAll = await prisma.markets.findMany({
+          where: whereCondition,
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
+      } catch (queryError: any) {
+        // 🔥 如果查询失败（可能是字段不存在），尝试使用 select 排除可能不存在的字段
+        if (queryError.message?.includes('ammK') || queryError.message?.includes('initialLiquidity')) {
+          console.warn('⚠️ [Admin Markets GET] 检测到字段不存在，使用 select 排除这些字段');
+          dbMarketsAll = await prisma.markets.findMany({
+            where: whereCondition,
+            orderBy: {
+              createdAt: 'desc',
+            },
+            select: {
+              id: true,
+              title: true,
+              titleZh: true,
+              description: true,
+              descriptionZh: true,
+              closingDate: true,
+              status: true,
+              resolvedOutcome: true,
+              totalVolume: true,
+              totalYes: true,
+              totalNo: true,
+              feeRate: true,
+              category: true,
+              categorySlug: true,
+              createdAt: true,
+              updatedAt: true,
+              isHot: true,
+              externalId: true,
+              externalSource: true,
+              noProbability: true,
+              yesProbability: true,
+              externalVolume: true,
+              internalVolume: true,
+              manualOffset: true,
+              source: true,
+              isActive: true,
+              reviewStatus: true,
+              templateId: true,
+              period: true,
+              isFactory: true,
+              rank: true,
+            },
+          });
+        } else {
+          // 其他错误直接抛出
+          throw queryError;
+        }
+      }
       
       // 🔥 分离需要显示的市场
       // 🚀 修复：工厂市场不应该被48小时过滤规则影响（36小时窗口需要显示所有场次）
