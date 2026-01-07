@@ -164,12 +164,19 @@ export async function GET(
 
     // 🔥 8. 添加AMM虚拟订单（自动补全盘口）
     // 如果真实挂单不足，自动显示由AMM生成的虚拟挂单
-    const { calculateAMMDepth } = await import('@/lib/engine/match');
-    const ammDepth = calculateAMMDepth(
-      Number(market.totalYes || 0),
-      Number(market.totalNo || 0),
-      [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
-    );
+    // 🔥 关键修复：只有在该市场有流动性时才生成AMM虚拟订单
+    const totalLiquidity = Number(market.totalYes || 0) + Number(market.totalNo || 0);
+    let ammDepth: Array<{ price: number; depth: number; outcome: Outcome }> = [];
+    
+    // 🔥 修复：只有当市场有流动性（totalYes + totalNo > 0）时才生成AMM虚拟订单
+    if (totalLiquidity > 0) {
+      const { calculateAMMDepth } = await import('@/lib/engine/match');
+      ammDepth = calculateAMMDepth(
+        Number(market.totalYes || 0),
+        Number(market.totalNo || 0),
+        [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+      );
+    }
 
     // 将AMM深度转换为虚拟订单
     const ammAsks: OrderBookEntry[] = [];

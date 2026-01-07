@@ -380,10 +380,10 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
           <div className="flex items-baseline gap-3 flex-wrap">
             {/* YES 价格显示 */}
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl md:text-4xl font-black text-pm-green tracking-tight">
+              <span className="text-xs font-bold text-pm-green tracking-tight">
                 {yesPercent}%
               </span>
-              <span className="text-lg font-bold text-pm-green">{t('market.chart.yes')}</span>
+              <span className="text-xs font-bold text-pm-green">{t('market.chart.yes')}</span>
               {priceChange24h !== null ? (
                 <span className={`flex items-center text-xs font-bold ${priceChange24h.isPositive ? 'text-pm-green bg-pm-green-dim' : 'text-red-500 bg-red-500/20'} px-2 py-0.5 rounded ml-2`}>
                   {priceChange24h.isPositive ? (
@@ -397,10 +397,10 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
             </div>
             {/* NO 价格显示 */}
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl md:text-4xl font-black text-pm-red tracking-tight">
+              <span className="text-xs font-bold text-pm-red tracking-tight">
                 {noPercent !== undefined ? noPercent : (100 - yesPercent)}%
               </span>
-              <span className="text-lg font-bold text-pm-red">{t('market.chart.no')}</span>
+              <span className="text-xs font-bold text-pm-red">{t('market.chart.no')}</span>
               {noPriceChange24h !== null ? (
                 <span className={`flex items-center text-xs font-bold ${noPriceChange24h.isPositive ? 'text-pm-green bg-pm-green-dim' : 'text-red-500 bg-red-500/20'} px-2 py-0.5 rounded ml-2`}>
                   {noPriceChange24h.isPositive ? (
@@ -564,10 +564,10 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
       <div className="flex items-baseline gap-3 mb-2 flex-wrap">
         {/* YES 价格显示 */}
         <div className="flex items-baseline gap-2">
-          <span className="text-3xl md:text-4xl font-black text-pm-green tracking-tight">
+          <span className="text-xs font-bold text-pm-green tracking-tight">
             {yesPercent}%
           </span>
-          <span className="text-lg font-bold text-pm-green">{t('market.chart.yes')}</span>
+          <span className="text-xs font-bold text-pm-green">{t('market.chart.yes')}</span>
           {priceChange24h !== null ? (
             <span className={`flex items-center text-xs font-bold ${priceChange24h.isPositive ? 'text-pm-green bg-pm-green-dim' : 'text-red-500 bg-red-500/20'} px-2 py-0.5 rounded ml-2`}>
               {priceChange24h.isPositive ? (
@@ -581,10 +581,10 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
         </div>
         {/* NO 价格显示 */}
         <div className="flex items-baseline gap-2">
-          <span className="text-3xl md:text-4xl font-black text-pm-red tracking-tight">
+          <span className="text-xs font-bold text-pm-red tracking-tight">
             {noPercent !== undefined ? noPercent : (100 - yesPercent)}%
           </span>
-          <span className="text-lg font-bold text-pm-red">{t('market.chart.no')}</span>
+          <span className="text-xs font-bold text-pm-red">{t('market.chart.no')}</span>
           {noPriceChange24h !== null ? (
             <span className={`flex items-center text-xs font-bold ${noPriceChange24h.isPositive ? 'text-pm-green bg-pm-green-dim' : 'text-red-500 bg-red-500/20'} px-2 py-0.5 rounded ml-2`}>
               {noPriceChange24h.isPositive ? (

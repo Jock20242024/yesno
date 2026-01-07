@@ -266,6 +266,12 @@ export function calculateAMMDepth(
 ): Array<{ price: number; depth: number; outcome: Outcome }> {
   const depth: Array<{ price: number; depth: number; outcome: Outcome }> = [];
 
+  // 🔥 关键修复：如果市场没有流动性（totalYes + totalNo <= 0），返回空数组
+  const totalLiquidity = totalYes + totalNo;
+  if (totalLiquidity <= 0) {
+    return depth; // 返回空数组，不生成任何虚拟订单
+  }
+
   for (const price of priceLevels) {
     // 🔥 修复：计算在该价格下可以买入多少份额
     // 使用固定测试金额计算深度，但total应该基于实际可成交金额
