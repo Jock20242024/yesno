@@ -553,6 +553,29 @@ export async function POST(request: Request) {
           // updatedMarket 保持为原始 market 对象（在前面已经设置为 market）
         }
         
+        // 🔥 在事务内保存 existingPosition 信息用于日志记录
+        let existingPositionInfo = null;
+        if (validOrderType === 'MARKET') {
+          const existingPos = await tx.positions.findFirst({
+            where: {
+              userId,
+              marketId,
+              outcome: outcomeSelection as Outcome,
+              status: PositionStatus.OPEN,
+            },
+            select: {
+              shares: true,
+              avgPrice: true,
+            },
+          });
+          if (existingPos) {
+            existingPositionInfo = {
+              shares: existingPos.shares,
+              avgPrice: existingPos.avgPrice,
+            };
+          }
+        }
+
         return {
           updatedUser,
           updatedMarket,
@@ -579,6 +602,11 @@ export async function POST(request: Request) {
           // 🔥 保存 calculatedShares 和 executionPrice 用于事务后的做市盈亏记录
           calculatedShares: calculatedShares,
           executionPrice: executionPrice,
+          // 🔥 新增：保存订单详情用于日志记录
+          orderDetails: {
+            netAmount,
+            existingPositionBefore: existingPositionInfo,
+          },
         };
       });
       
