@@ -207,19 +207,6 @@ export default function MarketDetailPage() {
     // 过滤出当前市场的持仓（API 已经过滤了，但为了安全再检查一次）
     const marketPositions = positionsData.filter((pos: any) => pos.marketId === id);
     
-    // 🔥 修复：确保 costBasis 字段被正确传递
-    if (marketPositions.length > 0) {
-      const pos = marketPositions[0];
-      return {
-        shares: pos.shares,
-        avgPrice: pos.avgPrice,
-        currentPrice: pos.currentPrice,
-        outcome: pos.outcome === 'YES' ? 'yes' : 'no',
-        costBasis: pos.costBasis, // 🔥 新增：传递实际投入金额
-        actualInvestedAmount: pos.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
-      };
-    }
-    
     if (marketPositions.length === 0) {
 
       return null;
@@ -252,40 +239,40 @@ export default function MarketDetailPage() {
       // 两个都有持仓，显示份额较多的
       if (yesPosition.shares >= noPosition.shares) {
         mainPosition = {
-          shares: yesPosition.shares,
-          avgPrice: yesPosition.avgPrice,
+          shares: Number(yesPosition.shares),
+          avgPrice: Number(yesPosition.avgPrice),
           currentPrice: displayYesPercent / 100,
-          outcome: "yes",
-          costBasis: yesPosition.costBasis, // 🔥 新增：传递实际投入金额
-          actualInvestedAmount: yesPosition.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
+          outcome: "yes" as const, // 🔥 修复：使用 as const 确保类型正确
+          costBasis: yesPosition.costBasis ? Number(yesPosition.costBasis) : undefined, // 🔥 新增：传递实际投入金额
+          actualInvestedAmount: yesPosition.actualInvestedAmount ? Number(yesPosition.actualInvestedAmount) : undefined, // 🔥 新增：传递实际投入金额（用于调试）
         };
       } else {
         mainPosition = {
-          shares: noPosition.shares,
-          avgPrice: noPosition.avgPrice,
+          shares: Number(noPosition.shares),
+          avgPrice: Number(noPosition.avgPrice),
           currentPrice: displayNoPercent / 100,
-          outcome: "no",
-          costBasis: noPosition.costBasis, // 🔥 新增：传递实际投入金额
-          actualInvestedAmount: noPosition.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
+          outcome: "no" as const, // 🔥 修复：使用 as const 确保类型正确
+          costBasis: noPosition.costBasis ? Number(noPosition.costBasis) : undefined, // 🔥 新增：传递实际投入金额
+          actualInvestedAmount: noPosition.actualInvestedAmount ? Number(noPosition.actualInvestedAmount) : undefined, // 🔥 新增：传递实际投入金额（用于调试）
         };
       }
     } else if (hasYesPosition) {
       mainPosition = {
-        shares: yesPosition.shares,
-        avgPrice: yesPosition.avgPrice,
+        shares: Number(yesPosition.shares),
+        avgPrice: Number(yesPosition.avgPrice),
         currentPrice: displayYesPercent / 100,
-        outcome: "yes",
-        costBasis: yesPosition.costBasis, // 🔥 新增：传递实际投入金额
-        actualInvestedAmount: yesPosition.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
+        outcome: "yes" as const, // 🔥 修复：使用 as const 确保类型正确
+        costBasis: yesPosition.costBasis ? Number(yesPosition.costBasis) : undefined, // 🔥 新增：传递实际投入金额
+        actualInvestedAmount: yesPosition.actualInvestedAmount ? Number(yesPosition.actualInvestedAmount) : undefined, // 🔥 新增：传递实际投入金额（用于调试）
       };
     } else if (hasNoPosition) {
       mainPosition = {
-        shares: noPosition.shares,
-        avgPrice: noPosition.avgPrice,
+        shares: Number(noPosition.shares),
+        avgPrice: Number(noPosition.avgPrice),
         currentPrice: displayNoPercent / 100,
-        outcome: "no",
-        costBasis: noPosition.costBasis, // 🔥 新增：传递实际投入金额
-        actualInvestedAmount: noPosition.actualInvestedAmount, // 🔥 新增：传递实际投入金额（用于调试）
+        outcome: "no" as const, // 🔥 修复：使用 as const 确保类型正确
+        costBasis: noPosition.costBasis ? Number(noPosition.costBasis) : undefined, // 🔥 新增：传递实际投入金额
+        actualInvestedAmount: noPosition.actualInvestedAmount ? Number(noPosition.actualInvestedAmount) : undefined, // 🔥 新增：传递实际投入金额（用于调试）
       };
     }
     
