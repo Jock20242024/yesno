@@ -97,25 +97,14 @@ export const authOptions: NextAuthConfig = {
           }
 
           // 🔥 修复：检查用户是否是管理员
-          // 如果是管理员，检查登录来源（通过检查 request 中的 headers）
+          // 如果是管理员，必须通过管理员登录入口登录（需要 adminLogin 标记）
           if (user.isAdmin === true) {
-            // 尝试从 request 中获取 referer 或 origin 来判断登录来源
-            const referer = (request as any)?.headers?.get?.('referer') || '';
-            const origin = (request as any)?.headers?.get?.('origin') || '';
+            // 检查是否有 adminLogin 标记（只有管理员登录页面会传递这个标记）
+            const isAdminLogin = (credentials as any).adminLogin === true;
             
-            // 如果是从前端登录页面（/login）调用的，拒绝登录
-            // 管理员只能通过 /admin/login 登录
-            if (referer.includes('/login') && !referer.includes('/admin/login')) {
+            if (!isAdminLogin) {
+              // 管理员尝试通过前端登录入口登录，拒绝
               throw new Error("ADMIN_MUST_USE_ADMIN_LOGIN");
-            }
-            // 如果 origin 包含前端域名但不包含 /admin/login，也拒绝
-            if (origin && !referer.includes('/admin/login') && !origin.includes('/admin')) {
-              // 检查是否是前端登录页面的调用
-              // 通过检查是否有 callbackUrl 参数来判断
-              const callbackUrl = (request as any)?.query?.callbackUrl || '';
-              if (!callbackUrl.includes('/admin')) {
-                throw new Error("ADMIN_MUST_USE_ADMIN_LOGIN");
-              }
             }
           }
 
