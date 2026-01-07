@@ -1176,6 +1176,7 @@ export async function POST(request: Request) {
       isHot: finalIsHot, // 🔥 修复：如果包含热门分类，自动设置为 true
       templateId: templateId,
       updatedAt: new Date(), // 🔥 修复：必须提供 updatedAt 字段
+      feeRate: parsedFeeRate, // 🔥 修复：保存用户设置的手续费率，而不是使用默认值
       // 🔥 第一步：如果指定了流动性注入，初始化 totalYes 和 totalNo（默认 50/50 分配）
       totalYes: shouldInjectLiquidity ? liquidityAmount * 0.5 : 0,
       totalNo: shouldInjectLiquidity ? liquidityAmount * 0.5 : 0,
