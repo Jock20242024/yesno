@@ -1308,6 +1308,9 @@ export async function POST(request: Request) {
       return newMarket;
     });
 
+    // 🔥 修复：result 就是 newMarket
+    const newMarket = result;
+
     // 处理 BigInt 序列化并返回
     return new Response(JSON.stringify({ 
       success: true,
