@@ -61,26 +61,63 @@ export async function GET(request: Request) {
       );
     }
 
-    // 3. 从Position表查询持仓
-    const positions = await prisma.positions.findMany({
-      where: whereClause,
-      include: {
-        markets: {
-          select: {
-            id: true,
-            title: true,
-            totalYes: true,
-            totalNo: true,
-            status: true,
-            resolvedOutcome: true, // 🔥 必须包含：用于计算已结算市场的价格
-            closingDate: true, // 添加关闭日期，用于已结束列表的排序
+    // 3. 从Position表查询持仓 - 添加连接检查和重试逻辑
+    let positions: any[] = [];
+    try {
+      await prisma.$connect();
+      positions = await prisma.positions.findMany({
+        where: whereClause,
+        include: {
+          markets: {
+            select: {
+              id: true,
+              title: true,
+              totalYes: true,
+              totalNo: true,
+              status: true,
+              resolvedOutcome: true, // 🔥 必须包含：用于计算已结算市场的价格
+              closingDate: true, // 添加关闭日期，用于已结束列表的排序
+            },
           },
         },
-      },
-      orderBy: type === 'history' 
-        ? { updatedAt: 'desc' } // 已结束的按更新时间倒序（最新的在前）
-        : { updatedAt: 'desc' },
-    });
+        orderBy: type === 'history' 
+          ? { updatedAt: 'desc' } // 已结束的按更新时间倒序（最新的在前）
+          : { updatedAt: 'desc' },
+      });
+    } catch (positionError: any) {
+      console.error('❌ [Positions API] 查询持仓失败:', positionError);
+      if (positionError.message?.includes('Engine is not yet connected') || 
+          positionError.message?.includes('Engine was empty')) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+          positions = await prisma.positions.findMany({
+            where: whereClause,
+            include: {
+              markets: {
+                select: {
+                  id: true,
+                  title: true,
+                  totalYes: true,
+                  totalNo: true,
+                  status: true,
+                  resolvedOutcome: true,
+                  closingDate: true,
+                },
+              },
+            },
+            orderBy: type === 'history' 
+              ? { updatedAt: 'desc' }
+              : { updatedAt: 'desc' },
+          });
+        } catch (retryError) {
+          console.error('❌ [Positions API] 重试查询持仓失败:', retryError);
+          positions = []; // 降级：返回空数组
+        }
+      } else {
+        positions = []; // 降级：返回空数组
+      }
+    }
 
     // 4. 根据 type 进行二次过滤
     let filteredPositions = positions;
