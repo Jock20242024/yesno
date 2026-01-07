@@ -484,6 +484,10 @@ export async function POST(request: Request) {
         let updatedPosition = null;
         let finalMarket = updatedMarket;
         
+        // 🔥 保存 calculatedShares 和 executionPrice 用于事务后的做市盈亏记录
+        let savedCalculatedShares = calculatedShares;
+        let savedExecutionPrice = executionPrice;
+        
         if (validOrderType === 'MARKET') {
           // ========== MARKET 订单：立即成交，创建 Position ==========
           // 🔥 注意：calculatedShares 和 executionPrice 已经在步骤 2 中计算完成
@@ -562,7 +566,7 @@ export async function POST(request: Request) {
         };
       });
       
-      const { updatedUser, updatedMarket, newOrder, updatedPosition } = result;
+      const { updatedUser, updatedMarket, newOrder, updatedPosition, calculatedShares, executionPrice } = result;
 
       // 🔥 返佣分发：只有在 MARKET 订单成交后才分发返佣
       if (validOrderType === 'MARKET' && newOrder.status === 'FILLED') {
