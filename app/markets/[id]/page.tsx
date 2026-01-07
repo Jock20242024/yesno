@@ -446,7 +446,7 @@ export default function MarketDetailPage() {
                 noData={(marketData as any)?.noPriceData}
                 hideNavigation={false}
                 isFactory={!!((marketData as any)?.isFactory || (marketData as any)?.templateId)}
-                volume={(marketData as any)?.totalVolume || (marketData as any)?.volume || 0}
+                volume={(marketData as any)?.totalVolume ?? (marketData as any)?.volume ?? undefined}
               />
             </div>
 
