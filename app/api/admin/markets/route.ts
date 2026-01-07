@@ -120,45 +120,11 @@ export async function GET(request: NextRequest) {
         console.error(`⚠️ [Admin Markets GET] 维护任务失败: ${maintenanceError.message}，继续执行查询`);
       }
       
-      // 🔥 修复：使用 select 排除可能不存在的字段（ammK, initialLiquidity）
-      // 这些字段在数据库中可能尚未通过迁移添加
+      // 🔥 查询所有市场（现在 ammK 和 initialLiquidity 字段已存在于数据库中）
       const dbMarketsAll = await prisma.markets.findMany({
         where: whereCondition,
         orderBy: {
           createdAt: 'desc',
-        },
-        select: {
-          id: true,
-          title: true,
-          titleZh: true,
-          description: true,
-          descriptionZh: true,
-          closingDate: true,
-          status: true,
-          resolvedOutcome: true,
-          totalVolume: true,
-          totalYes: true,
-          totalNo: true,
-          feeRate: true,
-          category: true,
-          categorySlug: true,
-          createdAt: true,
-          updatedAt: true,
-          isHot: true,
-          externalId: true,
-          externalSource: true,
-          noProbability: true,
-          yesProbability: true,
-          externalVolume: true,
-          internalVolume: true,
-          manualOffset: true,
-          source: true,
-          isActive: true,
-          reviewStatus: true,
-          templateId: true,
-          period: true,
-          isFactory: true,
-          rank: true,
         },
       });
       
