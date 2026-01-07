@@ -58,11 +58,15 @@ interface AuditData {
     shares: number;
     avgPrice: number;
     cost: number;
+    costByAvgPrice?: number;
     currentPrice: number;
     currentValue: number;
     pnl: number;
     marketStatus: string;
     resolvedOutcome: string | null;
+    actualInvestedAmount: number;
+    costVsInvestedDifference: number;
+    isCostCorrect: boolean;
   }>;
   deposits: Array<{
     id: string;
