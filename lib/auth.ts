@@ -100,7 +100,9 @@ export const authOptions: NextAuthConfig = {
           // 如果是管理员，必须通过管理员登录入口登录（需要 adminLogin 标记）
           if (user.isAdmin === true) {
             // 检查是否有 adminLogin 标记（只有管理员登录页面会传递这个标记）
-            const isAdminLogin = (credentials as any).adminLogin === true;
+            // 🔥 修复：支持字符串 "true" 和布尔值 true（NextAuth 可能将值转换为字符串）
+            const adminLoginValue = (credentials as any).adminLogin;
+            const isAdminLogin = adminLoginValue === true || adminLoginValue === "true" || adminLoginValue === 1 || adminLoginValue === "1";
             
             if (!isAdminLogin) {
               // 管理员尝试通过前端登录入口登录，拒绝
