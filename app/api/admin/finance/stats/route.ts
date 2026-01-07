@@ -18,10 +18,21 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    // 权限验证：使用 NextAuth
-    const session = await auth();
-    if (!session || !session.user || !(session.user as any).isAdmin) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    // 🔥 统一权限验证：使用统一的管理员权限验证函数
+    const { verifyAdminAccess, createUnauthorizedResponse } = await import('@/lib/adminAuth');
+    const authResult = await verifyAdminAccess(request);
+    
+    if (!authResult.success || !authResult.isAdmin) {
+      console.error('❌ [Finance Stats API] 权限验证失败:', {
+        success: authResult.success,
+        isAdmin: authResult.isAdmin,
+        userEmail: authResult.userEmail,
+        error: authResult.error,
+      });
+      return createUnauthorizedResponse(
+        authResult.error || 'Unauthorized. Admin access required.',
+        authResult.statusCode || 401
+      );
     }
 
     const now = new Date();

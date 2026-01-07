@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DBService } from '@/lib/dbService'; // 🔥 修复：使用正确的 dbService 而不是 mockData
 import { Market, MarketStatus, Outcome } from '@/types/data';
 import { prisma } from '@/lib/prisma';
-import { auth } from "@/lib/authExport";
+import { verifyAdminAccess, createUnauthorizedResponse } from '@/lib/adminAuth';
 import { aggregateMarketsByTemplate, countUniqueMarketSeries } from '@/lib/marketAggregation';
 import dayjs from '@/lib/dayjs';
 
@@ -21,37 +21,19 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-
-    // 权限校验：使用 NextAuth session 验证管理员身份
-    const session = await auth();
+    // 🔥 统一权限验证：使用统一的管理员权限验证函数
+    const authResult = await verifyAdminAccess(request);
     
-    // 🔥 修复 500 错误：确保 session 和 user 不为 null
-    if (!session || !session.user) {
-      console.error('❌ [Admin Markets GET] Session 验证失败: session 或 user 为空');
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Unauthorized. Admin access required.',
-        },
-        { status: 401 }
-      );
-    }
-    
-    // 🔥 多重校验：角色为 ADMIN 或 isAdmin 为 true 或邮箱为管理员邮箱
-    const userRole = (session.user as any).role;
-    const userEmail = session.user.email;
-    const isAdmin = (session.user as any).isAdmin;
-    const adminEmail = 'yesno@yesno.com'; // 管理员邮箱
-    
-    // 🔥 修复：增加 isAdmin 字段检查，兼容多种管理员验证方式
-    if (userRole !== 'ADMIN' && !isAdmin && userEmail !== adminEmail) {
-      console.error('❌ [Admin Markets GET] 权限验证失败:', { userRole, userEmail, isAdmin });
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Unauthorized. Admin access required.',
-        },
-        { status: 401 }
+    if (!authResult.success || !authResult.isAdmin) {
+      console.error('❌ [Admin Markets GET] 权限验证失败:', {
+        success: authResult.success,
+        isAdmin: authResult.isAdmin,
+        userEmail: authResult.userEmail,
+        error: authResult.error,
+      });
+      return createUnauthorizedResponse(
+        authResult.error || 'Unauthorized. Admin access required.',
+        authResult.statusCode || 401
       );
     }
 
@@ -957,36 +939,22 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: Request) {
   try {
-
-    // 权限校验：使用 NextAuth session 验证管理员身份
-
-    const session = await auth();
+    // 🔥 统一权限验证：使用统一的管理员权限验证函数
+    const authResult = await verifyAdminAccess(request as any);
     
-    // 🔥 修复 500 错误：确保 session 和 user 不为 null
-    if (!session || !session.user) {
-      console.error('❌ [Market API] Session 验证失败: session 或 user 为空');
+    if (!authResult.success || !authResult.isAdmin) {
+      console.error('❌ [Market API] 权限验证失败:', {
+        success: authResult.success,
+        isAdmin: authResult.isAdmin,
+        userEmail: authResult.userEmail,
+        error: authResult.error,
+      });
       return NextResponse.json(
         {
           success: false,
-          error: 'Unauthorized. Admin access required.',
+          error: authResult.error || 'Unauthorized. Admin access required.',
         },
-        { status: 401 }
-      );
-    }
-    
-    // 🔥 双重校验：角色为 ADMIN 或邮箱为管理员邮箱
-    const userRole = (session.user as any).role;
-    const userEmail = session.user.email;
-    const adminEmail = 'yesno@yesno.com'; // 管理员邮箱
-    
-    if (userRole !== 'ADMIN' && userEmail !== adminEmail) {
-      console.error('❌ [Market API] 权限验证失败:', { userRole, userEmail });
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Unauthorized. Admin access required.',
-        },
-        { status: 401 }
+        { status: authResult.statusCode || 401 }
       );
     }
 
