@@ -584,6 +584,33 @@ export async function POST(request: Request) {
       
       const { updatedUser, updatedMarket, newOrder, updatedPosition, calculatedShares, executionPrice } = result;
 
+      // 🔥 新增：详细日志记录，用于调试持仓计算问题
+      if (validOrderType === 'MARKET' && calculatedShares && executionPrice) {
+        console.log(`💰 [Orders API] 订单成交详情:`, {
+          orderId: newOrder.id,
+          userId,
+          marketId,
+          outcome: outcomeSelection,
+          amount: amountNum,
+          feeDeducted,
+          netAmount,
+          calculatedShares,
+          executionPrice,
+          positionBefore: existingPosition ? {
+            shares: existingPosition.shares,
+            avgPrice: existingPosition.avgPrice,
+          } : null,
+          positionAfter: updatedPosition ? {
+            shares: updatedPosition.shares,
+            avgPrice: updatedPosition.avgPrice,
+          } : null,
+          // 🔥 验证：shares * avgPrice 应该接近实际投入金额
+          costByShares: updatedPosition ? updatedPosition.shares * updatedPosition.avgPrice : 0,
+          actualInvested: netAmount,
+          difference: updatedPosition ? Math.abs(updatedPosition.shares * updatedPosition.avgPrice - netAmount) : 0,
+        });
+      }
+
       // 🔥 修复：在事务成功后，记录做市盈亏（移到事务外，避免事务中止）
       if (validOrderType === 'MARKET' && updatedMarket && calculatedShares && executionPrice) {
         try {
