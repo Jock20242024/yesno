@@ -91,6 +91,32 @@ export async function GET(request: NextRequest) {
     // 获取本月开始时间
     const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
+    // 🔥 数据库连接检查：确保 Prisma 引擎已连接
+    try {
+      await prisma.$connect();
+    } catch (dbError: any) {
+      console.error('❌ [Admin Dashboard Stats] 数据库连接失败:', dbError);
+      // 如果是连接错误，尝试重新连接
+      if (dbError.message?.includes('Response from the Engine was empty') || 
+          dbError.message?.includes('Engine is not yet connected')) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+        } catch (retryError) {
+          console.error('❌ [Admin Dashboard Stats] 重试连接失败:', retryError);
+          return NextResponse.json({
+            success: false,
+            error: 'Database connection failed',
+          }, { status: 503 });
+        }
+      } else {
+        return NextResponse.json({
+          success: false,
+          error: 'Database connection failed',
+        }, { status: 503 });
+      }
+    }
+
     // ========== 一、实时状态指标（不需要时间范围） ==========
     let totalUsers = 0;
     let activeUsers24h = 0;

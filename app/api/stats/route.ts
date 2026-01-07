@@ -58,6 +58,32 @@ function translateLabel(label: string, language: string): string {
  */
 export async function GET(request: NextRequest) {
   try {
+    // 🔥 数据库连接检查：确保 Prisma 引擎已连接
+    try {
+      await prisma.$connect();
+    } catch (dbError: any) {
+      console.error('❌ [Stats API] 数据库连接失败:', dbError);
+      // 如果是连接错误，尝试重新连接
+      if (dbError.message?.includes('Response from the Engine was empty') || 
+          dbError.message?.includes('Engine is not yet connected')) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+        } catch (retryError) {
+          console.error('❌ [Stats API] 重试连接失败:', retryError);
+          return NextResponse.json({
+            success: true,
+            data: [],
+          }, { status: 200 });
+        }
+      } else {
+        return NextResponse.json({
+          success: true,
+          data: [],
+        }, { status: 200 });
+      }
+    }
+
     // 🔥 从查询参数或 Accept-Language 头获取语言
     const { searchParams } = new URL(request.url);
     const langParam = searchParams.get('lang');

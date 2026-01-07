@@ -68,6 +68,41 @@ export async function GET() {
     // 🔥 身份识别标准化：直接从 session.user.id 获取用户 ID，一步直达查询
     const userId = session.user.id;
     
+    // 🔥 数据库连接检查：确保 Prisma 引擎已连接
+    try {
+      await prisma.$connect();
+    } catch (dbError: any) {
+      console.error('❌ [Assets API] 数据库连接失败:', dbError);
+      // 如果是连接错误，尝试重新连接
+      if (dbError.message?.includes('Response from the Engine was empty') || 
+          dbError.message?.includes('Engine is not yet connected')) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+        } catch (retryError) {
+          console.error('❌ [Assets API] 重试连接失败:', retryError);
+          // 返回降级数据
+          return NextResponse.json({
+            success: true,
+            data: {
+              balance: 0,
+              availableBalance: 0,
+              frozenBalance: 0,
+              positionsValue: 0,
+              totalBalance: 0,
+              totalEquity: 0,
+              historical: {
+                '1D': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+                '1W': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+                '1M': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+                '1Y': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+              },
+            },
+          }, { status: 200 });
+        }
+      }
+    }
+
     // 🔥 性能优化：直接基于 ID 查询，只查询必需的字段（balance）
     // 🔥 修复：处理数据库查询超时错误
     let user;
