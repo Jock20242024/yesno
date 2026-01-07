@@ -886,7 +886,7 @@ export async function GET(request: NextRequest) {
         totalPages,
       },
     }, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ [Admin Markets GET] ========== 获取市场列表失败 ==========');
     console.error('错误类型:', error instanceof Error ? error.constructor.name : typeof error);
     console.error('错误消息:', error instanceof Error ? error.message : String(error));
