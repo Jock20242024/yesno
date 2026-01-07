@@ -93,9 +93,26 @@ export async function GET(request: NextRequest) {
     });
 
     // 4. 计算订单总投入
+    // 🔥 修复：区分已成交和未成交订单
+    // 订单总额 = 所有订单的金额（包括未成交的LIMIT订单）
     const totalOrderAmount = orders.reduce((sum, order) => sum + Number(order.amount || 0), 0);
     const totalFeeDeducted = orders.reduce((sum, order) => sum + Number(order.feeDeducted || 0), 0);
     const totalNetAmount = totalOrderAmount - totalFeeDeducted;
+    
+    // 🔥 新增：计算已成交订单的金额（只有MARKET订单和已成交的LIMIT订单）
+    const filledOrders = orders.filter(order => 
+      order.status === 'FILLED' || 
+      (order.orderType === 'MARKET' && order.status !== 'CANCELLED')
+    );
+    const totalFilledOrderAmount = filledOrders.reduce((sum, order) => sum + Number(order.amount || 0), 0);
+    const totalFilledFeeDeducted = filledOrders.reduce((sum, order) => sum + Number(order.feeDeducted || 0), 0);
+    const totalFilledNetAmount = totalFilledOrderAmount - totalFilledFeeDeducted;
+    
+    // 🔥 新增：计算未成交订单的金额（PENDING状态的LIMIT订单）
+    const pendingOrders = orders.filter(order => order.status === 'PENDING');
+    const totalPendingOrderAmount = pendingOrders.reduce((sum, order) => sum + Number(order.amount || 0), 0);
+    const totalPendingFeeDeducted = pendingOrders.reduce((sum, order) => sum + Number(order.feeDeducted || 0), 0);
+    const totalPendingNetAmount = totalPendingOrderAmount - totalPendingFeeDeducted;
 
     // 5. 获取所有持仓
     const positions = await prisma.positions.findMany({
@@ -123,8 +140,26 @@ export async function GET(request: NextRequest) {
     let totalPositionValue = 0; // 当前持仓价值
 
     const positionDetails = positions.map((position) => {
+      // 🔥 修复：持仓总投入应该基于实际投入金额，而不是 shares * avgPrice
+      // avgPrice 是加权平均价格，用于计算盈亏，但不代表实际投入成本
+      // 实际投入成本 = 所有已成交订单的净投资额（amount - feeDeducted）
+      // 但为了简化，我们先用 shares * avgPrice 作为近似值
+      // 更准确的方法是：从订单记录中计算该持仓对应的所有订单的净投资额
+      
+      // 临时方案：使用 shares * avgPrice（这是当前UI显示的方式）
+      // 但我们需要验证这个值是否与实际投入一致
       const cost = Number(position.shares) * Number(position.avgPrice);
       totalPositionCost += cost;
+      
+      // 🔥 新增：计算该持仓对应的实际投入金额（从订单记录）
+      // 查找该市场、该方向的已成交订单
+      const positionOrders = filledOrders.filter(order => 
+        order.marketId === position.marketId && 
+        order.outcomeSelection === position.outcome
+      );
+      const actualInvestedAmount = positionOrders.reduce((sum, order) => {
+        return sum + (Number(order.amount || 0) - Number(order.feeDeducted || 0));
+      }, 0);
 
       // 计算当前价格
       let currentPrice = 0;
@@ -163,6 +198,10 @@ export async function GET(request: NextRequest) {
         pnl: value - cost,
         marketStatus: position.markets.status,
         resolvedOutcome: position.markets.resolvedOutcome,
+        // 🔥 新增：实际投入金额（从订单记录计算）
+        actualInvestedAmount: actualInvestedAmount,
+        costVsInvestedDifference: Math.abs(cost - actualInvestedAmount),
+        isCostCorrect: Math.abs(cost - actualInvestedAmount) <= 0.01,
       };
     });
 
@@ -222,9 +261,24 @@ export async function GET(request: NextRequest) {
       totalOrderAmount: totalOrderAmount,
       totalFeeDeducted: totalFeeDeducted,
       totalNetAmount: totalNetAmount,
+      // 🔥 新增：已成交订单统计
+      totalFilledOrderAmount: totalFilledOrderAmount,
+      totalFilledFeeDeducted: totalFilledFeeDeducted,
+      totalFilledNetAmount: totalFilledNetAmount,
+      // 🔥 新增：未成交订单统计
+      totalPendingOrderAmount: totalPendingOrderAmount,
+      totalPendingFeeDeducted: totalPendingFeeDeducted,
+      totalPendingNetAmount: totalPendingNetAmount,
       totalPositionCost: totalPositionCost,
       totalPositionValue: totalPositionValue,
       totalAssets: totalAssets,
+      // 🔥 新增：验证逻辑
+      positionCostVsFilledNetAmount: {
+        filledNetAmount: totalFilledNetAmount,
+        positionCost: totalPositionCost,
+        difference: totalFilledNetAmount - totalPositionCost,
+        isConsistent: Math.abs(totalFilledNetAmount - totalPositionCost) <= 0.01,
+      },
     };
 
     return NextResponse.json({
