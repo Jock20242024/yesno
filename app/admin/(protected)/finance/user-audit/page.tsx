@@ -16,9 +16,27 @@ interface FundFlow {
   totalOrderAmount: number;
   totalFeeDeducted: number;
   totalNetAmount: number;
+  totalFilledOrderAmount?: number;
+  totalFilledFeeDeducted?: number;
+  totalFilledNetAmount?: number;
+  totalPendingOrderAmount?: number;
+  totalPendingFeeDeducted?: number;
+  totalPendingNetAmount?: number;
   totalPositionCost: number;
   totalPositionValue: number;
   totalAssets: number;
+  positionCostVsFilledNetAmount?: {
+    filledNetAmount: number;
+    positionCost: number;
+    difference: number;
+    isConsistent: boolean;
+    explanation: string;
+  };
+  orderStats?: {
+    totalOrders: number;
+    filledOrders: number;
+    pendingOrders: number;
+  };
 }
 
 interface AuditData {
