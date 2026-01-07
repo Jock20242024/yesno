@@ -37,13 +37,15 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // 🔥 双重校验：角色为 ADMIN 或邮箱为管理员邮箱
+    // 🔥 多重校验：角色为 ADMIN 或 isAdmin 为 true 或邮箱为管理员邮箱
     const userRole = (session.user as any).role;
     const userEmail = session.user.email;
+    const isAdmin = (session.user as any).isAdmin;
     const adminEmail = 'yesno@yesno.com'; // 管理员邮箱
     
-    if (userRole !== 'ADMIN' && userEmail !== adminEmail) {
-      console.error('❌ [Admin Markets GET] 权限验证失败:', { userRole, userEmail });
+    // 🔥 修复：增加 isAdmin 字段检查，兼容多种管理员验证方式
+    if (userRole !== 'ADMIN' && !isAdmin && userEmail !== adminEmail) {
+      console.error('❌ [Admin Markets GET] 权限验证失败:', { userRole, userEmail, isAdmin });
       return NextResponse.json(
         {
           success: false,
@@ -1142,6 +1144,7 @@ export async function POST(request: Request) {
       resolvedOutcome: null,
       isHot: finalIsHot, // 🔥 修复：如果包含热门分类，自动设置为 true
       templateId: templateId,
+      updatedAt: new Date(), // 🔥 修复：必须提供 updatedAt 字段
       // 🔥 第一步：如果指定了流动性注入，初始化 totalYes 和 totalNo（默认 50/50 分配）
       totalYes: shouldInjectLiquidity ? liquidityAmount * 0.5 : 0,
       totalNo: shouldInjectLiquidity ? liquidityAmount * 0.5 : 0,
