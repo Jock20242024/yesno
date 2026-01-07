@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { signIn, useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -9,6 +9,18 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { data: session } = useSession();
+  const router = useRouter();
+
+  // 🔥 修复：如果已登录且是管理员，重定向到后台
+  useEffect(() => {
+    if (session?.user) {
+      const isAdmin = (session.user as any).isAdmin;
+      if (isAdmin === true) {
+        router.replace('/admin/dashboard');
+      }
+    }
+  }, [session, router]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,18 +58,36 @@ export default function AdminLoginPage() {
         console.log('🎉 [Admin Login] NextAuth 登录成功！');
         console.log('🔍 [Admin Login] 当前路径:', window.location.pathname);
         
-        // 🔥 绝杀修复：先清除所有 localStorage 缓存，确保没有旧数据干扰
-        console.log('🧹 [Admin Login] 清除 localStorage 缓存...');
-        try {
-          window.localStorage.clear();
-          console.log('✅ [Admin Login] localStorage 已清除');
-        } catch (clearError) {
-          console.warn('⚠️ [Admin Login] 清除 localStorage 失败:', clearError);
-        }
-        
-        // 🔥 绝杀修复：使用 replace 而不是 href，避免历史记录问题
-        console.log('🚀 [Admin Login] 执行硬跳转: window.location.replace("/admin/dashboard")');
-        window.location.replace('/admin/dashboard');
+        // 🔥 修复：等待 session 更新后验证用户是否是管理员
+        // 使用 setTimeout 等待 NextAuth session 更新
+        setTimeout(async () => {
+          // 重新获取 session 以验证 isAdmin
+          const response = await fetch('/api/auth/session');
+          const sessionData = await response.json();
+          
+          if (sessionData?.user) {
+            const isAdmin = (sessionData.user as any).isAdmin;
+            if (isAdmin !== true) {
+              console.error('❌ [Admin Login] 用户不是管理员，拒绝访问后台');
+              toast.error('您没有管理员权限，无法访问后台');
+              setIsLoading(false);
+              return;
+            }
+          }
+          
+          // 🔥 绝杀修复：先清除所有 localStorage 缓存，确保没有旧数据干扰
+          console.log('🧹 [Admin Login] 清除 localStorage 缓存...');
+          try {
+            window.localStorage.clear();
+            console.log('✅ [Admin Login] localStorage 已清除');
+          } catch (clearError) {
+            console.warn('⚠️ [Admin Login] 清除 localStorage 失败:', clearError);
+          }
+          
+          // 🔥 绝杀修复：使用 replace 而不是 href，避免历史记录问题
+          console.log('🚀 [Admin Login] 执行硬跳转: window.location.replace("/admin/dashboard")');
+          window.location.replace('/admin/dashboard');
+        }, 500); // 等待 500ms 让 session 更新
         return;
       }
 

@@ -84,6 +84,13 @@ function LoginForm() {
       }
 
       if (res.success && res.user) {
+        // 🔥 修复：检查用户是否是管理员，如果是管理员，重定向到后台
+        if (res.user.isAdmin === true) {
+          // 管理员用户不应该访问前端登录页，重定向到后台
+          window.location.href = '/admin/dashboard';
+          return;
+        }
+
         // 显示成功提示
         try {
           toast.success(t('auth.login.success'));
@@ -93,11 +100,7 @@ function LoginForm() {
 
         // 🔥 物理清除所有"自动跳转"：登录成功后，直接使用 window.location.href 进行物理硬跳转
         // 物理刷新页面会强制清除浏览器路由缓存，绕过 Next.js 的缓存陷阱
-        if (res.user.isAdmin) {
-          window.location.href = '/admin/dashboard';
-        } else {
-          window.location.href = redirect || '/';
-        }
+        window.location.href = redirect || '/';
       }
     } catch (err) {
       console.error('Login error:', err);
