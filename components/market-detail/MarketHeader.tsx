@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Clock, TrendingUp, Share2 } from "lucide-react";
+import { Clock, TrendingUp } from "lucide-react";
 import { MarketEvent } from "@/lib/data";
 import dayjs from "@/lib/dayjs"; // 🔥 使用全局初始化的 dayjs
 import { useLanguage } from "@/i18n/LanguageContext";
