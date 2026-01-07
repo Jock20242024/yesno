@@ -19,20 +19,40 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🔍 [Categories API] 收到请求:', request.url);
     
-    // 🔥 数据库连接检查
+    // 🔥 数据库连接检查：确保 Prisma 引擎已连接
     try {
+      // 检查连接状态，如果未连接则连接
       await prisma.$connect();
-    } catch (dbError) {
+    } catch (dbError: any) {
       console.error('❌ [Categories API] 数据库连接失败:', dbError);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Database connection failed',
-          data: [],
-          message: '无法连接到数据库，请检查 DATABASE_URL 配置'
-        },
-        { status: 503 }
-      );
+      // 如果是 "Response from the Engine was empty" 错误，尝试重新连接
+      if (dbError.message?.includes('Response from the Engine was empty') || 
+          dbError.message?.includes('Engine is not yet connected')) {
+        try {
+          // 等待一小段时间后重试
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+        } catch (retryError) {
+          console.error('❌ [Categories API] 重试连接失败:', retryError);
+          return NextResponse.json(
+            { 
+              success: true, 
+              data: [],
+              message: '数据库连接暂时不可用，请稍后重试'
+            },
+            { status: 200 }
+          );
+        }
+      } else {
+        return NextResponse.json(
+          { 
+            success: true, 
+            data: [],
+            message: '无法连接到数据库，请检查 DATABASE_URL 配置'
+          },
+          { status: 200 }
+        );
+      }
     }
     
     // 🔥 查询所有分类（包括子分类）
@@ -106,18 +126,47 @@ export async function GET(request: NextRequest) {
                 };
 
             // 🚀 查询市场（与后台使用相同的字段）
-            const markets = await prisma.markets.findMany({
-              where: whereCondition,
-              select: {
-                id: true,
-                templateId: true,
-                title: true,
-                period: true,
-                closingDate: true,
-                status: true,
-                isFactory: true,
-              },
-            });
+            // 🔥 修复：添加错误处理，捕获连接错误
+            let markets = [];
+            try {
+              markets = await prisma.markets.findMany({
+                where: whereCondition,
+                select: {
+                  id: true,
+                  templateId: true,
+                  title: true,
+                  period: true,
+                  closingDate: true,
+                  status: true,
+                  isFactory: true,
+                },
+              });
+            } catch (queryError: any) {
+              // 如果是连接错误，尝试重新连接后重试
+              if (queryError.message?.includes('Response from the Engine was empty') || 
+                  queryError.message?.includes('Engine is not yet connected')) {
+                try {
+                  await prisma.$connect();
+                  markets = await prisma.markets.findMany({
+                    where: whereCondition,
+                    select: {
+                      id: true,
+                      templateId: true,
+                      title: true,
+                      period: true,
+                      closingDate: true,
+                      status: true,
+                      isFactory: true,
+                    },
+                  });
+                } catch (retryError) {
+                  console.error('❌ [Categories API] 重试查询失败:', retryError);
+                  markets = []; // 返回空数组
+                }
+              } else {
+                throw queryError; // 其他错误继续抛出
+              }
+            }
 
             // 🚀 使用与后台相同的聚合逻辑
             const aggregatedMarkets = aggregateMarketsByTemplate(markets);
@@ -136,18 +185,47 @@ export async function GET(request: NextRequest) {
                     },
                   };
 
-                  const childMarkets = await prisma.markets.findMany({
-                    where: childWhereCondition,
-                    select: {
-                      id: true,
-                      templateId: true,
-                      title: true,
-                      period: true,
-                      closingDate: true,
-                      status: true,
-                      isFactory: true,
-                    },
-                  });
+                  // 🔥 修复：添加错误处理，捕获连接错误
+                  let childMarkets = [];
+                  try {
+                    childMarkets = await prisma.markets.findMany({
+                      where: childWhereCondition,
+                      select: {
+                        id: true,
+                        templateId: true,
+                        title: true,
+                        period: true,
+                        closingDate: true,
+                        status: true,
+                        isFactory: true,
+                      },
+                    });
+                  } catch (queryError: any) {
+                    // 如果是连接错误，尝试重新连接后重试
+                    if (queryError.message?.includes('Response from the Engine was empty') || 
+                        queryError.message?.includes('Engine is not yet connected')) {
+                      try {
+                        await prisma.$connect();
+                        childMarkets = await prisma.markets.findMany({
+                          where: childWhereCondition,
+                          select: {
+                            id: true,
+                            templateId: true,
+                            title: true,
+                            period: true,
+                            closingDate: true,
+                            status: true,
+                            isFactory: true,
+                          },
+                        });
+                      } catch (retryError) {
+                        console.error('❌ [Categories API] 重试子分类查询失败:', retryError);
+                        childMarkets = []; // 返回空数组
+                      }
+                    } else {
+                      throw queryError; // 其他错误继续抛出
+                    }
+                  }
 
                   const aggregatedChildMarkets = aggregateMarketsByTemplate(childMarkets);
                   return {
