@@ -91,26 +91,63 @@ export async function GET(request: NextRequest) {
     let language = langParam || (acceptLanguage.includes('zh') ? 'zh' : 'en');
     
     // 获取所有激活的全局指标（包含手动覆盖和偏移字段）
-    const stats = await prisma.global_stats.findMany({
-      where: {
-        isActive: true,
-      },
-      orderBy: [
-        { sortOrder: 'asc' },
-        { createdAt: 'asc' },
-      ],
-      select: {
-        id: true,
-        label: true,
-        value: true,
-        unit: true,
-        icon: true,
-        sortOrder: true,
-        isActive: true,
-        manualOffset: true,
-        overrideValue: true,
-      },
-    });
+    // 🔥 修复：添加错误处理，捕获连接错误
+    let stats = [];
+    try {
+      stats = await prisma.global_stats.findMany({
+        where: {
+          isActive: true,
+        },
+        orderBy: [
+          { sortOrder: 'asc' },
+          { createdAt: 'asc' },
+        ],
+        select: {
+          id: true,
+          label: true,
+          value: true,
+          unit: true,
+          icon: true,
+          sortOrder: true,
+          isActive: true,
+          manualOffset: true,
+          overrideValue: true,
+        },
+      });
+    } catch (queryError: any) {
+      // 如果是连接错误，尝试重新连接后重试
+      if (queryError.message?.includes('Response from the Engine was empty') || 
+          queryError.message?.includes('Engine is not yet connected')) {
+        try {
+          await prisma.$connect();
+          stats = await prisma.global_stats.findMany({
+            where: {
+              isActive: true,
+            },
+            orderBy: [
+              { sortOrder: 'asc' },
+              { createdAt: 'asc' },
+            ],
+            select: {
+              id: true,
+              label: true,
+              value: true,
+              unit: true,
+              icon: true,
+              sortOrder: true,
+              isActive: true,
+              manualOffset: true,
+              overrideValue: true,
+            },
+          });
+        } catch (retryError) {
+          console.error('❌ [Stats API] 重试查询失败:', retryError);
+          stats = []; // 返回空数组
+        }
+      } else {
+        throw queryError; // 其他错误继续抛出
+      }
+    }
 
     // 🔥 翻译 label：将数据库中的中文 label 转换为请求的语言
     const statsWithCalculated = stats.map(stat => {
