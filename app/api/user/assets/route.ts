@@ -177,8 +177,27 @@ export async function GET() {
 
     // ========== STEP 2: 深度日志埋点 - AvailableBalance 计算后 ==========
 
-    // 2. 获取用户所有订单
-    const orders = await DBService.findOrdersByUserId(userId);
+    // 2. 获取用户所有订单 - 添加连接检查
+    let orders: any[] = [];
+    try {
+      await prisma.$connect();
+      orders = await DBService.findOrdersByUserId(userId);
+    } catch (orderError: any) {
+      console.error('❌ [Assets API] 查询订单失败:', orderError);
+      if (orderError.message?.includes('Engine is not yet connected') || 
+          orderError.message?.includes('Engine was empty')) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+          orders = await DBService.findOrdersByUserId(userId);
+        } catch (retryError) {
+          console.error('❌ [Assets API] 重试查询订单失败:', retryError);
+          orders = []; // 降级：返回空数组
+        }
+      } else {
+        orders = []; // 降级：返回空数组
+      }
+    }
 
     // ========== 修复：计算冻结资金（待结算订单的总金额）==========
     // 冻结资金 = 所有未结算订单的金额总和
@@ -292,16 +311,60 @@ export async function GET() {
     const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
     const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000;
 
-    // 获取充值记录（用于计算历史余额）
-    const deposits = await prisma.deposits.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'asc' },
-    });
+    // 🔥 修复：获取充值记录（用于计算历史余额）- 添加连接检查和重试逻辑
+    let deposits: any[] = [];
+    try {
+      await prisma.$connect();
+      deposits = await prisma.deposits.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'asc' },
+      });
+    } catch (depositError: any) {
+      console.error('❌ [Assets API] 查询充值记录失败:', depositError);
+      if (depositError.message?.includes('Engine is not yet connected') || 
+          depositError.message?.includes('Engine was empty')) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+          deposits = await prisma.deposits.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'asc' },
+          });
+        } catch (retryError) {
+          console.error('❌ [Assets API] 重试查询充值记录失败:', retryError);
+          deposits = []; // 降级：返回空数组
+        }
+      } else {
+        deposits = []; // 降级：返回空数组
+      }
+    }
 
-    const withdrawals = await prisma.withdrawals.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'asc' },
-    });
+    let withdrawals: any[] = [];
+    try {
+      await prisma.$connect();
+      withdrawals = await prisma.withdrawals.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'asc' },
+      });
+    } catch (withdrawalError: any) {
+      console.error('❌ [Assets API] 查询提现记录失败:', withdrawalError);
+      if (withdrawalError.message?.includes('Engine is not yet connected') || 
+          withdrawalError.message?.includes('Engine was empty')) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+          withdrawals = await prisma.withdrawals.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'asc' },
+          });
+        } catch (retryError) {
+          console.error('❌ [Assets API] 重试查询提现记录失败:', retryError);
+          withdrawals = []; // 降级：返回空数组
+        }
+      } else {
+        withdrawals = []; // 降级：返回空数组
+      }
+    }
 
     // ========== 修复：计算历史总资产（基于充值/提现记录和Position历史）==========
     // 实际应该基于历史快照，这里使用简化计算
