@@ -41,15 +41,27 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         throw new Error('Database connection failed');
       }
 
-      const category = await prisma.categories.findFirst({
+      // 🔥 修复：支持按 slug 或 name 查询分类（兼容中文名称）
+      // 先按 slug 查询，如果找不到再按 name 查询
+      let category = await prisma.categories.findFirst({
         where: {
           slug: slug,
           status: 'active',
         },
       });
 
+      // 如果按 slug 找不到，尝试按 name 查询（支持中文分类名称）
       if (!category) {
-        console.error(`❌ [Category Page] 分类不存在: slug="${slug}"`);
+        category = await prisma.categories.findFirst({
+          where: {
+            name: slug, // 将 slug 作为 name 查询
+            status: 'active',
+          },
+        });
+      }
+
+      if (!category) {
+        console.error(`❌ [Category Page] 分类不存在: slug="${slug}" (已尝试按 slug 和 name 查询)`);
         notFound(); // 返回 404 页面
       }
 
