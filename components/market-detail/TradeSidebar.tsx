@@ -646,6 +646,12 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       return;
     }
 
+    // 🔥 修复：防止重复提交 - 如果正在交易，直接返回
+    if (isTrading || isSubmitting) {
+      console.warn('⚠️ [TradeSidebar] 交易正在进行中，忽略重复请求');
+      return;
+    }
+
     setIsTrading(true);
     setIsSubmitting(true);
     setTradeMessage(null);

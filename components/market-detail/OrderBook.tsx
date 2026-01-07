@@ -237,10 +237,10 @@ export default function OrderBook({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-pm-border">
-                  {/* 卖单（从高到低显示） */}
+                  {/* 卖单（Asks，红色显示，从高到低） */}
                   {orderBookData.asks
                     .slice()
-                    .sort((a, b) => b.price - a.price) // 🔥 修复：按价格从高到低排序，移除reverse()
+                    .sort((a, b) => b.price - a.price) // 🔥 修复：按价格从高到低排序
                     .map((order: any, index: number) => (
                       <tr
                         key={`sell-${index}`}
@@ -277,7 +277,7 @@ export default function OrderBook({
                         : `--- ${t('market.orderbook.spread')}: N/A ---`}
                     </td>
                   </tr>
-                  {/* 买单（从高到低显示） */}
+                  {/* 买单（Bids，绿色显示，从高到低） */}
                   {orderBookData.bids.map((order: any, index: number) => (
                       <tr
                         key={`buy-${index}`}
