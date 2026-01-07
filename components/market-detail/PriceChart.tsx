@@ -553,9 +553,23 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
             {formatDate(currentDate)}, {t('market.time.local_time')} ({userTimeZone})
           </div>
           <div className="text-lg font-bold text-pm-green leading-none">
-            {yesPercent}% Yes
+            {yesPercent}% {t('market.chart.yes')}
+          </div>
+          <div className="text-lg font-bold text-pm-red leading-none mt-1">
+            {noPercent !== undefined ? noPercent : (100 - yesPercent)}% {t('market.chart.no')}
           </div>
         </div>
+        {/* 🔥 新增：右下角交易量统计 */}
+        {volume !== undefined && (
+          <div className="absolute bottom-4 right-4 bg-pm-card/90 border border-pm-border px-3 py-2 rounded-lg shadow-xl z-10">
+            <div className="text-[10px] text-pm-text-dim mb-0.5 font-medium uppercase tracking-wider">
+              {t('market.chart.volume')}
+            </div>
+            <div className="text-sm font-bold text-white leading-none">
+              ${typeof volume === 'number' ? volume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : volume}
+            </div>
+          </div>
+        )}
       </div>
       
       {/* 🔥 场次导航：核心滚动条 + 向上抽屉 */}
