@@ -211,6 +211,34 @@ export default function PriceChart({ yesPercent, noPercent, marketStatus = "open
     // 过滤数据：只保留时间戳在cutoffTime之后的数据点
     return allChartData.filter((point) => point.timestamp >= cutoffTime);
   }, [allChartData, timeRange]);
+
+  // 🔥 新增：NO 数据过滤（与 YES 数据使用相同的时间范围）
+  const noChartData = useMemo(() => {
+    if (!allNoChartData || allNoChartData.length === 0) return allNoChartData;
+    
+    const now = Date.now();
+    let cutoffTime: number;
+    
+    switch (timeRange) {
+      case "1H":
+        cutoffTime = now - 60 * 60 * 1000;
+        break;
+      case "24H":
+        cutoffTime = now - 24 * 60 * 60 * 1000;
+        break;
+      case "7D":
+        cutoffTime = now - 7 * 24 * 60 * 60 * 1000;
+        break;
+      case "30D":
+        cutoffTime = now - 30 * 24 * 60 * 60 * 1000;
+        break;
+      case "ALL":
+      default:
+        return allNoChartData;
+    }
+    
+    return allNoChartData.filter((point) => point.timestamp >= cutoffTime);
+  }, [allNoChartData, timeRange]);
   
   // 🔥 计算24小时价格变化百分比（基于真实历史数据）
   const priceChange24h = useMemo(() => {
