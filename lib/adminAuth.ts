@@ -4,7 +4,7 @@
  * 此文件提供统一的管理员权限验证函数，确保所有管理员 API 使用相同的验证逻辑
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/authExport';
 import { prisma } from '@/lib/prisma';
 
