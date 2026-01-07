@@ -92,7 +92,17 @@ export async function GET(request: NextRequest) {
     
     // 获取所有激活的全局指标（包含手动覆盖和偏移字段）
     // 🔥 修复：添加错误处理，捕获连接错误
-    let stats = [];
+    let stats: Array<{
+      id: string;
+      label: string;
+      value: number;
+      unit: string | null;
+      icon: string | null;
+      sortOrder: number;
+      isActive: boolean;
+      manualOffset: number;
+      overrideValue: number | null;
+    }> = [];
     try {
       stats = await prisma.global_stats.findMany({
         where: {
