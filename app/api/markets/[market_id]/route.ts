@@ -60,9 +60,16 @@ export async function GET(
       return createNoCacheResponse({ success: false, error: 'Market not found' }, 404);
     }
 
-    // 检查市场是否已发布且激活
-    if (market.reviewStatus !== 'PUBLISHED' || !market.isActive) {
-      console.error('❌ [Market Detail API] 市场未发布或未激活:', market_id);
+    // 🔥 修复：放宽检查条件，允许状态为 OPEN 的市场访问（即使 reviewStatus 不是 PUBLISHED）
+    // 检查市场是否激活，如果未激活则返回 404
+    if (!market.isActive) {
+      console.error('❌ [Market Detail API] 市场未激活:', market_id, { reviewStatus: market.reviewStatus, isActive: market.isActive });
+      return createNoCacheResponse({ success: false, error: 'Market not available' }, 404);
+    }
+    
+    // 🔥 修复：如果市场状态不是 OPEN，也返回 404（已关闭或已结算的市场不应该访问）
+    if (market.status !== 'OPEN') {
+      console.error('❌ [Market Detail API] 市场状态不是 OPEN:', market_id, { status: market.status });
       return createNoCacheResponse({ success: false, error: 'Market not available' }, 404);
     }
     
