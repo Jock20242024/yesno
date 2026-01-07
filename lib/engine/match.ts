@@ -280,13 +280,15 @@ export function calculateAMMDepth(
     
     try {
       const result = calculateCPMMPrice(totalYes, totalNo, outcome, testAmount);
-      // 计算在该价格下可以买入的份额数
-      const sharesAtPrice = testAmount / price;
-      // total应该是实际可成交金额，而不是固定的100
+      // 🔥 修复：使用CPMM计算出的实际份额，而不是简单的 testAmount / price
+      // result.shares 是实际可以获得的份额数
+      const sharesAtPrice = result.shares;
+      // 🔥 修复：total应该是实际可成交金额 = shares * executionPrice
+      // 但为了订单簿显示，我们使用 shares * price（目标价格）
       const actualTotal = sharesAtPrice * price;
       depth.push({ 
         price, 
-        depth: sharesAtPrice, // 深度是份额数
+        depth: sharesAtPrice, // 深度是份额数（基于CPMM实际计算）
         outcome 
       });
     } catch (error) {
