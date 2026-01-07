@@ -17,6 +17,7 @@ import {
   Activity,
   Film,
   LucideIcon,
+  Share2,
 } from "lucide-react";
 import { EthereumIcon } from "@/components/icons/EthereumIcon";
 
@@ -318,19 +319,67 @@ export default function MarketHeader({ event, status = "open", result = null, cl
           <IconComponent className="w-10 h-10" />
         </div>
       </div>
-      <div>
-        <h1 className="text-2xl md:text-3xl lg:text-[32px] font-bold text-white leading-tight mb-2">
-          {(() => {
-            // 🔥 根据语言环境显示对应的标题（不再使用实时翻译）
-            const market = event as any;
-            if (language === 'zh' && market.titleZh) {
-              // 优先使用已有的 titleZh
-              return market.titleZh;
-            }
-            // 英文环境或没有 titleZh，显示原始标题
-            return event.title;
-          })()}
-        </h1>
+      <div className="flex-1">
+        <div className="flex items-start justify-between gap-4 mb-2">
+          <h1 className="text-2xl md:text-3xl lg:text-[32px] font-bold text-white leading-tight flex-1">
+            {(() => {
+              // 🔥 根据语言环境显示对应的标题（不再使用实时翻译）
+              const market = event as any;
+              if (language === 'zh' && market.titleZh) {
+                // 优先使用已有的 titleZh
+                return market.titleZh;
+              }
+              // 英文环境或没有 titleZh，显示原始标题
+              return event.title;
+            })()}
+          </h1>
+          {/* 🔥 新增：分享按钮 */}
+          <button
+            onClick={async () => {
+              try {
+                const marketTitle = (() => {
+                  const market = event as any;
+                  if (language === 'zh' && market.titleZh) {
+                    return market.titleZh;
+                  }
+                  return event.title;
+                })();
+                const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/markets/${event.id}`;
+                const shareText = `${marketTitle} - ${shareUrl}`;
+                
+                if (navigator.share) {
+                  // 移动端使用原生分享
+                  await navigator.share({
+                    title: marketTitle,
+                    text: marketTitle,
+                    url: shareUrl,
+                  });
+                } else {
+                  // 桌面端复制到剪贴板
+                  await navigator.clipboard.writeText(shareText);
+                  // 显示成功提示（可以使用 toast 库）
+                  if (typeof window !== 'undefined' && (window as any).toast) {
+                    (window as any).toast.success(t('market.chart.share_success'));
+                  } else {
+                    alert(t('market.chart.share_success'));
+                  }
+                }
+              } catch (error) {
+                console.error('❌ [MarketHeader] 分享失败:', error);
+                if (typeof window !== 'undefined' && (window as any).toast) {
+                  (window as any).toast.error(t('market.chart.share_error'));
+                } else {
+                  alert(t('market.chart.share_error'));
+                }
+              }
+            }}
+            className="flex-shrink-0 p-2 rounded-lg bg-pm-card border border-pm-border hover:bg-pm-card-hover transition-colors text-pm-text-dim hover:text-white"
+            title={t('market.chart.share_market')}
+            aria-label={t('market.chart.share_market')}
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
+        </div>
         {/* 🔥 时间区间显示（参考 Polymarket 风格） */}
         {timeInterval && (
           <div className="mb-3 text-sm text-pm-text-dim font-medium">

@@ -419,6 +419,7 @@ export default function MarketDetailPage() {
             <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative mb-8 z-0">
               <PriceChart
                 yesPercent={displayYesPercent}
+                noPercent={displayNoPercent}
                 marketStatus={marketStatus}
                 marketResult={marketResult === "yes" ? "YES_WON" : marketResult === "no" ? "NO_WON" : null}
                 slots={(marketData as any)?.slots || []}
@@ -427,8 +428,10 @@ export default function MarketDetailPage() {
                 templateId={(marketData as any)?.templateId || (marketData as any)?.template?.id || null}
                 height={320}
                 data={priceData}
+                noData={(marketData as any)?.noPriceData}
                 hideNavigation={false}
                 isFactory={!!((marketData as any)?.isFactory || (marketData as any)?.templateId)}
+                volume={(marketData as any)?.totalVolume || (marketData as any)?.volume || 0}
               />
             </div>
 

@@ -158,7 +158,13 @@
       "days": "d"
     },
     "chart": {
-      "more": "More"
+      "more": "More",
+      "yes": "Yes",
+      "no": "No",
+      "volume": "Volume",
+      "share_market": "Share Market",
+      "share_success": "Share link copied to clipboard",
+      "share_error": "Failed to share, please try again"
     },
     "position": {
       "title": "Your Position",

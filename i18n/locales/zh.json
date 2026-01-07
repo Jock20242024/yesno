@@ -158,7 +158,13 @@
       "days": "天"
     },
     "chart": {
-      "more": "更多"
+      "more": "更多",
+      "yes": "Yes",
+      "no": "No",
+      "volume": "交易量",
+      "share_market": "分享市场",
+      "share_success": "分享链接已复制到剪贴板",
+      "share_error": "分享失败，请重试"
     },
     "position": {
       "title": "我的持仓",

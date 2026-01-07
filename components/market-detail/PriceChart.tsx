@@ -27,6 +27,7 @@ interface SlotItem {
 
 interface PriceChartProps {
   yesPercent: number;
+  noPercent?: number; // 🔥 新增：NO 百分比
   marketStatus?: MarketStatus;
   marketResult?: MarketResult;
   slots?: SlotItem[]; // 🔥 同模板今天的所有场次
@@ -34,9 +35,11 @@ interface PriceChartProps {
   period?: number | null; // 🔥 周期（分钟数），用于判断是否显示场次导航
   templateId?: string | null; // 🔥 模板 ID，用于未生成场次的生成接口
   height?: number; // 🔥 图表高度
-  data?: Array<{ time: string; value: number; timestamp: number }>; // 🔥 图表数据（历史价格数据）
+  data?: Array<{ time: string; value: number; timestamp: number }>; // 🔥 图表数据（历史价格数据，YES）
+  noData?: Array<{ time: string; value: number; timestamp: number }>; // 🔥 新增：NO 图表数据
   hideNavigation?: boolean; // 🔥 是否隐藏内部导航栏
   isFactory?: boolean; // 🔥 是否是工厂市场
+  volume?: number; // 🔥 新增：市场交易量
 }
 
 // 🔥 移除假数据生成函数：现在使用真实历史数据
@@ -57,7 +60,7 @@ const getDefaultChartData = (currentPrice: number) => {
   ];
 };
 
-export default function PriceChart({ yesPercent, marketStatus = "open", marketResult = null, slots = [], currentMarketId, period, templateId, height = 300, data, hideNavigation = false, isFactory = false }: PriceChartProps) {
+export default function PriceChart({ yesPercent, noPercent, marketStatus = "open", marketResult = null, slots = [], currentMarketId, period, templateId, height = 300, data, noData, hideNavigation = false, isFactory = false, volume }: PriceChartProps) {
   // 🔥 关键：所有 hooks 必须在早期返回之前调用
   const router = useRouter();
   const { t, language } = useLanguage();
@@ -343,6 +346,10 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
                   <stop offset="0%" stopColor="#22c55e" stopOpacity={0.2} />
                   <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
                 </linearGradient>
+                <linearGradient id="colorNo" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.2} />
+                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
+                </linearGradient>
               </defs>
               <XAxis 
                 dataKey="time" 
@@ -373,6 +380,17 @@ export default function PriceChart({ yesPercent, marketStatus = "open", marketRe
                 strokeWidth={2}
                 fill="url(#colorYes)"
                 dot={false}
+                name={t('market.chart.yes')}
+              />
+              {/* 🔥 新增：NO K线 */}
+              <Area
+                type="monotone"
+                dataKey="noValue"
+                stroke="#ef4444"
+                strokeWidth={2}
+                fill="url(#colorNo)"
+                dot={false}
+                name={t('market.chart.no')}
               />
               {isResolved && (
                 <ReferenceLine 
