@@ -192,16 +192,17 @@ export async function GET(request: NextRequest) {
         outcome: position.outcome,
         shares: Number(position.shares),
         avgPrice: Number(position.avgPrice),
-        cost: cost,
+        cost: actualInvestedAmount, // 🔥 修复：使用实际投入金额
+        costByAvgPrice: costByAvgPrice, // 保留 shares * avgPrice 用于对比
         currentPrice: currentPrice,
         currentValue: value,
-        pnl: value - cost,
+        pnl: value - actualInvestedAmount, // 🔥 修复：盈亏基于实际投入金额
         marketStatus: position.markets.status,
         resolvedOutcome: position.markets.resolvedOutcome,
         // 🔥 新增：实际投入金额（从订单记录计算）
         actualInvestedAmount: actualInvestedAmount,
-        costVsInvestedDifference: Math.abs(cost - actualInvestedAmount),
-        isCostCorrect: Math.abs(cost - actualInvestedAmount) <= 0.01,
+        costVsInvestedDifference: Math.abs(costByAvgPrice - actualInvestedAmount),
+        isCostCorrect: Math.abs(costByAvgPrice - actualInvestedAmount) <= 0.01,
       };
     });
 

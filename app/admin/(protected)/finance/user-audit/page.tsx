@@ -251,12 +251,29 @@ export default function UserAuditPage() {
             <p className="text-white text-lg font-bold">{formatUSD(fundFlow.totalFeeDeducted)}</p>
           </div>
           <div className="p-4 rounded-lg bg-gray-700/50">
-            <p className="text-gray-400 text-sm">净投资额</p>
+            <p className="text-gray-400 text-sm">净投资额（所有订单）</p>
             <p className="text-white text-lg font-bold">{formatUSD(fundFlow.totalNetAmount)}</p>
           </div>
+          {fundFlow.totalFilledNetAmount !== undefined && (
+            <div className="p-4 rounded-lg bg-green-900/30">
+              <p className="text-gray-400 text-sm">已成交净投资额</p>
+              <p className="text-green-400 text-lg font-bold">{formatUSD(fundFlow.totalFilledNetAmount)}</p>
+            </div>
+          )}
+          {fundFlow.totalPendingNetAmount !== undefined && fundFlow.totalPendingNetAmount > 0 && (
+            <div className="p-4 rounded-lg bg-yellow-900/30">
+              <p className="text-gray-400 text-sm">未成交净投资额</p>
+              <p className="text-yellow-400 text-lg font-bold">{formatUSD(fundFlow.totalPendingNetAmount)}</p>
+            </div>
+          )}
           <div className="p-4 rounded-lg bg-gray-700/50">
             <p className="text-gray-400 text-sm">持仓总投入</p>
             <p className="text-white text-lg font-bold">{formatUSD(fundFlow.totalPositionCost)}</p>
+            {fundFlow.positionCostVsFilledNetAmount && (
+              <p className={`text-xs mt-1 ${fundFlow.positionCostVsFilledNetAmount.isConsistent ? 'text-green-400' : 'text-red-400'}`}>
+                {fundFlow.positionCostVsFilledNetAmount.isConsistent ? '✓ 与已成交订单一致' : `✗ 差异: ${formatUSD(Math.abs(fundFlow.positionCostVsFilledNetAmount.difference))}`}
+              </p>
+            )}
           </div>
           <div className="p-4 rounded-lg bg-gray-700/50">
             <p className="text-gray-400 text-sm">持仓总价值</p>
@@ -299,6 +316,15 @@ export default function UserAuditPage() {
                     <td className="p-2 text-right text-white font-mono">{formatUSD(pos.currentValue)}</td>
                     <td className={`p-2 text-right font-mono ${pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                       {pos.pnl >= 0 ? '+' : ''}{formatUSD(pos.pnl)}
+                    </td>
+                    <td className="p-2 text-right">
+                      {pos.isCostCorrect ? (
+                        <span className="text-green-400 text-xs">✓</span>
+                      ) : (
+                        <span className="text-red-400 text-xs" title={`差异: ${formatUSD(pos.costVsInvestedDifference)}`}>
+                          ✗
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
