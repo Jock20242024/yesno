@@ -68,68 +68,15 @@ export async function GET() {
     // 🔥 身份识别标准化：直接从 session.user.id 获取用户 ID，一步直达查询
     const userId = session.user.id;
     
-    // 🔥 数据库连接检查：确保 Prisma 引擎已连接
-    try {
-      await prisma.$connect();
-    } catch (dbError: any) {
-      console.error('❌ [Assets API] 数据库连接失败:', dbError);
-      // 如果是连接错误，尝试重新连接
-      if (dbError.message?.includes('Response from the Engine was empty') || 
-          dbError.message?.includes('Engine is not yet connected')) {
-        try {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          await prisma.$connect();
-        } catch (retryError) {
-          console.error('❌ [Assets API] 重试连接失败:', retryError);
-          // 返回降级数据
-          return NextResponse.json({
-            success: true,
-            data: {
-              balance: 0,
-              availableBalance: 0,
-              frozenBalance: 0,
-              positionsValue: 0,
-              totalBalance: 0,
-              totalEquity: 0,
-              historical: {
-                '1D': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-                '1W': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-                '1M': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-                '1Y': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
-              },
-            },
-          }, { status: 200 });
-        }
-      }
-    }
-
-    // 🔥 性能优化：直接基于 ID 查询，只查询必需的字段（balance）
-    // 🔥 修复：处理数据库查询超时错误
-    let user;
-    try {
-      user = await prisma.users.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          balance: true,
-        },
-      });
-      
-      // ========== STEP 1: 深度日志埋点 - User 查询结果 ==========
-
-      if (user) {
-
-      } else {
-
-      }
-
-    } catch (dbError: any) {
-      // 🔥 修复：数据库连接超时或其他错误时，返回降级数据（零值），但不返回 isGuest: true
-      console.error('❌ [Assets API] 用户查询失败（可能是超时）:', dbError?.message || dbError);
-
-      const response = NextResponse.json({
-        success: true,
+    // 🔥 数据库连接检查：使用统一的连接工具函数
+    const connected = await ensurePrismaConnected();
+    if (!connected) {
+      console.error('❌ [Assets API] 数据库连接失败，返回降级数据');
+      // 🔥 关键修复：用户资产 API 不应该返回 0，应该返回上一次的值或提示错误
+      // 但在 Serverless 环境下无法缓存，所以返回一个明确的错误标识
+      return NextResponse.json({
+        success: false, // 🔥 改为 false，让前端知道这是错误
+        error: '数据库连接失败，请稍后重试',
         data: {
           balance: 0,
           availableBalance: 0,
@@ -144,9 +91,54 @@ export async function GET() {
             '1Y': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
           },
         },
-      }, { status: 200 });
-      response.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
-      return response;
+      }, { status: 503 }); // 🔥 使用 503 Service Unavailable
+    }
+
+    // 🔥 性能优化：直接基于 ID 查询，只查询必需的字段（balance）
+    // 🔥 修复：使用统一的查询工具函数，自动处理连接错误
+    const user = await executePrismaQuery(
+      async () => {
+        return await prisma.users.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            email: true,
+            balance: true,
+          },
+        });
+      },
+      null // 连接失败时返回 null
+    );
+      
+      // ========== STEP 1: 深度日志埋点 - User 查询结果 ==========
+
+      if (user) {
+
+      } else {
+
+      }
+
+    // 🔥 修复：如果用户查询失败，返回错误而不是零值
+    if (!user) {
+      console.error('❌ [Assets API] 用户查询失败或用户不存在');
+      return NextResponse.json({
+        success: false,
+        error: '用户查询失败，请稍后重试',
+        data: {
+          balance: 0,
+          availableBalance: 0,
+          frozenBalance: 0,
+          positionsValue: 0,
+          totalBalance: 0,
+          totalEquity: 0,
+          historical: {
+            '1D': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+            '1W': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+            '1M': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+            '1Y': { balance: 0, profit: { value: 0, percent: 0, isPositive: true } },
+          },
+        },
+      }, { status: 503 });
     }
 
     if (!user) {

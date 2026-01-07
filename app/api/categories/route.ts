@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { BASE_MARKET_FILTER, buildHotMarketFilter } from '@/lib/marketQuery';
 import { aggregateMarketsByTemplate } from '@/lib/marketAggregation';
+import { ensurePrismaConnected, executePrismaQuery } from '@/lib/prismaConnection'; // 🔥 引入 Prisma 连接工具
 
 // 🔥 强制禁用缓存，确保新创建的分类能立即显示
 export const dynamic = 'force-dynamic';
@@ -19,44 +20,24 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🔍 [Categories API] 收到请求:', request.url);
     
-    // 🔥 数据库连接检查：确保 Prisma 引擎已连接
-    try {
-      // 检查连接状态，如果未连接则连接
-      await prisma.$connect();
-    } catch (dbError: any) {
-      console.error('❌ [Categories API] 数据库连接失败:', dbError);
-      // 如果是 "Response from the Engine was empty" 错误，尝试重新连接
-      if (dbError.message?.includes('Response from the Engine was empty') || 
-          dbError.message?.includes('Engine is not yet connected')) {
-        try {
-          // 等待一小段时间后重试
-          await new Promise(resolve => setTimeout(resolve, 100));
-          await prisma.$connect();
-        } catch (retryError) {
-          console.error('❌ [Categories API] 重试连接失败:', retryError);
-          return NextResponse.json(
-            { 
-              success: true, 
-              data: [],
-              message: '数据库连接暂时不可用，请稍后重试'
-            },
-            { status: 200 }
-          );
-        }
-      } else {
-        return NextResponse.json(
-          { 
-            success: true, 
-            data: [],
-            message: '无法连接到数据库，请检查 DATABASE_URL 配置'
-          },
-          { status: 200 }
-        );
-      }
+    // 🔥 数据库连接检查：使用统一的连接工具函数
+    const connected = await ensurePrismaConnected();
+    if (!connected) {
+      console.error('❌ [Categories API] 数据库连接失败，返回空数组');
+      return NextResponse.json(
+        { 
+          success: true, 
+          data: [],
+          message: '数据库连接暂时不可用，请稍后重试'
+        },
+        { status: 200 }
+      );
     }
     
     // 🔥 查询所有分类（包括子分类）
-    const categories = await prisma.categories.findMany({
+    const categories = await executePrismaQuery(
+      async () => {
+        return await prisma.categories.findMany({
       where: {
         status: 'active',
       },
@@ -93,6 +74,9 @@ export async function GET(request: NextRequest) {
         { displayOrder: 'asc' },
       ],
     });
+      },
+      [] // 连接失败时返回空数组
+    );
 
     // 🔥 递归函数：获取分类及其所有子分类的 ID
     const getAllCategoryIds = (category: any, allCategories: any[]): string[] => {

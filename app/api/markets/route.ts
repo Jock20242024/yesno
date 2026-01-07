@@ -8,6 +8,7 @@ import { aggregateMarketsByTemplate } from '@/lib/marketAggregation'; // 🔥 �
 import { BASE_MARKET_FILTER, buildHotMarketFilter, buildCategoryMarketFilter } from '@/lib/marketQuery'; // 🚀 统一过滤器
 import { isIndependentMarket } from '@/lib/marketTypeDetection'; // 🚀 市场类型检测
 import { createNoCacheResponse } from '@/lib/responseHelpers'; // 🔥 创建禁用缓存的响应
+import { ensurePrismaConnected } from '@/lib/prismaConnection'; // 🔥 引入 Prisma 连接工具
 
 // 🔥 强制清理前端缓存：确保不使用旧缓存
 export const dynamic = 'force-dynamic';
@@ -29,19 +30,18 @@ export async function GET(request: Request) {
   try {
     console.log('🔍 [Markets API] 收到请求:', request.url);
     
-    // 🔥 数据库连接检查
-    try {
-      await prisma.$connect();
-    } catch (dbError) {
-      console.error('❌ [Markets API] 数据库连接失败:', dbError);
+    // 🔥 数据库连接检查：使用统一的连接工具函数
+    const connected = await ensurePrismaConnected();
+    if (!connected) {
+      console.error('❌ [Markets API] 数据库连接失败，返回空数组');
       return NextResponse.json(
         { 
-          success: false, 
+          success: true, // 🔥 改为 true，避免前端报错
           error: 'Database connection failed',
           data: [],
-          message: '无法连接到数据库，请检查 DATABASE_URL 配置'
+          message: '数据库连接暂时不可用，请稍后重试'
         },
-        { status: 503 }
+        { status: 200 } // 🔥 改为 200，避免前端报错
       );
     }
     
