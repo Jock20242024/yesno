@@ -21,16 +21,65 @@ export async function GET() {
     }
 
     // 3. 查数据库获取完整信息 (余额、isAdmin等)
-    const user = await prisma.users.findUnique({
-      where: { email: session.user.email },
-      select: {
-        id: true,
-        email: true,
-        provider: true,
-        isAdmin: true,
-        balance: true, // 确保前端能拿到余额
-      },
-    });
+    // 🔥 修复：添加连接检查和重试逻辑
+    let user;
+    try {
+      await prisma.$connect();
+      user = await prisma.users.findUnique({
+        where: { email: session.user.email },
+        select: {
+          id: true,
+          email: true,
+          provider: true,
+          isAdmin: true,
+          balance: true, // 确保前端能拿到余额
+        },
+      });
+    } catch (dbError: any) {
+      console.error('❌ [Me API] 数据库查询失败:', dbError);
+      if (dbError.message?.includes('Engine is not yet connected') || 
+          dbError.message?.includes('Engine was empty')) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await prisma.$connect();
+          user = await prisma.users.findUnique({
+            where: { email: session.user.email },
+            select: {
+              id: true,
+              email: true,
+              provider: true,
+              isAdmin: true,
+              balance: true,
+            },
+          });
+        } catch (retryError) {
+          console.error('❌ [Me API] 重试查询失败:', retryError);
+          // 降级：返回session信息，但balance为0
+          return NextResponse.json({
+            success: true,
+            user: {
+              id: session.user.id || '',
+              email: session.user.email || '',
+              provider: (session.user as any).provider || null,
+              isAdmin: (session.user as any).isAdmin || false,
+              balance: 0, // 降级：返回0
+            },
+          });
+        }
+      } else {
+        // 其他错误也降级处理
+        return NextResponse.json({
+          success: true,
+          user: {
+            id: session.user.id || '',
+            email: session.user.email || '',
+            provider: (session.user as any).provider || null,
+            isAdmin: (session.user as any).isAdmin || false,
+            balance: 0, // 降级：返回0
+          },
+        });
+      }
+    }
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
