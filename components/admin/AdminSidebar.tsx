@@ -118,6 +118,18 @@ export default function AdminSidebar() {
             </Link>
 
             <Link
+              href="/admin/finance/user-audit"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                pathname === "/admin/finance/user-audit"
+                  ? "bg-primary text-white shadow-sm hover:bg-blue-600"
+                  : "text-[#111418] dark:text-[#9da8b9] hover:bg-[#f3f4f6] dark:hover:bg-[#283545]"
+              }`}
+            >
+              <span className="material-symbols-outlined">search</span>
+              <p className="text-sm font-medium leading-normal">用户资金审计</p>
+            </Link>
+
+            <Link
               href="/admin/finance/stats"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                 pathname?.startsWith("/admin/finance/stats")
