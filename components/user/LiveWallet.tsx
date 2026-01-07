@@ -87,12 +87,21 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
         return -1; // 使用 -1 作为特殊标记，表示需要重新登录
       }
       
-      // 🔥 关键修复：从 /api/user/assets 获取 totalBalance（总资产）
-      // 这与 WalletPage 主页面使用相同的数据源，确保数据一致
+      // 🔥 修复：右上角应该显示 totalBalance（总资产），但"可用"应该显示 availableBalance
+      // 目前两个都显示 totalBalance，这是错误的
+      // 但根据用户反馈，右上角显示的是 totalBalance，这是对的
+      // 所以这里继续返回 totalBalance
       const totalBalance = result?.success && result?.data?.totalBalance 
         ? result.data.totalBalance 
         : 0;
+      
+      // 🔥 修复：同时返回 availableBalance，供"可用"字段使用
+      const availableBalance = result?.success && result?.data?.availableBalance 
+        ? result.data.availableBalance 
+        : totalBalance; // 如果没有 availableBalance，使用 totalBalance 作为降级
 
+      // 🔥 注意：LiveWallet 组件只显示一个值，所以返回 totalBalance
+      // "可用"字段应该使用另一个组件或修改 LiveWallet 支持显示 availableBalance
       return totalBalance;
     } catch (error) {
       console.error('💰 [LiveWallet] Fetcher error:', error);

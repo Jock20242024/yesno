@@ -193,6 +193,7 @@ export async function GET(
           ammAsks.push({
             ...entry,
             price: yesSellPrice,
+            total: depthPoint.depth * yesSellPrice, // 🔥 修复：使用转换后的价格计算total
           });
         }
       }

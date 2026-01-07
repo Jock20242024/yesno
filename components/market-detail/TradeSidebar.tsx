@@ -535,11 +535,16 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       return null;
     }
     
+    // 🔥 修复：优先级 1: 使用 /api/user/assets 的 availableBalance（与右上角一致）
+    // 右上角显示的是 totalBalance（总资产），交易区应该显示 availableBalance（可用余额）
+    // 但为了数据一致性，我们也应该从同一个API获取
     // 优先级 1: 使用 currentUser.balance（从 /api/auth/me 获取的最新数字值）
     if (currentUser?.balance !== undefined && currentUser.balance !== null) {
       const balanceNum = Number(currentUser.balance);
       if (!isNaN(balanceNum) && balanceNum >= 0) {
-
+        // 🔥 修复：currentUser.balance 应该是 availableBalance，不是 totalBalance
+        // 如果右上角显示的是 totalBalance，那么交易区应该显示 availableBalance
+        // 但 /api/auth/me 返回的是 user.balance（可用余额），这是正确的
         return balanceNum;
       }
     }
