@@ -1196,21 +1196,8 @@ export async function POST(request: Request) {
     }
 
     // 🔥 第一步：使用事务确保市场创建和流动性注入的原子性
-    // 🔥 修复：在 Serverless 环境中，确保连接活跃后再执行事务
-    try {
-      await prisma.$connect();
-    } catch (connectError) {
-      console.warn('⚠️ [Market API] 连接已存在或连接失败，继续执行:', connectError);
-    }
-    
-    // 🔥 修复：添加重试逻辑，处理 Serverless 环境中的连接断开问题
-    let result;
-    let retryCount = 0;
-    const maxRetries = 2;
-    
-    while (retryCount <= maxRetries) {
-      try {
-        result = await prisma.$transaction(async (tx) => {
+    // 🔥 修复：使用统一的事务工具函数，自动处理连接问题和重试
+    const result = await executeTransaction(async (tx) => {
       // 创建市场
       const newMarket = await tx.markets.create({
         data: marketData,
@@ -1318,48 +1305,7 @@ export async function POST(request: Request) {
       }
 
       return newMarket;
-        }, {
-          // 🔥 修复：设置事务超时和隔离级别，提高 Serverless 环境下的稳定性
-          timeout: 30000, // 30秒超时
-          isolationLevel: 'ReadCommitted', // 使用读已提交隔离级别
-        });
-        
-        // 如果成功，跳出重试循环
-        break;
-      } catch (transactionError: any) {
-        // 如果是事务 ID 无效错误，尝试重新连接并重试
-        if (transactionError.code === 'P2028' || 
-            transactionError.message?.includes('Transaction not found') ||
-            transactionError.message?.includes('Transaction ID is invalid')) {
-          retryCount++;
-          if (retryCount <= maxRetries) {
-            console.warn(`⚠️ [Market API] 事务连接失效，尝试重新连接 (${retryCount}/${maxRetries}):`, transactionError.message);
-            // 断开并重新连接
-            try {
-              await prisma.$disconnect();
-            } catch (disconnectError) {
-              // 忽略断开错误
-            }
-            // 等待一小段时间后重试
-            await new Promise(resolve => setTimeout(resolve, 500));
-            try {
-              await prisma.$connect();
-            } catch (reconnectError) {
-              console.error('❌ [Market API] 重新连接失败:', reconnectError);
-            }
-            continue; // 重试
-          } else {
-            // 重试次数用尽，抛出错误
-            throw new Error(`事务失败：连接问题，已重试 ${maxRetries} 次。请稍后重试。原始错误: ${transactionError.message}`);
-          }
-        } else {
-          // 其他错误直接抛出
-          throw transactionError;
-        }
-      }
-    }
-
-    const newMarket = result;
+    });
 
     // 处理 BigInt 序列化并返回
     return new Response(JSON.stringify({ 
