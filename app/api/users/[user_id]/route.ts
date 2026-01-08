@@ -142,11 +142,18 @@ export async function GET(
 
     // 🔥 获取用户的订单（用于交易历史，不是持仓）
     // 注意：交易历史包含所有订单，包括已成交的
+    // 🔥 修复：不要过滤订单，统计所有订单数量作为预测次数
     // 使用 Prisma 直接查询，避免 DBService 的 UUID 验证问题（如果将来需要）
     const orders = await prisma.orders.findMany({
-      where: { userId: targetUserId },
+      where: { 
+        userId: targetUserId,
+        // 🔥 修复：不添加任何状态过滤，统计所有订单（包括FILLED、PENDING等）
+      },
       orderBy: { createdAt: 'desc' },
     });
+    
+    // 🔥 调试日志：确认订单数量
+    console.log(`🔍 [User Detail API] 用户 ${targetUserId} 的订单数量:`, orders.length);
 
     // 从订单生成交易历史
     const tradeHistory = orders.map((order) => ({

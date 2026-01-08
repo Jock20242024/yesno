@@ -540,14 +540,25 @@ export async function POST(request: Request) {
           // ========== MARKET 订单：立即成交，创建 Position ==========
           // 🔥 注意：calculatedShares 和 executionPrice 已经在步骤 2 中计算完成
           // 🔥 executionPrice 是基于更新前的 Market 状态计算的，这是用户实际成交的价格
-          // 查询是否已存在OPEN Position
+          // 🔥 关键修复：查询是否已存在OPEN Position（使用字符串'OPEN'确保兼容性）
+          // 注意：在事务中使用字符串而不是枚举值，避免Prisma枚举值问题
           const existingPosition = await tx.positions.findFirst({
             where: {
               userId,
               marketId,
               outcome: outcomeSelection as Outcome,
-              status: PositionStatus.OPEN, // 🔥 使用枚举值而非字符串
+              status: 'OPEN' as any, // 🔥 修复：直接使用字符串，避免枚举值问题
             },
+          });
+          
+          // 🔥 调试日志：确认查询结果
+          console.log(`🔍 [Orders API] 查询现有持仓结果:`, {
+            marketId,
+            outcome: outcomeSelection,
+            found: !!existingPosition,
+            positionId: existingPosition?.id,
+            existingShares: existingPosition?.shares,
+            existingAvgPrice: existingPosition?.avgPrice,
           });
           
           if (existingPosition) {
@@ -607,7 +618,7 @@ export async function POST(request: Request) {
                 outcome: outcomeSelection as Outcome,
                 shares: calculatedShares,
                 avgPrice: executionPrice, // 🔥 使用实际成交价格
-                status: PositionStatus.OPEN, // 🔥 使用枚举值而非字符串
+                status: 'OPEN' as any, // 🔥 修复：直接使用字符串，确保一致性
               },
             });
           }
