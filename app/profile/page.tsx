@@ -64,15 +64,8 @@ function OverviewTab({
   const positionsValue = rawPositions.reduce((sum, pos) => sum + (pos.currentValue || 0), 0);
   
   // 🔥 修复3：亏损显示只计算结算后的结果，不包括正在持仓的盈亏
-  // 只计算已结算市场的盈亏（市场状态为 RESOLVED 的持仓）
-  const profitLoss = rawPositions
-    .filter(pos => {
-      // 这里需要检查市场是否已结算，但由于 rawPositions 没有市场状态信息
-      // 我们需要从 positionsWithMarketNames 中获取，或者从 API 返回的数据中获取
-      // 暂时先使用所有持仓的盈亏，后续会通过 API 返回已结算的持仓
-      return true; // 临时：先显示所有持仓的盈亏
-    })
-    .reduce((sum, pos) => sum + (pos.profitLoss || 0), 0);
+  // 使用 API 返回的 totalProfitLoss（后端已过滤只计算已结算市场的盈亏）
+  const profitLoss = userData?.totalProfitLoss || 0;
   
   // 计算最大胜利（单笔最大盈利）- 只计算已结算的
   const biggestWin = rawPositions.reduce((max, pos) => {
@@ -442,6 +435,17 @@ function OverviewTab({
                       >
                         <Share2 className="w-5 h-5" />
                       </button>
+                      {/* 🔥 修复2：市场分析链接 - 跳转到市场详情页 */}
+                      <a
+                        href={`/markets/${position.marketId}`}
+                        onClick={(e) => {
+                          e.stopPropagation(); // 阻止事件冒泡，避免触发行的 onClick
+                        }}
+                        className="p-2 rounded-lg text-pm-text-dim opacity-0 group-hover:opacity-100 hover:text-white hover:bg-white/10 transition-all"
+                        title="市场分析"
+                      >
+                        <BarChart3 className="w-5 h-5" />
+                      </a>
                     </div>
                   </div>
                 ))}
