@@ -367,31 +367,75 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     // 与 StoreContext 中的 netInvest = inputVal * (1 - FEE_RATE) 和 newShares = netInvest / price 一致
     const netInvest = amountNum * (1 - FEE_RATE);
     
-    // 🔥 价格影响计算：模拟交易后的市场状态
+    // 🔥 价格影响计算：使用CPMM公式模拟交易后的市场状态
     if (selectedOutcome === "yes") {
-      // 买入 YES：新 totalYes = currentYesAmount + netInvest，totalNo 不变
-      const newTotalYes = currentYesAmount + netInvest;
-      const newTotalNo = currentNoAmount;
+      // 买入 YES：使用CPMM公式计算
+      // 当前状态：totalYes, totalNo, K = totalYes * totalNo
+      // 用户投入：netInvest
+      // 根据CPMM：K = (totalYes - shares) * (totalNo + netInvest)
+      // shares = totalYes - K / (totalNo + netInvest)
+      const k = currentYesAmount * currentNoAmount;
+      const newTotalNoAfter = currentNoAmount + netInvest;
+      let estimatedShares = 0;
+      
+      if (newTotalNoAfter > 0 && k > 0) {
+        estimatedShares = currentYesAmount - (k / newTotalNoAfter);
+        if (estimatedShares <= 0 || estimatedShares > currentYesAmount || !isFinite(estimatedShares)) {
+          // 如果计算无效，使用简化公式
+          const currentPrice = currentYesAmount > 0 || currentNoAmount > 0 
+            ? currentYesAmount / (currentYesAmount + currentNoAmount)
+            : 0.5;
+          estimatedShares = netInvest / Math.max(0.01, currentPrice);
+        }
+      } else {
+        const currentPrice = currentYesAmount > 0 || currentNoAmount > 0 
+          ? currentYesAmount / (currentYesAmount + currentNoAmount)
+          : 0.5;
+        estimatedShares = netInvest / Math.max(0.01, currentPrice);
+      }
+      
+      const newTotalYes = Math.max(0, currentYesAmount - estimatedShares);
+      const newTotalNo = newTotalNoAfter;
       const newTotalVolume = newTotalYes + newTotalNo;
       
       // 预估成交价 = 新 YES 价格
       estimatedExecutionPrice = newTotalVolume > 0 ? newTotalYes / newTotalVolume : 1.0;
       
-      // 价格影响计算（仅用于内部计算，不显示警告）
+      // 🔥 价格影响计算：用于显示警告
       const currentPrice = currentYesAmount > 0 || currentNoAmount > 0 
         ? currentYesAmount / (currentYesAmount + currentNoAmount)
         : 0.5;
       priceImpact = currentPrice > 0 ? Math.abs(estimatedExecutionPrice - currentPrice) / currentPrice * 100 : 0;
     } else {
-      // 买入 NO：新 totalNo = currentNoAmount + netInvest，totalYes 不变
-      const newTotalYes = currentYesAmount;
-      const newTotalNo = currentNoAmount + netInvest;
+      // 买入 NO：使用CPMM公式计算
+      const k = currentYesAmount * currentNoAmount;
+      const newTotalYesAfter = currentYesAmount + netInvest;
+      let estimatedShares = 0;
+      
+      if (newTotalYesAfter > 0 && k > 0) {
+        estimatedShares = currentNoAmount - (k / newTotalYesAfter);
+        if (estimatedShares <= 0 || estimatedShares > currentNoAmount || !isFinite(estimatedShares)) {
+          // 如果计算无效，使用简化公式
+          const currentPrice = currentYesAmount > 0 || currentNoAmount > 0
+            ? currentNoAmount / (currentYesAmount + currentNoAmount)
+            : 0.5;
+          estimatedShares = netInvest / Math.max(0.01, currentPrice);
+        }
+      } else {
+        const currentPrice = currentYesAmount > 0 || currentNoAmount > 0
+          ? currentNoAmount / (currentYesAmount + currentNoAmount)
+          : 0.5;
+        estimatedShares = netInvest / Math.max(0.01, currentPrice);
+      }
+      
+      const newTotalYes = newTotalYesAfter;
+      const newTotalNo = Math.max(0, currentNoAmount - estimatedShares);
       const newTotalVolume = newTotalYes + newTotalNo;
       
       // 预估成交价 = 新 NO 价格
       estimatedExecutionPrice = newTotalVolume > 0 ? newTotalNo / newTotalVolume : 1.0;
       
-      // 价格影响计算（仅用于内部计算，不显示警告）
+      // 🔥 价格影响计算：用于显示警告
       const currentPrice = currentYesAmount > 0 || currentNoAmount > 0
         ? currentNoAmount / (currentYesAmount + currentNoAmount)
         : 0.5;

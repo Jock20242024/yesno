@@ -562,10 +562,12 @@ export async function POST(request: Request) {
           });
           
           if (existingPosition) {
-            // 更新现有Position（加权平均价格）
-            // 🔥 使用 executionPrice（实际成交价格）进行加权平均计算
+            // 🔥 核心修复：avgPrice必须等于净投入金额/获得的份额，而不是executionPrice
+            // 正确的avgPrice = 总净投入金额 / 总份额
+            const existingNetAmount = existingPosition.shares * existingPosition.avgPrice; // 现有持仓的净投入金额
+            const newTotalNetAmount = existingNetAmount + netAmount; // 总净投入金额
             const newShares = existingPosition.shares + calculatedShares;
-            const newAvgPrice = (existingPosition.shares * existingPosition.avgPrice + calculatedShares * executionPrice) / newShares;
+            const newAvgPrice = newShares > 0 ? newTotalNetAmount / newShares : executionPrice; // 🔥 修复：使用净投入金额/份额
             
             // 🔥 新增：详细日志记录，用于调试持仓计算问题
             console.log(`💰 [Orders API] 更新现有持仓:`, {
@@ -573,14 +575,15 @@ export async function POST(request: Request) {
               outcome: outcomeSelection,
               existingShares: existingPosition.shares,
               existingAvgPrice: existingPosition.avgPrice,
+              existingNetAmount: existingPosition.shares * existingPosition.avgPrice,
               newOrderShares: calculatedShares,
-              newOrderExecutionPrice: executionPrice,
+              newOrderNetAmount: netAmount,
               newTotalShares: newShares,
-              newAvgPrice: newAvgPrice,
-              // 🔥 验证：检查 shares * avgPrice 是否接近实际投入金额
+              newAvgPrice: newAvgPrice, // 🔥 修复后的avgPrice
+              // 🔥 验证：shares * avgPrice 应该等于总净投入金额
               costByShares: newShares * newAvgPrice,
-              actualInvested: netAmount,
-              difference: Math.abs(newShares * newAvgPrice - netAmount),
+              totalNetAmount: (existingPosition.shares * existingPosition.avgPrice) + netAmount,
+              difference: Math.abs(newShares * newAvgPrice - ((existingPosition.shares * existingPosition.avgPrice) + netAmount)),
             });
             
             updatedPosition = await tx.positions.update({
@@ -592,7 +595,10 @@ export async function POST(request: Request) {
             });
           } else {
             // 创建新Position
-            // 🔥 使用 executionPrice（实际成交价格）作为 avgPrice
+            // 🔥 核心修复：avgPrice必须等于净投入金额/获得的份额
+            // 正确的avgPrice = netAmount / calculatedShares
+            const correctAvgPrice = calculatedShares > 0 ? netAmount / calculatedShares : executionPrice;
+            
             // 🔥 使用 UUID 格式（与 schema 定义一致：@id @default(uuid())）
             const positionId = randomUUID();
             
@@ -601,12 +607,13 @@ export async function POST(request: Request) {
               marketId,
               outcome: outcomeSelection,
               shares: calculatedShares,
-              avgPrice: executionPrice,
               netAmount: netAmount,
-              // 🔥 验证：检查 shares * avgPrice 是否接近实际投入金额
-              costByShares: calculatedShares * executionPrice,
+              correctAvgPrice: correctAvgPrice, // 🔥 修复后的avgPrice
+              oldAvgPrice: executionPrice, // 旧的错误avgPrice
+              // 🔥 验证：检查 shares * avgPrice 应该等于实际投入金额
+              costByShares: calculatedShares * correctAvgPrice,
               actualInvested: netAmount,
-              difference: Math.abs(calculatedShares * executionPrice - netAmount),
+              difference: Math.abs(calculatedShares * correctAvgPrice - netAmount),
             });
             
             updatedPosition = await tx.positions.create({
@@ -617,7 +624,7 @@ export async function POST(request: Request) {
                 marketId,
                 outcome: outcomeSelection as Outcome,
                 shares: calculatedShares,
-                avgPrice: executionPrice, // 🔥 使用实际成交价格
+                avgPrice: correctAvgPrice, // 🔥 修复：使用净投入金额/份额
                 status: 'OPEN' as any, // 🔥 修复：直接使用字符串，确保一致性
               },
             });
@@ -748,8 +755,39 @@ export async function POST(request: Request) {
           let spreadProfit = priceDifference * calculatedShares; // 点差收益 = 价格差 * 份额
           
           // 🔥 修复：添加点差上限，用户要求点差不超过1%
-          // 点差上限：净投入金额的1%，超过部分不归系统
+          // 点差上限：净投入金额的1%，超过部分退还给用户（增加份额）
           const maxSpread = netAmount * 0.01; // 最大点差：净投入的1%
+          const excessSpread = Math.max(0, spreadProfit - maxSpread); // 超过1%的部分
+          
+          // 🔥 如果点差超过1%，将超过部分退还给用户（通过增加份额）
+          // 退还金额 = excessSpread，需要转换为额外的份额
+          let refundShares = 0;
+          if (excessSpread > 0.01 && calculatedShares > 0 && executionPrice > 0) {
+            // 退还份额 = 超过的点差 / 当前执行价格
+            refundShares = excessSpread / executionPrice;
+            console.log(`💰 [Orders API] 点差超过1%，退还用户:`, {
+              spreadProfit,
+              maxSpread,
+              excessSpread,
+              refundShares,
+              originalShares: calculatedShares,
+              finalShares: calculatedShares + refundShares,
+            });
+            
+            // 🔥 更新持仓份额（增加退还的份额）
+            if (updatedPosition) {
+              const finalShares = updatedPosition.shares + refundShares;
+              // avgPrice保持不变（因为退还的份额是基于相同的价格）
+              await prisma.positions.update({
+                where: { id: updatedPosition.id },
+                data: {
+                  shares: finalShares,
+                },
+              });
+              console.log(`✅ [Orders API] 已退还用户额外份额: ${refundShares.toFixed(4)}，最终份额: ${finalShares.toFixed(4)}`);
+            }
+          }
+          
           const actualSpread = Math.min(Math.max(0, spreadProfit), maxSpread); // 限制点差上限，且不能为负
           
           // 🔥 调试日志：记录点差计算详情
