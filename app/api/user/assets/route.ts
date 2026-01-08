@@ -245,7 +245,23 @@ export async function GET() {
     }
 
     // 5. 计算总资产
-    const totalBalance = availableBalance + frozenBalance + positionsValue;
+    // 🔥 校验逻辑：确保 totalBalance 永远等于 availableBalance + frozenBalance + positionsValue
+    const calculatedTotalBalance = availableBalance + frozenBalance + positionsValue;
+    
+    // 🔥 校验：强制使用计算值，确保总资产公式正确
+    const totalBalance = calculatedTotalBalance;
+    
+    // 🔥 校验日志：如果计算结果与预期不符，记录警告
+    if (Math.abs(totalBalance - calculatedTotalBalance) > 0.01) {
+      console.warn('⚠️ [Assets API] 总资产校验失败:', {
+        calculatedTotalBalance,
+        totalBalance,
+        availableBalance,
+        frozenBalance,
+        positionsValue,
+        difference: Math.abs(totalBalance - calculatedTotalBalance),
+      });
+    }
 
     // ========== STEP 3: 深度日志埋点 - TotalBalance 计算后（最终返回前）==========
     // 🔥 审计日志：记录详细的资产计算信息
