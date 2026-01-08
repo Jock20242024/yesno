@@ -184,18 +184,34 @@ export async function GET(
       });
     }
 
-    // 计算总盈亏、持仓价值、最大胜利（从持仓计算）
+    // 🔥 修复3：亏损显示只计算结算后的结果，不包括正在持仓的盈亏
+    // 计算总盈亏、持仓价值、最大胜利（只从已结算的持仓计算）
     let totalProfitLoss = 0;
     let positionsValue = 0;
     let biggestWin = 0;
     
-    for (const pos of positions) {
+    // 分离已结算和未结算的持仓
+    const resolvedPositions = positions.filter(pos => {
+      // 检查市场是否已结算（status === 'RESOLVED'）
+      return pos.marketStatus === 'RESOLVED';
+    });
+    
+    const activePositions = positions.filter(pos => {
+      return pos.marketStatus !== 'RESOLVED';
+    });
+    
+    // 只计算已结算持仓的盈亏
+    for (const pos of resolvedPositions) {
       totalProfitLoss += pos.profitLoss || 0;
-      positionsValue += pos.currentValue || 0;
       const profitLoss = pos.profitLoss || 0;
       if (profitLoss > biggestWin) {
         biggestWin = profitLoss;
       }
+    }
+    
+    // 持仓价值包括所有持仓（已结算和未结算）
+    for (const pos of positions) {
+      positionsValue += pos.currentValue || 0;
     }
 
     // 计算预测次数（订单数量）
