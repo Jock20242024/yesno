@@ -78,15 +78,19 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
 
   // 🔥 架构修复：只有当 isLoggedIn 且 assets 不为 undefined 时才渲染数值
   // totalBalance 可以是 0，但不能是 undefined
-  const displayBalance = assets.totalBalance;
+  // 🔥 强化数据安全性：确保 totalBalance 是有效数字，防止 NaN
+  const rawTotalBalance = assets.totalBalance || 0;
+  const displayBalance = Number(rawTotalBalance);
+  const safeDisplayBalance = (isNaN(displayBalance) || !isFinite(displayBalance)) ? 0 : displayBalance;
   
+  // 🔥 确保在 API 请求完成前显示 0.00 而不是 NaN
   // 格式化余额显示
   const formattedBalance = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(displayBalance);
+  }).format(safeDisplayBalance);
   
   // 格式化拆解数据
   const formatCurrency = (amount: number) => {
@@ -118,23 +122,23 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
           </div>
           
           <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-400">可用余额</span>
+            <span className="text-xs text-zinc-400">🟢 可用余额</span>
             <span className="text-xs font-bold text-white font-mono tabular-nums">
-              {formatCurrency(assets.availableBalance)}
+              {formatCurrency(Number(assets.availableBalance || 0))}
             </span>
           </div>
           
           <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-400">挂单冻结</span>
-            <span className="text-xs font-bold text-zinc-300 font-mono tabular-nums">
-              {formatCurrency(assets.frozenBalance)}
-            </span>
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-400">持仓估值</span>
+            <span className="text-xs text-zinc-400">🔵 持仓价值</span>
             <span className="text-xs font-bold text-emerald-400 font-mono tabular-nums">
-              {formatCurrency(assets.positionsValue)}
+              {formatCurrency(Number(assets.positionsValue || 0))}
+            </span>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-zinc-400">🔴 冻结资金</span>
+            <span className="text-xs font-bold text-zinc-300 font-mono tabular-nums">
+              {formatCurrency(Number(assets.frozenBalance || 0))}
             </span>
           </div>
           
@@ -142,7 +146,7 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-zinc-400">总资产</span>
               <span className="text-xs font-black text-white font-mono tabular-nums">
-                {formatCurrency(assets.totalBalance)}
+                {formatCurrency(Number(assets.totalBalance || 0))}
               </span>
             </div>
           </div>

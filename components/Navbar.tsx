@@ -222,14 +222,23 @@ export default function Navbar() {
                   prefetch={false}
                   className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity cursor-pointer group flex-shrink-1 min-w-0"
                 >
-                  <div className="flex flex-col items-end mr-1">
-                    <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1" suppressHydrationWarning>
+                  {/* 🔥 新增：总资产 - 带 Tooltip */}
+                  <div className="flex flex-col items-end mr-1 relative group/total">
+                    <span 
+                      className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1 cursor-help" 
+                      suppressHydrationWarning
+                    >
                       {mounted ? t('layout.header.total_assets') : 'Total Assets'}
                     </span>
                     <LiveWallet className="group-hover:text-primary transition-colors" />
                   </div>
-                  <div className="flex flex-col items-end mr-2">
-                    <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1" suppressHydrationWarning>
+                  
+                  {/* 🔥 新增：可用余额 - 带 Tooltip */}
+                  <div className="flex flex-col items-end mr-2 relative group/available">
+                    <span 
+                      className="text-[10px] font-bold text-text-secondary uppercase tracking-wider leading-none mb-1 cursor-help" 
+                      suppressHydrationWarning
+                    >
                       {mounted ? t('layout.header.available') : 'Available'}
                     </span>
                     <LiveAvailableBalance className="text-poly-green group-hover:text-primary transition-colors" />
