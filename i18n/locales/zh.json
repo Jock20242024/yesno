@@ -188,7 +188,12 @@
       "deposit": "充值",
       "withdraw": "提现",
       "loading": "加载中...",
-      "past": "过去"
+      "past": "过去",
+      "asset_breakdown": "资产拆解",
+      "available_balance": "可用余额",
+      "holding_value": "持仓价值",
+      "frozen_funds": "冻结资金",
+      "total_assets": "总资产"
     },
     "tabs": {
       "positions": "我的持仓",

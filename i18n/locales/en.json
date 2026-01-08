@@ -188,7 +188,12 @@
       "deposit": "Deposit",
       "withdraw": "Withdraw",
       "loading": "Loading...",
-      "past": "Past"
+      "past": "Past",
+      "asset_breakdown": "Asset Breakdown",
+      "available_balance": "Available Balance",
+      "holding_value": "Holding Value",
+      "frozen_funds": "Frozen Funds",
+      "total_assets": "Total Assets"
     },
     "tabs": {
       "positions": "My Positions",

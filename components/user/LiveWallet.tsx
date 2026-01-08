@@ -18,6 +18,7 @@ import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useAssets } from '@/hooks/useAssets';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface LiveWalletProps {
   className?: string;
@@ -30,6 +31,7 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   const session = sessionQuery?.data ?? null;
   const status = sessionQuery?.status ?? 'unauthenticated';
   const { isLoggedIn, isLoading: authLoading, logout, handleApiGuestResponse } = useAuth();
+  const { t } = useLanguage(); // 🔥 修复：添加语言切换支持
   
   // 🔥 新增：使用统一的 useAssets Hook 获取完整资产数据
   const { assets, isLoading: assetsLoading } = useAssets();
@@ -119,25 +121,25 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
       {showTooltip && assets && (
         <div className="absolute right-0 top-full mt-2 w-56 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-xl z-50 p-3 flex flex-col gap-2">
           <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">
-            资产拆解
+            {t('portfolio.stats.asset_breakdown')}
           </div>
           
           <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-400">🟢 可用余额</span>
+            <span className="text-xs text-zinc-400">🟢 {t('portfolio.stats.available_balance')}</span>
             <span className="text-xs font-bold text-white font-mono tabular-nums">
               {formatCurrency(Number(assets.availableBalance || 0))}
             </span>
           </div>
           
           <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-400">🔵 持仓价值</span>
+            <span className="text-xs text-zinc-400">🔵 {t('portfolio.stats.holding_value')}</span>
             <span className="text-xs font-bold text-emerald-400 font-mono tabular-nums">
               {formatCurrency(Number(assets.positionsValue || 0))}
             </span>
           </div>
           
           <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-400">🔴 冻结资金</span>
+            <span className="text-xs text-zinc-400">🔴 {t('portfolio.stats.frozen_funds')}</span>
             <span className="text-xs font-bold text-zinc-300 font-mono tabular-nums">
               {formatCurrency(Number(assets.frozenBalance || 0))}
             </span>
@@ -145,7 +147,7 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
           
           <div className="border-t border-white/10 pt-2 mt-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-400">总资产</span>
+              <span className="text-xs font-bold text-zinc-400">{t('portfolio.stats.total_assets')}</span>
               <span className="text-xs font-black text-white font-mono tabular-nums">
                 {formatCurrency(Number(assets.totalBalance || 0))}
               </span>
