@@ -685,19 +685,21 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
 
     // 🔥 新增：乐观更新 - 在API调用前立即更新本地UI
     // 保存原始余额，用于失败时回滚
-    const originalBalance = availableBalance;
-    const optimisticBalance = availableBalance !== null ? availableBalance - amountNum : null;
+    let originalBalance: number | null = null;
+    let optimisticBalance: number | null = null;
     
-    // 🔥 乐观更新：立即更新本地余额（买入时扣除金额）
-    if (activeTab === "buy" && optimisticBalance !== null) {
-      // 更新 useAssets Hook 的数据（乐观更新）
+    if (activeTab === "buy" && availableBalance !== null) {
+      originalBalance = availableBalance;
+      optimisticBalance = availableBalance - amountNum;
+      
+      // 🔥 乐观更新：立即更新本地余额（买入时扣除金额）
       if (mutateAssets) {
         mutateAssets(
           (currentAssets: any) => {
             if (!currentAssets) return currentAssets;
             return {
               ...currentAssets,
-              availableBalance: Math.max(0, optimisticBalance), // 确保不小于0
+              availableBalance: Math.max(0, optimisticBalance!), // 确保不小于0
               totalBalance: Math.max(0, (currentAssets.totalBalance || 0) - amountNum),
             };
           },
@@ -706,9 +708,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
       }
       
       // 同时更新 Store 中的余额（用于兼容其他组件）
-      if (optimisticBalance !== null) {
-        updateStoreBalance(Math.max(0, optimisticBalance));
-      }
+      updateStoreBalance(Math.max(0, optimisticBalance));
     }
 
     try {
@@ -926,6 +926,32 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
         }
       } else {
         // 🔥 卖出功能：调用真实 API
+        // 🔥 新增：乐观更新 - 在API调用前立即更新本地UI（卖出时增加余额）
+        let originalBalanceSell: number | null = null;
+        let optimisticBalanceSell: number | null = null;
+        
+        if (availableBalance !== null) {
+          originalBalanceSell = availableBalance;
+          optimisticBalanceSell = availableBalance + estReturn;
+          
+          // 🔥 乐观更新：立即更新本地余额（卖出时增加预估收益）
+          if (mutateAssets) {
+            mutateAssets(
+              (currentAssets: any) => {
+                if (!currentAssets) return currentAssets;
+                return {
+                  ...currentAssets,
+                  availableBalance: optimisticBalanceSell!,
+                  totalBalance: (currentAssets.totalBalance || 0) + estReturn, // 预估收益
+                };
+              },
+              false // false 表示不立即重新验证，等待API响应
+            );
+          }
+          
+          // 同时更新 Store 中的余额（用于兼容其他组件）
+          updateStoreBalance(optimisticBalanceSell);
+        }
 
         const response = await fetch("/api/orders/sell", {
           method: "POST",
@@ -974,6 +1000,22 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
             description: errorDetails ? `错误详情: ${errorDetails}` : undefined,
             duration: 5000,
           });
+          
+          // 🔥 新增：API失败时回滚乐观更新（卖出）
+          if (originalBalanceSell !== null && mutateAssets) {
+            mutateAssets(
+              (currentAssets: any) => {
+                if (!currentAssets) return currentAssets;
+                return {
+                  ...currentAssets,
+                  availableBalance: originalBalanceSell!,
+                  totalBalance: (currentAssets.totalBalance || 0) - estReturn, // 恢复总资产
+                };
+              },
+              false // false 表示不立即重新验证
+            );
+            updateStoreBalance(originalBalanceSell);
+          }
           
           throw new Error(errorMessage);
         }
@@ -1036,17 +1078,82 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
               },
             });
           }
+          
+          // 🔥 新增：卖出成功后，使用API返回的实际余额更新（覆盖乐观更新）
+          // 确保余额与服务器端一致
+          if (result.data.updatedBalance !== undefined && mutateAssets) {
+            mutateAssets(
+              (currentAssets: any) => {
+                if (!currentAssets) return currentAssets;
+                const actualReturn = result.data.order?.netReturn || estReturn;
+                return {
+                  ...currentAssets,
+                  availableBalance: result.data.updatedBalance,
+                  totalBalance: (originalBalanceSell || currentAssets.totalBalance) + actualReturn, // 使用实际收益
+                };
+              },
+              true // true 表示立即重新验证，确保数据同步
+            );
+          }
 
           // 🔥 强制刷新页面数据（使用 Next.js router）
           router.refresh();
         } else {
-          throw new Error(result.error || '卖出失败');
+          // API 返回错误 - 回滚乐观更新
+          const errorMsg = result.error || "卖出失败";
+          setTradeMessage(`卖出失败: ${errorMsg}`);
+          try {
+            toast.error("卖出失败", {
+              description: errorMsg,
+              duration: 3000,
+            });
+          } catch (e) {
+            console.error("toast failed", e);
+          }
+          
+          // 🔥 新增：API失败时回滚乐观更新（卖出）
+          if (originalBalanceSell !== null && mutateAssets) {
+            mutateAssets(
+              (currentAssets: any) => {
+                if (!currentAssets) return currentAssets;
+                return {
+                  ...currentAssets,
+                  availableBalance: originalBalanceSell!,
+                  totalBalance: (currentAssets.totalBalance || 0) - estReturn, // 恢复总资产
+                };
+              },
+              false // false 表示不立即重新验证
+            );
+            updateStoreBalance(originalBalanceSell);
+          }
+          
+          throw new Error(errorMsg);
         }
       }
     } catch (error) {
       console.error("交易失败:", error);
       const errorMsg = error instanceof Error ? error.message : "请稍后重试";
       setTradeMessage(`交易失败: ${errorMsg}`);
+      
+      // 🔥 新增：捕获所有错误，确保在错误时也回滚乐观更新
+      // 买入失败：回滚乐观更新
+      if (activeTab === "buy" && originalBalance !== null && mutateAssets) {
+        mutateAssets(
+          (currentAssets: any) => {
+            if (!currentAssets) return currentAssets;
+            return {
+              ...currentAssets,
+              availableBalance: originalBalance!,
+              totalBalance: (currentAssets.totalBalance || 0) + amountNum, // 恢复总资产
+            };
+          },
+          false // false 表示不立即重新验证
+        );
+        updateStoreBalance(originalBalance);
+      }
+      
+      // 🔥 卖出失败：回滚乐观更新（在卖出分支中处理，这里只处理买入）
+      
       try {
         toast.error("交易失败", {
           description: errorMsg,
