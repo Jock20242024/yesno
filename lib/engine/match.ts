@@ -88,6 +88,20 @@ export function calculateCPMMPrice(
       newTotalYes = Math.max(0, totalYes - shares);
       newTotalNo = totalNo + amount;
     }
+    
+    // 🔥 核心保护：平均成本价绝对不能超过 1.0（提前检查）
+    // 如果计算出的 shares < amount（即单价 > 1），调整 shares = amount
+    const avgCostPrice = shares > 0 ? amount / shares : Infinity;
+    if (avgCostPrice > 1.0) {
+      console.warn(`⚠️ [CPMM] YES买入检测到平均成本价超过1.0: ${avgCostPrice.toFixed(4)}, 调整前 shares=${shares.toFixed(4)}`);
+      // 调整 shares = amount，单价变为 1.0
+      // 但需要重新调整 totalYes，确保系统资金平衡
+      const adjustedShares = amount;
+      const sharesDiff = shares - adjustedShares; // 差额
+      newTotalYes = Math.max(0, totalYes + sharesDiff); // 返还差额给池子
+      shares = adjustedShares;
+      console.log(`✅ [CPMM] YES买入已调整 shares: ${shares.toFixed(4)}, 平均成本价=1.0`);
+    }
   } else {
     // 用户买入NO：系统拆开组合包，给用户NO，自己持有YES
     // 用户投入 amount，获得 shares 份 NO
