@@ -13,6 +13,7 @@ import UserPositionCard from '@/components/market-detail/UserPositionCard';
 import MobileTradeDrawer from '@/components/market-detail/MobileTradeDrawer';
 import { Market } from '@/types/api';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 const fetcher = async (url: string) => {
   const response = await fetch(url);
@@ -34,6 +35,7 @@ export default function MarketDetailPage() {
   const router = useRouter();
   const tradeSidebarRef = useRef<TradeSidebarRef>(null);
   const { isLoggedIn, currentUser } = useAuth();
+  const { t } = useLanguage(); // 🔥 修复：添加语言切换支持
   
   // 1. 彻底消灭白屏报错（水合保护）
   const [isMounted, setIsMounted] = useState(false);
@@ -599,7 +601,7 @@ export default function MarketDetailPage() {
                       : "bg-zinc-800 text-zinc-300"
                   }`}
                 >
-                  买入
+                  {t('market.trade.buy')}
                 </button>
                 <button
                   onClick={() => {
@@ -612,7 +614,7 @@ export default function MarketDetailPage() {
                       : "bg-zinc-800 text-zinc-300"
                   }`}
                 >
-                  卖出
+                  {t('market.trade.sell')}
                 </button>
               </div>
             </div>
