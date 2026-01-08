@@ -670,6 +670,7 @@ export const DBService = {
       orderBy: { createdAt: 'desc' },
     });
 
+    // 🔥 修复：返回所有订单字段，包括 filledAmount、orderType、status 等
     return dbOrders.map((dbOrder) => ({
       id: dbOrder.id,
       userId: dbOrder.userId,
@@ -679,7 +680,13 @@ export const DBService = {
       payout: dbOrder.payout ?? undefined,
       feeDeducted: dbOrder.feeDeducted,
       createdAt: dbOrder.createdAt.toISOString(),
-    }));
+      // 🔥 新增：返回订单的完整字段，用于交易历史显示
+      filledAmount: dbOrder.filledAmount || 0, // 实际成交的份额数
+      orderType: dbOrder.orderType || 'MARKET', // 订单类型（MARKET/LIMIT）
+      status: dbOrder.status || 'PENDING', // 订单状态（FILLED/PENDING/CANCELLED）
+      limitPrice: dbOrder.limitPrice || undefined, // 限价订单的价格
+      type: dbOrder.type || 'BUY', // 订单方向（BUY/SELL）
+    } as any)); // 使用 as any 因为 Order 接口可能还没有这些字段
   },
 
   /**
