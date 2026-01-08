@@ -15,10 +15,9 @@
  */
 
 import { useState } from 'react';
-import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { useAssets, AssetsData } from '@/hooks/useAssets';
+import { useAssets } from '@/hooks/useAssets';
 
 interface LiveWalletProps {
   className?: string;
