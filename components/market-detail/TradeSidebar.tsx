@@ -892,9 +892,23 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           
           // 2. 刷新用户资产（解决导航栏余额延迟）- 🔥 修复：使用useAssets Hook的mutate方法
           mutate('/api/user/assets');
-          // 🔥 修复：使用useAssets Hook的mutate方法，确保交易区和右上角同步
-          if (mutateAssets) {
-            mutateAssets();
+          // 🔥 新增：使用API返回的实际余额更新（覆盖乐观更新），确保数据与服务器端一致
+          if (result.data.updatedBalance !== undefined && mutateAssets) {
+            mutateAssets(
+              (currentAssets: any) => {
+                if (!currentAssets) return currentAssets;
+                const actualAmount = result.data.order?.amount || amountNum;
+                const actualFee = result.data.order?.feeDeducted || (amountNum * feeRate);
+                return {
+                  ...currentAssets,
+                  availableBalance: result.data.updatedBalance, // 使用API返回的实际余额
+                  totalBalance: (originalBalance || currentAssets.totalBalance) - actualAmount, // 使用实际扣除金额
+                };
+              },
+              true // true 表示立即重新验证，确保数据同步
+            );
+          } else if (mutateAssets) {
+            mutateAssets(); // 如果没有updatedBalance，使用默认刷新
           }
           
           // 3. 刷新用户详情数据（解决个人中心不同步）
@@ -907,7 +921,7 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           
           // 5. 刷新交易记录（解决个人中心交易记录不同步）
           mutate('/api/transactions');
-          
+
           // 修复交易状态管理：下注成功后，刷新详情页订单列表
           // 通过调用 onTradeSuccess 回调，触发父组件刷新市场数据
           // 这将确保用户持仓数据正确显示，并根据持仓情况禁用/启用交易按钮
