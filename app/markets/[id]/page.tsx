@@ -343,6 +343,7 @@ export default function MarketDetailPage() {
       id: parseInt(marketData.id.replace(/-/g, '').substring(0, 10), 16) || 1,
       rank: 1,
       title: marketData.title,
+      titleZh: (marketData as any).titleZh || null, // 🔥 修复：传递中文标题，让MarketHeader根据语言切换
       category: (marketData as any).category?.name || (marketData as any).category || '加密货币',
       categorySlug: (marketData as any).category?.slug || 'crypto',
       icon: (marketData as any).icon || undefined, // 🔥 修复：不默认使用Bitcoin，让MarketHeader根据数据动态判断
