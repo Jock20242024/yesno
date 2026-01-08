@@ -297,13 +297,26 @@ export async function GET(request: NextRequest) {
         const stats = orderStatsMap.get(dbMarket.id) || { userCount: 0, orderCount: 0 };
         // 🚀 修复：总交易量只使用本地平台的真实数据（internalVolume），不包含外部爬取的数据
         const localVolume = convertToNumber(dbMarket.internalVolume || 0);
+        const totalYes = convertToNumber(dbMarket.totalYes || 0);
+        const totalNo = convertToNumber(dbMarket.totalNo || 0);
+        
+        // 🔥 新增：计算市场深度健康分（仅对OPEN状态的市场计算）
+        let healthScore = null;
+        if (dbMarket.status === 'OPEN' && (totalYes > 0 || totalNo > 0)) {
+          try {
+            healthScore = calculateMarketHealth(totalYes, totalNo, Outcome.YES);
+          } catch (error) {
+            console.error(`❌ [Admin Markets GET] 计算市场 ${dbMarket.id} 健康分失败:`, error);
+          }
+        }
+        
         return {
           id: dbMarket.id,
           title: dbMarket.title,
           volume: localVolume, // 🚀 修复：使用本地交易量
           totalVolume: localVolume, // 🚀 修复：使用本地交易量
-          totalYes: convertToNumber(dbMarket.totalYes || 0),
-          totalNo: convertToNumber(dbMarket.totalNo || 0),
+          totalYes: totalYes,
+          totalNo: totalNo,
           status: dbMarket.status as any,
           endTime: dbMarket.closingDate.toISOString(),
           yesPercent: dbMarket.yesProbability || 50,
@@ -316,6 +329,12 @@ export async function GET(request: NextRequest) {
           templateId: (dbMarket as any).templateId || null,
           period: (dbMarket as any).period || null,
           isFactory: (dbMarket as any).isFactory || false,
+          // 🔥 新增：市场深度健康分
+          healthScore: healthScore ? {
+            status: healthScore.status,
+            score: healthScore.score,
+            message: healthScore.message,
+          } : null,
           // 🚀 新增：交易统计数据（只统计本地平台的真实数据）
           tradingStats: {
             userCount: stats.userCount, // 交易用户数（本地平台）
@@ -429,9 +448,19 @@ export async function GET(request: NextRequest) {
           aggregated.volume = (aggregated.volume || 0) + (market.volume || 0); // market.volume 已经是 internalVolume
           aggregated.totalVolume = (aggregated.totalVolume || 0) + (market.totalVolume || 0); // market.totalVolume 已经是 internalVolume
           aggregated.totalYes = (aggregated.totalYes || 0) + (market.totalYes || 0);
+          aggregated.totalNo = (aggregated.totalNo || 0) + (market.totalNo || 0);
+          
+          // 🔥 新增：计算聚合后的市场深度健康分（仅对OPEN状态的市场系列计算）
+          // 注意：聚合时使用累计的totalYes和totalNo，代表整个市场系列的流动性
+          if (market.status === 'OPEN' && (aggregated.totalYes > 0 || aggregated.totalNo > 0)) {
+            try {
+              aggregated.healthScore = calculateMarketHealth(aggregated.totalYes, aggregated.totalNo, Outcome.YES);
+            } catch (error) {
+              console.error(`❌ [Admin Markets GET] 计算聚合市场 ${groupKey} 健康分失败:`, error);
+            }
+          }
           
           // 🚀 交易统计数据将在聚合完成后统一计算（见下方循环）
-          aggregated.totalNo = (aggregated.totalNo || 0) + (market.totalNo || 0);
           aggregated.externalVolume = (aggregated.externalVolume || 0) + (market.externalVolume || 0);
           aggregated.internalVolume = (aggregated.internalVolume || 0) + (market.internalVolume || 0);
           

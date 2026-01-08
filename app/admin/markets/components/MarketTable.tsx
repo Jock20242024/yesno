@@ -302,6 +302,7 @@ export default function MarketTable({
                 {showDetails ? "状态" : "状态统计"}
               </th>
               <th className="p-4 text-xs font-bold text-[#637588] dark:text-[#9da8b9] uppercase tracking-wider text-right">总交易量</th>
+              <th className="p-4 text-xs font-bold text-[#637588] dark:text-[#9da8b9] uppercase tracking-wider text-center">深度状态</th>
               {/* 🚀 核心：根据 mode 显示不同的列 */}
               {mode === 'manual' ? (
                 <>
@@ -443,6 +444,36 @@ export default function MarketTable({
                     <td className="p-4 text-right">
                       <span className="text-sm font-bold text-[#111418] dark:text-white">{formatCurrency(market.volume)}</span>
                     </td>
+
+                    {/* 🔥 新增：深度状态标签 */}
+                    <td className="p-4 text-center">
+                      {(market as any).healthScore ? (
+                        <div className="inline-flex flex-col items-center gap-1">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold ${
+                              (market as any).healthScore.status === 'HEALTHY'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                : (market as any).healthScore.status === 'DEPLETED'
+                                ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                            }`}
+                            title={(market as any).healthScore.message}
+                          >
+                            {(market as any).healthScore.status === 'HEALTHY'
+                              ? '健康'
+                              : (market as any).healthScore.status === 'DEPLETED'
+                              ? '枯竭'
+                              : '警告'}
+                          </span>
+                          <span className="text-xs text-[#637588] dark:text-[#9da8b9]">
+                            {(market as any).healthScore.score}/100
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[#637588] dark:text-[#9da8b9]">-</span>
+                      )}
+                    </td>
+
                     {/* 🚀 核心：根据 mode 显示不同的列内容 */}
                     {mode === 'manual' ? (
                       <>
