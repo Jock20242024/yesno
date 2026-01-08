@@ -237,17 +237,26 @@ export default function WalletPage() {
   const positions = useMemo(() => {
     return apiPositions.map((pos) => {
       // 只映射 API 返回的字段，不计算
+      // 🔥 修复：优先使用costBasis（实际投入金额）计算avgPrice，确保账目自洽
+      const costBasis = (pos as any).costBasis && (pos as any).costBasis > 0 
+        ? (pos as any).costBasis 
+        : (pos.avgPrice || 0) * (pos.shares || 0);
+      const correctAvgPrice = (pos.shares || 0) > 0 && costBasis > 0
+        ? costBasis / (pos.shares || 0)
+        : (pos.avgPrice || 0);
+      
       return {
         id: pos.id?.toString() || `${pos.marketId}-${pos.outcome}`,
         event: pos.marketTitle || `${t('portfolio.table.market')} ${pos.marketId}`,
         type: (pos.outcome || 'YES').toUpperCase(),
         shares: pos.shares || 0,
-        avgPrice: pos.avgPrice || 0,
+        avgPrice: correctAvgPrice, // 🔥 修复：使用计算出的正确avgPrice
         value: pos.currentValue || 0, // 直接使用 API 返回的 currentValue
         pnl: pos.profitLoss || 0, // 直接使用 API 返回的 profitLoss
         pnlPercent: pos.profitLossPercent || 0, // 直接使用 API 返回的 profitLossPercent
         status: pos.status || 'OPEN',
         marketId: pos.marketId?.toString() || pos.marketId,
+        costBasis: costBasis, // 🔥 新增：保存costBasis用于前端显示
       };
     });
   }, [apiPositions, t]);

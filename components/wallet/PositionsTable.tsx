@@ -124,7 +124,12 @@ export default function PositionsTable({ positions }: PositionsTableProps) {
               <div className="text-right">
                 <div className="text-xs text-zinc-500 md:hidden mb-0.5">平均均价</div>
                 <div className="text-sm font-medium text-zinc-100 font-mono tabular-nums">
-                  {formatUSD(position.avgPrice)}
+                  {/* 🔥 修复：优先使用costBasis（实际投入金额）计算avgPrice，确保账目自洽 */}
+                  {formatUSD(
+                    (position as any).costBasis && (position as any).costBasis > 0 && position.shares > 0
+                      ? (position as any).costBasis / position.shares
+                      : position.avgPrice
+                  )}
                 </div>
               </div>
 

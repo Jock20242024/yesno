@@ -217,6 +217,12 @@ export async function GET(request: Request) {
       const profitLoss = valuation.currentValue - costBasis;
       const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
 
+      // 🔥 核心修复：avgPrice必须等于净投入金额/获得的份额，而不是数据库存储的值
+      // 这样可以确保无论数据库存了什么，API返回的逻辑永远是自洽的
+      const correctAvgPrice = actualInvestedAmount > 0 && position.shares > 0
+        ? actualInvestedAmount / position.shares
+        : position.avgPrice; // 如果没有订单记录，使用数据库的值（降级方案）
+      
       return {
         id: position.id,
         marketId: position.marketId,
@@ -225,7 +231,7 @@ export async function GET(request: Request) {
         resolvedOutcome: position.markets.resolvedOutcome,
         outcome: position.outcome as 'YES' | 'NO',
         shares: position.shares,
-        avgPrice: position.avgPrice,
+        avgPrice: correctAvgPrice, // 🔥 修复：使用计算出的正确avgPrice
         currentPrice: valuation.currentPrice,
         currentValue: valuation.currentValue,
         costBasis: costBasis, // 🔥 修复：使用实际投入金额

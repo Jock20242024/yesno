@@ -11,6 +11,7 @@ import confetti from "canvas-confetti";
 import { useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { useAssets } from "@/hooks/useAssets"; // 🔥 新增：统一资产Hook
 
 interface UserPosition {
   yesShares: number;
@@ -568,60 +569,37 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     return isLoggedIn && (currentUser !== null || user !== null);
   }, [isLoggedIn, currentUser, user]);
 
-  // 数据源追踪：优先使用 AuthContext 的余额（从 API 获取的真实值），而不是 Store 的余额
-  // 修复：确保使用正确的可用余额（$1000.00），而不是错误的 $1,900.46
+  // 🔥 核心修复：统一使用 /api/user/assets 获取余额，确保与右上角数据源一致
+  // 使用统一的 useAssets Hook，避免数据不一致
+  const { assets, mutate: mutateAssets } = useAssets();
+  
+  // 可用余额（交易区显示）：从统一的数据源获取
   const availableBalance = React.useMemo(() => {
     if (!isLoggedIn) return null; // 返回 null 表示未登录，显示加载状态
     
-    // 🔥 如果 WalletContext 未就绪，返回 null 以显示加载状态
-    if (!isWalletReady) {
-
-      return null;
+    // 🔥 优先使用 useAssets Hook 的数据（与右上角一致）
+    if (assets) {
+      return assets.availableBalance; // 可用余额（不含持仓价值）
     }
     
-    // 🔥 修复：优先级 1: 使用 /api/user/assets 的 availableBalance（与右上角一致）
-    // 右上角显示的是 totalBalance（总资产），交易区应该显示 availableBalance（可用余额）
-    // 但为了数据一致性，我们也应该从同一个API获取
-    // 优先级 1: 使用 currentUser.balance（从 /api/auth/me 获取的最新数字值）
+    // 降级：如果 useAssets 未加载，使用 currentUser.balance（从 /api/auth/me 获取）
     if (currentUser?.balance !== undefined && currentUser.balance !== null) {
       const balanceNum = Number(currentUser.balance);
       if (!isNaN(balanceNum) && balanceNum >= 0) {
-        // 🔥 修复：currentUser.balance 应该是 availableBalance，不是 totalBalance
-        // 如果右上角显示的是 totalBalance，那么交易区应该显示 availableBalance
-        // 但 /api/auth/me 返回的是 user.balance（可用余额），这是正确的
         return balanceNum;
       }
     }
     
-    // 优先级 2: 使用 user.balance（可能是格式化后的字符串如 "$1000.00" 或数字）
+    // 再降级：使用 user.balance
     if (user?.balance !== undefined && user?.balance !== null) {
-      // 🔥 修复：安全处理 balance，使用 String().replace() 防错处理
       const parsedFromUser = parseFloat(String(user.balance || 0).replace(/[$,]/g, ''));
       if (!isNaN(parsedFromUser) && parsedFromUser >= 0) {
-
         return parsedFromUser;
       }
     }
     
-    // 优先级 3: 检查 storeBalance（但需要验证不是旧的测试值）
-    // 统一资金：强制修正所有仍然显示 $1,900.45... 或 $2,437.799 USD 的账户/交易区组件
-    // 排除所有已知的测试值：2450.32, 1900.46, 2437.799 等
-    const knownTestValues = [2450.32, 1900.46, 1900.45, 2437.799, 2437.8, 145.0];
-    if (storeBalance > 0 && !knownTestValues.includes(storeBalance)) {
-
-      return storeBalance;
-    }
-    
-    // 如果 storeBalance 是测试值，记录警告并返回 null（显示加载状态）
-    if (knownTestValues.includes(storeBalance)) {
-      console.warn('⚠️ [TradeSidebar] 检测到旧的测试余额值，忽略:', storeBalance);
-      return null; // 返回 null 显示加载状态，而不是 0
-    }
-    
-    // WalletContext 就绪但余额还未加载，返回 null 显示加载状态
-
-    return null;
-  }, [isLoggedIn, isWalletReady, currentUser?.balance, user?.balance, storeBalance]);
+    return null; // 数据加载中，返回 null 显示加载状态
+  }, [isLoggedIn, assets, currentUser?.balance, user?.balance]);
 
   // 🔥 可用份额（卖出模式）：使用传入的 userPosition 数据
   const availableShares = React.useMemo(() => {

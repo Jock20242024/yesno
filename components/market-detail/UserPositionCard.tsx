@@ -120,7 +120,12 @@ export default function UserPositionCard({
           <span className={`font-mono font-bold text-sm ${
             isLoser ? "text-zinc-500" : "text-white"
           }`}>
-            {formatUSD(position.avgPrice)}
+            {/* 🔥 修复：优先使用costBasis（实际投入金额）计算avgPrice，确保账目自洽 */}
+            {formatUSD(
+              position.costBasis && position.costBasis > 0 && position.shares > 0
+                ? position.costBasis / position.shares
+                : position.avgPrice
+            )}
           </span>
         </div>
 
