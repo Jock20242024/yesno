@@ -497,19 +497,20 @@ export default function MarketDetailPage() {
               {/* 🔥 移动端优化：增加更厚的顶部填充 mt-24，确保 K线悬浮窗（Tooltip 约 80-100px）有足够空间显示，不会被遮挡 */}
               <div className="mt-24 lg:mt-16 mb-24 lg:mb-0 relative z-0">
                 <OrderBook
-                activeTab={detailTab}
-                onTabChange={handleDetailTabChange}
-                marketTitle={marketData.title}
-                endDate={new Date(marketData.endTime).toISOString().split("T")[0]}
-                userOrders={(marketData as any).userOrders || []}
-                marketId={marketData.id}
-                onPriceSelect={(price) => {
-                  // 🔥 修复：点击订单簿价格时，填充到交易区并切换到限价模式
-                  if (tradeSidebarRef.current) {
-                    tradeSidebarRef.current.setLimitPriceAndSwitch(price);
-                  }
-                }}
-              />
+                  activeTab={detailTab}
+                  onTabChange={handleDetailTabChange}
+                  marketTitle={marketData.title}
+                  endDate={new Date(marketData.endTime).toISOString().split("T")[0]}
+                  userOrders={(marketData as any).userOrders || []}
+                  marketId={marketData.id}
+                  onPriceSelect={(price) => {
+                    // 🔥 修复：点击订单簿价格时，填充到交易区并切换到限价模式
+                    if (tradeSidebarRef.current) {
+                      tradeSidebarRef.current.setLimitPriceAndSwitch(price);
+                    }
+                  }}
+                />
+              </div>
             </div>
           </div>
 
