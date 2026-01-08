@@ -131,8 +131,9 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
       </span>
       
       {/* 🔥 新增：Tooltip 显示资产拆解 */}
+      {/* 🔥 修复：添加 key={language} 确保语言切换时强制重新渲染 */}
       {showTooltip && assets && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-xl z-50 p-3 flex flex-col gap-2">
+        <div key={language} className="absolute right-0 top-full mt-2 w-56 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-xl z-50 p-3 flex flex-col gap-2">
           <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">
             {t('portfolio.stats.asset_breakdown')}
           </div>
