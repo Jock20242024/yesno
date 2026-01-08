@@ -434,64 +434,69 @@ export default function MarketDetailPage() {
         {/* 2. 物理修复 Sticky 交易区（左动右不动） */}
         <div className="flex flex-col lg:flex-row gap-6 mt-6 items-start">
           {/* 左侧区域 */}
-          <div className="flex-1 lg:flex-[2] space-y-4 w-full">
-            {/* K线图 */}
-            <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative mb-6 lg:mb-8 z-0">
-              <PriceChart
-                yesPercent={displayYesPercent}
-                noPercent={displayNoPercent}
-                marketStatus={marketStatus}
-                marketResult={marketResult === "yes" ? "YES_WON" : marketResult === "no" ? "NO_WON" : null}
-                slots={(marketData as any)?.slots || []}
-                currentMarketId={marketData.id}
-                period={(marketData as any)?.period || null}
-                templateId={(marketData as any)?.templateId || (marketData as any)?.template?.id || null}
-                height={320}
-                data={priceData}
-                noData={(marketData as any)?.noPriceData}
-                hideNavigation={false}
-                isFactory={!!((marketData as any)?.isFactory || (marketData as any)?.templateId)}
-                volume={(marketData as any)?.totalVolume ?? (marketData as any)?.volume ?? undefined}
-              />
-            </div>
-
-            {/* 场次导航 */}
-            {(marketData as any)?.period && (
-              <div className="py-2 border-b border-gray-800 mb-4 lg:mb-0">
-                <TimeNavigationBar
+          <div className="flex-1 lg:flex-[2] w-full">
+            {/* 🔥 移动端适配：使用 Flex 布局控制间距，确保 K线区域和订单簿区域之间有显式的 Gap */}
+            <div className="flex flex-col gap-6 lg:gap-4">
+              {/* K线图 */}
+              {/* 🔥 移动端优化：增加 overflow-visible 确保 Tooltip 不被剪裁，z-10 确保层级足够高 */}
+              <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative mb-0 lg:mb-8 overflow-visible lg:overflow-hidden z-10">
+                <PriceChart
+                  yesPercent={displayYesPercent}
+                  noPercent={displayNoPercent}
+                  marketStatus={marketStatus}
+                  marketResult={marketResult === "yes" ? "YES_WON" : marketResult === "no" ? "NO_WON" : null}
                   slots={(marketData as any)?.slots || []}
                   currentMarketId={marketData.id}
                   period={(marketData as any)?.period || null}
                   templateId={(marketData as any)?.templateId || (marketData as any)?.template?.id || null}
+                  height={320}
+                  data={priceData}
+                  noData={(marketData as any)?.noPriceData}
+                  hideNavigation={false}
+                  isFactory={!!((marketData as any)?.isFactory || (marketData as any)?.templateId)}
+                  volume={(marketData as any)?.totalVolume ?? (marketData as any)?.volume ?? undefined}
                 />
               </div>
-            )}
 
-            {/* 我的持仓面板 */}
-            {userPositionData && (
-              <div className="mb-6 lg:mb-4 relative z-20">
-                <UserPositionCard
-                  position={userPositionData}
-                  onSell={() => {
-                    // 🔥 修复：点击卖出按钮时，切换到卖出标签、选择正确的 outcome、填充最大份额
-                    handleTabChange("sell");
-                    // 通过 ref 调用 switchToSell 并设置金额
-                    if (tradeSidebarRef.current) {
-                      tradeSidebarRef.current.switchToSell(userPositionData.outcome, userPositionData.shares);
-                    }
-                  }}
-                  marketTitle={marketData.title}
-                  marketStatus={marketData.status as "OPEN" | "RESOLVED"}
-                  winningOutcome={marketData.winningOutcome}
-                />
-              </div>
-            )}
+              {/* 场次导航 */}
+              {(marketData as any)?.period && (
+                <div className="py-2 border-b border-gray-800 mb-0 lg:mb-0">
+                  <TimeNavigationBar
+                    slots={(marketData as any)?.slots || []}
+                    currentMarketId={marketData.id}
+                    period={(marketData as any)?.period || null}
+                    templateId={(marketData as any)?.templateId || (marketData as any)?.template?.id || null}
+                  />
+                </div>
+              )}
 
-            {/* 🔥 移动端适配：移除内嵌交易区，改用底部悬浮按钮 + 抽屉方案 */}
+              {/* 我的持仓面板 */}
+              {/* 🔥 移动端优化：增加最小底部内边距 pb-8，防止内容过多推挤下方 */}
+              {userPositionData && (
+                <div className="mb-0 lg:mb-4 relative z-20 pb-8 lg:pb-0">
+                  <UserPositionCard
+                    position={userPositionData}
+                    onSell={() => {
+                      // 🔥 修复：点击卖出按钮时，切换到卖出标签、选择正确的 outcome、填充最大份额
+                      handleTabChange("sell");
+                      // 通过 ref 调用 switchToSell 并设置金额
+                      if (tradeSidebarRef.current) {
+                        tradeSidebarRef.current.switchToSell(userPositionData.outcome, userPositionData.shares);
+                      }
+                    }}
+                    marketTitle={marketData.title}
+                    marketStatus={marketData.status as "OPEN" | "RESOLVED"}
+                    winningOutcome={marketData.winningOutcome}
+                  />
+                </div>
+              )}
 
-            {/* 详情 Tabs（订单簿） */}
-            <div className="mt-12 lg:mt-16 mb-24 lg:mb-0">
-              <OrderBook
+              {/* 🔥 移动端适配：移除内嵌交易区，改用底部悬浮按钮 + 抽屉方案 */}
+
+              {/* 详情 Tabs（订单簿） */}
+              {/* 🔥 移动端优化：增加更厚的顶部填充 mt-24，确保 K线悬浮窗（Tooltip 约 80-100px）有足够空间显示，不会被遮挡 */}
+              <div className="mt-24 lg:mt-16 mb-24 lg:mb-0 relative z-0">
+                <OrderBook
                 activeTab={detailTab}
                 onTabChange={handleDetailTabChange}
                 marketTitle={marketData.title}
