@@ -322,15 +322,16 @@ export default function WalletPage() {
                 minute: '2-digit',
               }),
               event: marketTitle,
-              action: order.orderType === 'MARKET' 
+              action: (order as any).orderType === 'MARKET' 
                 ? (order.outcomeSelection === 'YES' ? '买入 YES' : '买入 NO')
                 : (order.outcomeSelection === 'YES' ? '限价买入 YES' : '限价买入 NO'),
-              price: executionPrice,
-              shares: shares,
-              value: order.amount,
+              price: executionPrice > 0 ? executionPrice : avgPrice, // 使用执行价格，如果没有则使用平均价格
+              shares: shares, // 🔥 使用 filledAmount（实际成交的份额数）
+              value: order.amount, // 订单总金额
               pnl: (order as any).profitLoss || 0, // 如果有盈亏字段
-              status: order.status === 'FILLED' ? '成功' : order.status === 'PENDING' ? '待成交' : '失败',
+              status: (order as any).status === 'FILLED' ? '成功' : (order as any).status === 'PENDING' ? '待成交' : '失败',
               marketId: order.marketId,
+              orderType: (order as any).orderType || 'MARKET', // 🔥 保存订单类型用于显示
             };
           })
         );
