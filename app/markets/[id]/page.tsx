@@ -10,6 +10,7 @@ import TimeNavigationBar from '@/components/market-detail/TimeNavigationBar';
 import OrderBook from '@/components/market-detail/OrderBook';
 import TradeSidebar, { TradeSidebarRef } from '@/components/market-detail/TradeSidebar';
 import UserPositionCard from '@/components/market-detail/UserPositionCard';
+import MobileTradeDrawer from '@/components/market-detail/MobileTradeDrawer';
 import { Market } from '@/types/api';
 import { useAuth } from '@/components/providers/AuthProvider';
 
@@ -55,6 +56,9 @@ export default function MarketDetailPage() {
   const handleDetailTabChange = (tab: "orderbook" | "comments" | "holders" | "rules") => {
     setDetailTab(tab);
   };
+
+  // 🔥 移动端交易抽屉状态管理
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -483,25 +487,7 @@ export default function MarketDetailPage() {
               </div>
             )}
 
-            {/* 🔥 移动端适配：在移动端先显示交易区，桌面端保持原顺序 */}
-            {/* 移动端：交易区在订单簿之前 */}
-            <div className="block lg:hidden mb-6">
-              <TradeSidebar
-                ref={tradeSidebarRef}
-                yesPercent={displayYesPercent}
-                noPercent={displayNoPercent}
-                marketId={marketData.id}
-                userPosition={(marketData as any)?.userPosition || null}
-                marketTitle={marketData.title}
-                marketStatus={marketData.status as "OPEN" | "RESOLVED"}
-                winningOutcome={marketData.winningOutcome}
-                activeTab={activeTab}
-                onTabChange={handleTabChange}
-                amount={amount}
-                onAmountChange={handleAmountChange}
-                feeRate={(marketData as any).feeRate || 0.02}
-              />
-            </div>
+            {/* 🔥 移动端适配：移除内嵌交易区，改用底部悬浮按钮 + 抽屉方案 */}
 
             {/* 详情 Tabs（订单簿） */}
             <div className="mt-16 lg:mt-16">
@@ -589,6 +575,82 @@ export default function MarketDetailPage() {
             />
           </div>
         </div>
+
+        {/* 🔥 移动端底部悬浮交易按钮（仅移动端显示） */}
+        {marketData.status === "OPEN" && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-gradient-to-t from-black via-black to-transparent pb-safe">
+            <div className="px-4 py-3 space-y-2">
+              {/* 买入/卖出切换按钮 */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    handleTabChange("buy");
+                    setIsMobileDrawerOpen(true);
+                  }}
+                  className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm transition-all ${
+                    activeTab === "buy"
+                      ? "bg-pm-green text-white shadow-lg shadow-pm-green/50"
+                      : "bg-zinc-800 text-zinc-300"
+                  }`}
+                >
+                  买入
+                </button>
+                <button
+                  onClick={() => {
+                    handleTabChange("sell");
+                    setIsMobileDrawerOpen(true);
+                  }}
+                  className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm transition-all ${
+                    activeTab === "sell"
+                      ? "bg-pm-red text-white shadow-lg shadow-pm-red/50"
+                      : "bg-zinc-800 text-zinc-300"
+                  }`}
+                >
+                  卖出
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 移动端交易抽屉 */}
+        <MobileTradeDrawer
+          isOpen={isMobileDrawerOpen}
+          onClose={() => setIsMobileDrawerOpen(false)}
+          yesPercent={displayYesPercent}
+          noPercent={displayNoPercent}
+          marketId={marketData.id}
+          userPosition={(marketData as any)?.userPosition || null}
+          marketTitle={marketData.title}
+          marketStatus={marketData.status as "OPEN" | "RESOLVED"}
+          winningOutcome={marketData.winningOutcome}
+          activeTab={activeTab}
+          onTabChange={(tab) => {
+            handleTabChange(tab);
+            // 切换标签时保持抽屉打开
+          }}
+          amount={amount}
+          onAmountChange={handleAmountChange}
+          feeRate={(marketData as any).feeRate || 0.02}
+          tradeSidebarRef={tradeSidebarRef}
+          onTradeSuccess={async (data) => {
+            // 🔥 交易成功后关闭抽屉并刷新数据
+            setIsMobileDrawerOpen(false);
+            
+            // 刷新市场数据
+            if (id) {
+              const marketKey = `/api/markets/${id}`;
+              await mutateSWR((key) => {
+                const keyString = Array.isArray(key) ? key[0] : key;
+                return typeof keyString === 'string' && keyString.startsWith(marketKey);
+              }, undefined, { revalidate: true });
+              await mutateMarket(undefined, { revalidate: true });
+              await mutatePositions();
+              await mutateSWR('/api/user/assets', undefined, { revalidate: true });
+              router.refresh();
+            }
+          }}
+        />
       </div>
     </main>
   );

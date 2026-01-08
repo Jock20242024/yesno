@@ -2,6 +2,7 @@ export interface MarketEvent {
   id: number;
   rank: number;
   title: string;
+  titleZh?: string | null; // 🔥 修复：添加中文标题字段，支持语言切换
   category: string; // 中文名称
   categorySlug: string; // URL slug
   icon: string;

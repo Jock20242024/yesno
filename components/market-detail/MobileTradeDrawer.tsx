@@ -26,6 +26,18 @@ interface MobileTradeDrawerProps {
   onAmountChange: (val: string) => void;
   feeRate: number;
   tradeSidebarRef: React.RefObject<TradeSidebarRef>;
+  onTradeSuccess?: (data: {
+    updatedMarketPrice: { yesPercent: number; noPercent: number };
+    userPosition: { outcome: 'YES' | 'NO'; shares: number; avgPrice: number; totalValue: number };
+    order?: {
+      id: string;
+      outcome: 'YES' | 'NO';
+      amount: number;
+      shares: number;
+      price: number;
+      fee: number;
+    };
+  }) => void; // 🔥 新增：交易成功回调
 }
 
 export default function MobileTradeDrawer({
@@ -44,6 +56,7 @@ export default function MobileTradeDrawer({
   onAmountChange,
   feeRate,
   tradeSidebarRef,
+  onTradeSuccess, // 🔥 新增：交易成功回调
 }: MobileTradeDrawerProps) {
   // 阻止背景滚动
   useEffect(() => {
@@ -96,6 +109,7 @@ export default function MobileTradeDrawer({
             amount={amount}
             onAmountChange={onAmountChange}
             feeRate={feeRate}
+            onTradeSuccess={onTradeSuccess} // 🔥 传递交易成功回调
           />
         </div>
       </div>
