@@ -747,10 +747,10 @@ export async function POST(request: Request) {
           const priceDifference = beforePrice - executionPrice; // 交易前价格 - 执行价格
           let spreadProfit = priceDifference * calculatedShares; // 点差收益 = 价格差 * 份额
           
-          // 🔥 修复：添加点差上限，防止因流动性不足导致的异常点差
-          // 点差上限：净投入金额的5%（正常做市利润），超过部分视为流动性不足导致的滑点损失
-          const maxSpread = netAmount * 0.05; // 最大点差：净投入的5%
-          const actualSpread = Math.min(spreadProfit, maxSpread); // 限制点差上限
+          // 🔥 修复：添加点差上限，用户要求点差不超过1%
+          // 点差上限：净投入金额的1%，超过部分不归系统
+          const maxSpread = netAmount * 0.01; // 最大点差：净投入的1%
+          const actualSpread = Math.min(Math.max(0, spreadProfit), maxSpread); // 限制点差上限，且不能为负
           
           // 🔥 调试日志：记录点差计算详情
           if (Math.abs(spreadProfit) > 0.01) {
