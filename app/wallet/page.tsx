@@ -21,6 +21,7 @@ import WithdrawModal from '@/components/modals/WithdrawModal';
 import { formatUSD } from '@/lib/utils';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { useUserOrders } from '@/hooks/useUserOrders';
 
 // 定义时间范围类型
 type TimeRange = '1D' | '1W' | '1M' | '1Y';
@@ -63,6 +64,10 @@ export default function WalletPage() {
   // 钱包页只依赖 GET /api/transactions，禁止其他数据源
   const [fundingRecords, setFundingRecords] = useState<any[]>([]);
   const [isLoadingFunding, setIsLoadingFunding] = useState(false);
+
+  // ========== 架构加固：只从 API 获取交易历史（订单数据） ==========
+  // 钱包页只依赖 GET /api/orders/user，禁止其他数据源
+  const { orders: userOrders, isLoading: isLoadingOrders } = useUserOrders();
 
   // 获取资产汇总数据
   // 🔥 关键修复：即使 API 失败也允许页面渲染，不阻塞 UI
@@ -261,9 +266,85 @@ export default function WalletPage() {
     });
   }, [apiPositions, t]);
 
-  // ========== 架构加固：交易历史暂时为空（未来可从 API 获取） ==========
-  // 新用户/空数据状态：空数组是合法状态，UI 会显示"暂无交易历史"
-  const history: any[] = [];
+  // ========== 架构加固：从 API 获取交易历史（订单数据） ==========
+  // 🔥 修复：将订单数据转换为交易历史格式
+  const [history, setHistory] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // 🔥 修复：获取订单数据并转换为交易历史格式
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!isLoggedIn || !currentUser?.id || isLoadingOrders) {
+        setHistory([]);
+        return;
+      }
+
+      if (userOrders.length === 0) {
+        setHistory([]);
+        return;
+      }
+
+      setIsLoadingHistory(true);
+      try {
+        // 为每个订单获取市场标题
+        const historyItems = await Promise.all(
+          userOrders.map(async (order) => {
+            let marketTitle = `市场 ${order.marketId.slice(0, 8)}`;
+            try {
+              const response = await fetch(`/api/markets/${order.marketId}`);
+              if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.data) {
+                  marketTitle = result.data.title;
+                }
+              }
+            } catch (error) {
+              console.error('Error fetching market title:', error);
+            }
+
+            // 计算订单的份额（从订单金额扣除手续费）
+            const shares = order.amount - (order.feeDeducted || 0);
+            // 计算平均价格（如果有份额）
+            const avgPrice = shares > 0 ? (order.amount / shares) : 0;
+            // 执行价格（如果有执行价格字段，否则使用平均价格）
+            const executionPrice = (order as any).executionPrice || avgPrice;
+
+            return {
+              id: order.id,
+              date: new Date(order.createdAt).toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+              event: marketTitle,
+              action: order.orderType === 'MARKET' 
+                ? (order.outcomeSelection === 'YES' ? '买入 YES' : '买入 NO')
+                : (order.outcomeSelection === 'YES' ? '限价买入 YES' : '限价买入 NO'),
+              price: executionPrice,
+              shares: shares,
+              value: order.amount,
+              pnl: (order as any).profitLoss || 0, // 如果有盈亏字段
+              status: order.status === 'FILLED' ? '成功' : order.status === 'PENDING' ? '待成交' : '失败',
+              marketId: order.marketId,
+            };
+          })
+        );
+
+        // 按时间倒序排序（最新的在前）
+        historyItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setHistory(historyItems);
+      } catch (error) {
+        console.error('Error fetching history:', error);
+        setHistory([]);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    fetchHistory();
+  }, [userOrders, isLoadingOrders, isLoggedIn, currentUser?.id]);
 
   // 渲染函数 - 持仓列表
   const renderPositions = () => {
@@ -361,6 +442,14 @@ export default function WalletPage() {
 
   // 渲染函数 - 交易历史
   const renderHistory = () => {
+    if (isLoadingHistory || isLoadingOrders) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-zinc-500 text-sm">{t('portfolio.empty.loading')}</div>
+        </div>
+      );
+    }
+
     if (history.length === 0) {
       return (
         <div className="flex items-center justify-center py-12">
@@ -388,7 +477,14 @@ export default function WalletPage() {
             {history.map((item) => (
               <tr key={item.id} className="hover:bg-zinc-800/30 transition-colors">
                 <td className="px-4 py-4 text-xs font-mono">{item.date}</td>
-                <td className="px-4 py-4 text-zinc-200 max-w-[200px] truncate">{item.event}</td>
+                <td className="px-4 py-4 text-zinc-200 max-w-[200px] truncate">
+                  <Link 
+                    href={`/markets/${item.marketId}`}
+                    className="hover:text-white hover:underline decoration-zinc-500 underline-offset-4 cursor-pointer transition-colors"
+                  >
+                    {item.event}
+                  </Link>
+                </td>
                 <td className="px-4 py-4">
                   <span className={`text-xs px-2 py-0.5 rounded border ${
                     item.action.includes('买入') 
