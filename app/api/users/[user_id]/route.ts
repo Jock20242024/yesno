@@ -115,6 +115,7 @@ export async function GET(
         return {
           id: position.id,
           marketId: position.marketId,
+          marketStatus: position.markets?.status || 'OPEN', // 🔥 修复3：添加市场状态，用于区分已结算和未结算
           outcome: position.outcome as 'YES' | 'NO',
           shares: position.shares || 0,
           avgPrice: position.avgPrice || 0,
@@ -129,6 +130,7 @@ export async function GET(
         return {
           id: position.id,
           marketId: position.marketId,
+          marketStatus: position.markets?.status || 'OPEN', // 🔥 修复3：添加市场状态
           outcome: position.outcome || 'YES',
           shares: position.shares || 0,
           avgPrice: position.avgPrice || 0,
