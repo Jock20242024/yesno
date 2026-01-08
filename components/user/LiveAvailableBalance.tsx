@@ -10,7 +10,7 @@
  * 🔥 新增：Tooltip 拆解显示资产明细
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useAssets } from '@/hooks/useAssets';
@@ -24,7 +24,7 @@ export default function LiveAvailableBalance({ className = "" }: LiveAvailableBa
   // 🔥 核心修复：使用统一的 useAssets Hook 获取完整资产数据
   // 确保顶栏显示的"可用"金额与 Tooltip 内部的"可用余额"使用完全相同的变量
   const { assets, isLoading: assetsLoading } = useAssets();
-  const { t } = useLanguage(); // 🔥 修复：添加语言切换支持
+  const { t, language } = useLanguage(); // 🔥 修复：添加语言切换支持，同时获取 language 确保响应式更新
   
   // 🔥 新增：Tooltip 显示状态
   const [showTooltip, setShowTooltip] = useState(false);

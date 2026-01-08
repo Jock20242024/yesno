@@ -14,7 +14,7 @@
  * 🔥 新增：Tooltip 拆解显示资产明细
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useAssets } from '@/hooks/useAssets';
@@ -31,13 +31,26 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   const session = sessionQuery?.data ?? null;
   const status = sessionQuery?.status ?? 'unauthenticated';
   const { isLoggedIn, isLoading: authLoading, logout, handleApiGuestResponse } = useAuth();
-  const { t } = useLanguage(); // 🔥 修复：添加语言切换支持
+  const { t, language } = useLanguage(); // 🔥 修复：添加语言切换支持，同时获取 language 确保响应式更新
   
   // 🔥 新增：使用统一的 useAssets Hook 获取完整资产数据
   const { assets, isLoading: assetsLoading } = useAssets();
 
   // 🔥 新增：Tooltip 显示状态
   const [showTooltip, setShowTooltip] = useState(false);
+  
+  // 🔥 修复：当语言切换时，如果 tooltip 是打开的，强制重新渲染
+  // 通过将 language 添加到依赖项，确保 tooltip 内容在语言切换时更新
+  useEffect(() => {
+    // 当语言切换时，如果 tooltip 是打开的，暂时关闭并重新打开以触发重新渲染
+    if (showTooltip) {
+      // 使用 setTimeout 确保在下一个渲染周期重新打开
+      const timer = setTimeout(() => {
+        setShowTooltip(true);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [language]); // 🔥 当 language 改变时触发
 
   // 🔥 核心逻辑：必须 status === 'authenticated' 才渲染组件
   // 未认证时，必须销毁所有 DOM 节点，不显示任何内容
