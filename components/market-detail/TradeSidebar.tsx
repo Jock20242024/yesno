@@ -683,6 +683,34 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
     setIsSubmitting(true);
     setTradeMessage(null);
 
+    // 🔥 新增：乐观更新 - 在API调用前立即更新本地UI
+    // 保存原始余额，用于失败时回滚
+    const originalBalance = availableBalance;
+    const optimisticBalance = availableBalance !== null ? availableBalance - amountNum : null;
+    
+    // 🔥 乐观更新：立即更新本地余额（买入时扣除金额）
+    if (activeTab === "buy" && optimisticBalance !== null) {
+      // 更新 useAssets Hook 的数据（乐观更新）
+      if (mutateAssets) {
+        mutateAssets(
+          (currentAssets: any) => {
+            if (!currentAssets) return currentAssets;
+            return {
+              ...currentAssets,
+              availableBalance: Math.max(0, optimisticBalance), // 确保不小于0
+              totalBalance: Math.max(0, (currentAssets.totalBalance || 0) - amountNum),
+            };
+          },
+          false // false 表示不立即重新验证，等待API响应
+        );
+      }
+      
+      // 同时更新 Store 中的余额（用于兼容其他组件）
+      if (optimisticBalance !== null) {
+        updateStoreBalance(Math.max(0, optimisticBalance));
+      }
+    }
+
     try {
       // Market ID 修复：确保用于 API 调用的 marketId 变量是正确的 UUID 格式，而不是截断的数字 '74'
       // 该 ID 必须从市场详情页状态中安全获取 UUID

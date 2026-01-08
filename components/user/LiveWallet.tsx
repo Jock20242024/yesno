@@ -10,19 +10,15 @@
  * 
  * 🔥 状态硬隔离：必须基于 NextAuth 的 status === 'authenticated' 决定是否渲染
  * - 未认证时，必须销毁所有 DOM 节点，不显示任何内容（包括 $0.00 占位符）
+ * 
+ * 🔥 新增：Tooltip 拆解显示资产明细
  */
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { useAuth } from '@/components/providers/AuthProvider';
-
-interface AssetsData {
-  availableBalance: number;
-  frozenBalance: number;
-  positionsValue: number;
-  totalBalance: number;
-  totalEquity: number;
-}
+import { useAssets, AssetsData } from '@/hooks/useAssets';
 
 interface LiveWalletProps {
   className?: string;
@@ -35,6 +31,12 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   const session = sessionQuery?.data ?? null;
   const status = sessionQuery?.status ?? 'unauthenticated';
   const { isLoggedIn, isLoading: authLoading, logout, handleApiGuestResponse } = useAuth();
+  
+  // 🔥 新增：使用统一的 useAssets Hook 获取完整资产数据
+  const { assets, isLoading: assetsLoading } = useAssets();
+
+  // 🔥 新增：Tooltip 显示状态
+  const [showTooltip, setShowTooltip] = useState(false);
 
   // 🔥 核心逻辑：必须 status === 'authenticated' 才渲染组件
   // 未认证时，必须销毁所有 DOM 节点，不显示任何内容
@@ -43,87 +45,6 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   // 🔥 架构修复：不要在 authLoading 为 true 时就去解析余额
   // 只有当 NextAuth 认证且 isLoggedIn 为 true 时才发起请求
   const shouldFetch = isAuthenticated && isLoggedIn && !authLoading;
-
-  // 🔥 修复：检测 isGuest: true，强制触发退出登录
-  // fetcher 必须放在组件内部，以便访问 logout 函数
-  const fetcher = async (url: string): Promise<number> => {
-    try {
-      // 给 URL 加上时间戳参数，防止浏览器死缓存
-      const timestampedUrl = url + '?t=' + new Date().getTime();
-
-      // 🔥 彻底对齐数据：使用与 Dashboard 完全一致的 headers
-      const response = await fetch(timestampedUrl, {
-        method: 'GET',
-        credentials: 'include', // 与 Dashboard 一致：包含 Cookie
-        cache: 'no-store', // 与 Dashboard 一致：禁用缓存
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      // 🔥 修复：统一使用 AuthProvider 的 handleApiGuestResponse 处理 isGuest/401
-      // 先处理响应状态，检测 401 或 isGuest
-      if (!response.ok && response.status === 401) {
-        // 401 状态码，先调用 handleApiGuestResponse 处理
-        if (handleApiGuestResponse(response)) {
-
-          return -1; // 使用 -1 作为特殊标记，表示需要重新登录
-        }
-        return 0;
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('💰 [LiveWallet] Fetch failed:', response.status, errorText);
-        return 0; // 发生错误时返回 0，避免 SWR 停止重试
-      }
-
-      // 解析响应数据
-      const result = await response.json();
-
-      // 检测 isGuest: true
-      if (handleApiGuestResponse(response, result)) {
-
-        return -1; // 使用 -1 作为特殊标记，表示需要重新登录
-      }
-      
-      // 🔥 修复：右上角应该显示 totalBalance（总资产），但"可用"应该显示 availableBalance
-      // 目前两个都显示 totalBalance，这是错误的
-      // 但根据用户反馈，右上角显示的是 totalBalance，这是对的
-      // 所以这里继续返回 totalBalance
-      const totalBalance = result?.success && result?.data?.totalBalance 
-        ? result.data.totalBalance 
-        : 0;
-      
-      // 🔥 修复：同时返回 availableBalance，供"可用"字段使用
-      const availableBalance = result?.success && result?.data?.availableBalance 
-        ? result.data.availableBalance 
-        : totalBalance; // 如果没有 availableBalance，使用 totalBalance 作为降级
-
-      // 🔥 注意：LiveWallet 组件只显示一个值，所以返回 totalBalance
-      // "可用"字段应该使用另一个组件或修改 LiveWallet 支持显示 availableBalance
-      return totalBalance;
-    } catch (error) {
-      console.error('💰 [LiveWallet] Fetcher error:', error);
-      // 发生错误时返回 0，而不是抛出异常，避免 SWR 停止重试
-      return 0;
-    }
-  };
-
-  // 🔥 关键修复：使用 /api/user/assets 获取总资产，与主页面数据源一致
-  // 🔥 只有在 shouldFetch 为 true 时才发送请求（未登录时不发送请求）
-  const { data: totalBalance, isLoading, error } = useSWR<number>(
-    shouldFetch ? '/api/user/assets' : null,  // 🔥 未登录时传入 null，SWR 不会发送请求
-    fetcher,
-    {
-      refreshInterval: shouldFetch ? 5000 : 0, // 5秒刷新一次（资产数据不需要太频繁）
-      revalidateOnFocus: shouldFetch, // 聚焦时刷新
-      dedupingInterval: 2000, // 2秒内去重，避免重复请求
-      errorRetryCount: 3,
-      errorRetryInterval: 2000,
-      keepPreviousData: false, // 🔥 修复：登出后不保留之前的数据
-    }
-  );
 
   // 调试日志
 
@@ -145,8 +66,8 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
     return null;
   }
 
-  // 🔥 架构修复：只有当 isLoggedIn 且 totalBalance 不为 undefined 时才渲染数值
-  if (totalBalance === undefined || isLoading) {
+  // 🔥 架构修复：只有当 isLoggedIn 且 assets 不为 undefined 时才渲染数值
+  if (assets === undefined || assetsLoading) {
     // 数据加载中：显示 Loading
     return (
       <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className} animate-pulse`}>
@@ -155,18 +76,9 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
     );
   }
 
-  // 🔥 修复：如果 totalBalance 为 -1，表示需要重新登录，显示提示而不是余额
-  if (totalBalance === -1) {
-    return (
-      <span className={`text-xs font-medium text-yellow-400 leading-none ${className}`}>
-        需要重新登录
-      </span>
-    );
-  }
-
-  // 🔥 架构修复：只有当 isLoggedIn 且 totalBalance 不为 undefined 时才渲染数值
+  // 🔥 架构修复：只有当 isLoggedIn 且 assets 不为 undefined 时才渲染数值
   // totalBalance 可以是 0，但不能是 undefined
-  const displayBalance = totalBalance;
+  const displayBalance = assets.totalBalance;
   
   // 格式化余额显示
   const formattedBalance = new Intl.NumberFormat('en-US', {
@@ -175,12 +87,67 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(displayBalance);
+  
+  // 格式化拆解数据
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
 
   // 显示状态：格式化后的余额（强制显示，即使是 0 也要显示）
-
+  // 🔥 新增：添加 Tooltip 显示资产拆解
   return (
-    <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className}`}>
-      {formattedBalance}
-    </span>
+    <div 
+      className="relative inline-block"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className} cursor-help`}>
+        {formattedBalance}
+      </span>
+      
+      {/* 🔥 新增：Tooltip 显示资产拆解 */}
+      {showTooltip && assets && (
+        <div className="absolute right-0 top-full mt-2 w-56 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-xl z-50 p-3 flex flex-col gap-2">
+          <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">
+            资产拆解
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-zinc-400">可用余额</span>
+            <span className="text-xs font-bold text-white font-mono tabular-nums">
+              {formatCurrency(assets.availableBalance)}
+            </span>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-zinc-400">挂单冻结</span>
+            <span className="text-xs font-bold text-zinc-300 font-mono tabular-nums">
+              {formatCurrency(assets.frozenBalance)}
+            </span>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-zinc-400">持仓估值</span>
+            <span className="text-xs font-bold text-emerald-400 font-mono tabular-nums">
+              {formatCurrency(assets.positionsValue)}
+            </span>
+          </div>
+          
+          <div className="border-t border-white/10 pt-2 mt-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-zinc-400">总资产</span>
+              <span className="text-xs font-black text-white font-mono tabular-nums">
+                {formatCurrency(assets.totalBalance)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
