@@ -1111,7 +1111,7 @@ export async function POST(request: Request) {
     // 🔥 第一步：处理流动性注入逻辑
     const liquidityAmount = initialLiquidity ? parseFloat(String(initialLiquidity)) : 0;
     // 🔥 修复3：极端价格保护 - 设置最小初始流动性（防止K值过小导致滑点过大）
-    const MIN_INITIAL_LIQUIDITY = parseFloat(process.env.MIN_INITIAL_LIQUIDITY || '100');
+    const MIN_INITIAL_LIQUIDITY = parseFloat(process.env.MIN_INITIAL_LIQUIDITY || '1000'); // 🔥 修复：提高到$1000，避免流动性不足导致极大滑点
     
     // 如果指定了流动性注入，检查是否满足最小值要求
     if (liquidityAmount > 0 && liquidityAmount < MIN_INITIAL_LIQUIDITY) {

@@ -727,17 +727,39 @@ export async function POST(request: Request) {
             : 0.5;
           
           // 使用从事务中返回的值
-          const spreadProfit = (executionPrice - ammCostPrice) * calculatedShares;
+          let spreadProfit = (executionPrice - ammCostPrice) * calculatedShares;
           
+          // 🔥 修复：添加点差上限，防止因流动性不足导致的异常点差
+          // 点差上限：净投入金额的5%（正常做市利润），超过部分视为流动性不足导致的滑点损失
+          const maxSpread = netAmount * 0.05; // 最大点差：净投入的5%
+          const actualSpread = Math.min(spreadProfit, maxSpread); // 限制点差上限
+          
+          // 🔥 调试日志：记录点差计算详情
           if (Math.abs(spreadProfit) > 0.01) {
+            console.log(`💰 [Orders API] 点差计算详情:`, {
+              orderId: newOrder.id,
+              marketId,
+              netAmount,
+              executionPrice,
+              ammCostPrice,
+              calculatedShares,
+              spreadProfitRaw: spreadProfit,
+              maxSpread,
+              actualSpread,
+              spreadLimited: spreadProfit > maxSpread, // 是否被限制
+              liquidityRatio: netAmount / currentTotalVolume, // 流动性比率
+            });
+          }
+          
+          if (Math.abs(actualSpread) > 0.01) {
             // 在事务外记录做市盈亏，如果失败不影响订单
             await prisma.transactions.create({
               data: {
                 id: randomUUID(),
                 userId: ammAccount.id,
-                amount: spreadProfit,
+                amount: actualSpread, // 🔥 使用限制后的点差
                 type: 'MARKET_PROFIT_LOSS' as any,
-                reason: `AMM做市点差收益 - 市场: ${market.title} (${marketId}), 用户买入: ${outcomeSelection}, 数量: ${calculatedShares.toFixed(4)}, 点差: $${spreadProfit.toFixed(2)}`,
+                reason: `AMM做市点差收益 - 市场: ${market.title} (${marketId}), 用户买入: ${outcomeSelection}, 数量: ${calculatedShares.toFixed(4)}, 点差: $${actualSpread.toFixed(2)}${spreadProfit > maxSpread ? ` (原始: $${spreadProfit.toFixed(2)}, 已限制上限)` : ''}`,
                 status: TransactionStatus.COMPLETED,
               },
             }).catch((error: any) => {
