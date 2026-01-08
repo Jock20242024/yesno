@@ -302,10 +302,13 @@ export default function WalletPage() {
               console.error('Error fetching market title:', error);
             }
 
-            // 计算订单的份额（从订单金额扣除手续费）
-            const shares = order.amount - (order.feeDeducted || 0);
-            // 计算平均价格（如果有份额）
-            const avgPrice = shares > 0 ? (order.amount / shares) : 0;
+            // 🔥 修复：使用订单表中的 filledAmount 字段（实际成交的份额数）
+            // filledAmount 是 MARKET 订单实际成交的份额，LIMIT 订单为 0
+            const shares = (order as any).filledAmount || 0;
+            // 计算净投入金额（扣除手续费后的金额）
+            const netAmount = order.amount - (order.feeDeducted || 0);
+            // 计算平均价格（如果有份额，使用净投入金额/份额；否则使用订单金额/订单金额=1）
+            const avgPrice = shares > 0 ? (netAmount / shares) : 0;
             // 执行价格（如果有执行价格字段，否则使用平均价格）
             const executionPrice = (order as any).executionPrice || avgPrice;
 
