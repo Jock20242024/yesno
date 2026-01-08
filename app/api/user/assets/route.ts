@@ -246,22 +246,7 @@ export async function GET() {
 
     // 5. 计算总资产
     // 🔥 校验逻辑：确保 totalBalance 永远等于 availableBalance + frozenBalance + positionsValue
-    const calculatedTotalBalance = availableBalance + frozenBalance + positionsValue;
-    
-    // 🔥 校验：强制使用计算值，确保总资产公式正确
-    const totalBalance = calculatedTotalBalance;
-    
-    // 🔥 校验日志：如果计算结果与预期不符，记录警告
-    if (Math.abs(totalBalance - calculatedTotalBalance) > 0.01) {
-      console.warn('⚠️ [Assets API] 总资产校验失败:', {
-        calculatedTotalBalance,
-        totalBalance,
-        availableBalance,
-        frozenBalance,
-        positionsValue,
-        difference: Math.abs(totalBalance - calculatedTotalBalance),
-      });
-    }
+    const totalBalance = availableBalance + frozenBalance + positionsValue;
 
     // ========== STEP 3: 深度日志埋点 - TotalBalance 计算后（最终返回前）==========
     // 🔥 审计日志：记录详细的资产计算信息
@@ -462,18 +447,23 @@ export async function GET() {
     // 🔥 在返回前打印最终计算结果
 
     // 🔥 最终校验：确保返回的 totalBalance 永远等于 availableBalance + frozenBalance + positionsValue
-    const finalTotalBalance = availableBalance + frozenBalance + positionsValue;
+    // 重新计算以确保一致性（防止中间变量被修改）
+    const verifiedTotalBalance = availableBalance + frozenBalance + positionsValue;
     
-    // 🔥 强制校验：如果计算结果不一致，使用计算值
-    if (Math.abs(totalBalance - finalTotalBalance) > 0.01) {
+    // 🔥 强制校验：如果计算结果不一致，使用计算值并记录警告
+    if (Math.abs(totalBalance - verifiedTotalBalance) > 0.01) {
       console.warn('⚠️ [Assets API] 总资产校验失败，使用计算值:', {
         originalTotalBalance: totalBalance,
-        calculatedTotalBalance: finalTotalBalance,
+        calculatedTotalBalance: verifiedTotalBalance,
         availableBalance,
         frozenBalance,
         positionsValue,
+        difference: Math.abs(totalBalance - verifiedTotalBalance),
       });
     }
+    
+    // 🔥 使用验证后的总资产值
+    const finalTotalBalance = verifiedTotalBalance;
     
     const response = NextResponse.json({
       success: true,
