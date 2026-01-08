@@ -797,13 +797,13 @@ export async function POST(request: Request) {
               marketId,
               netAmount,
               executionPrice,
-              ammCostPrice,
+              beforePrice, // 🔥 修复：使用beforePrice代替ammCostPrice
               calculatedShares,
               spreadProfitRaw: spreadProfit,
               maxSpread,
               actualSpread,
               spreadLimited: spreadProfit > maxSpread, // 是否被限制
-              liquidityRatio: netAmount / currentTotalVolume, // 流动性比率
+              liquidityRatio: netAmount / beforeTotalVolume, // 流动性比率
             });
           }
           
