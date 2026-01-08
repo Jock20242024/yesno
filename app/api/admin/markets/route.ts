@@ -6,6 +6,7 @@ import { verifyAdminAccess, createUnauthorizedResponse } from '@/lib/adminAuth';
 import { executeTransaction } from '@/lib/prismaTransaction';
 import { aggregateMarketsByTemplate, countUniqueMarketSeries } from '@/lib/marketAggregation';
 import dayjs from '@/lib/dayjs';
+import { calculateMarketHealth } from '@/lib/marketHealth'; // 🔥 新增：市场深度健康分计算
 
 // 🔥 强制清理前端缓存：确保不使用旧缓存
 export const dynamic = 'force-dynamic';
