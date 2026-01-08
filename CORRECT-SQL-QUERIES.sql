@@ -54,7 +54,16 @@ ORDER BY "createdAt" ASC;
 -- 步骤3：关键验证 - 对比持仓成本 vs 实际投入
 -- ============================================
 -- 这个查询最关键：验证持仓是否正确合并
-WITH order_summary AS (
+-- 🔥 修复：使用子查询代替CTE，避免PostgreSQL语法错误
+SELECT 
+  o."实际投入金额",
+  o."订单总份额",
+  p."持仓记录数",  -- 🔥 关键指标：应该是1
+  p."持仓总份额",
+  p."持仓成本（shares * avgPrice）",
+  (o."实际投入金额" - p."持仓成本（shares * avgPrice）") AS "差异金额",
+  (o."订单总份额" - p."持仓总份额") AS "差异份额"
+FROM (
   SELECT 
     SUM(amount - "feeDeducted") AS "实际投入金额",
     SUM("filledAmount") AS "订单总份额"
@@ -63,8 +72,8 @@ WITH order_summary AS (
     AND "marketId" = 'b7c46788-1aec-4b79-93eb-b08eb185c0ea'  -- ✅ 纯字符串
     AND status = 'FILLED'
     AND "orderType" = 'MARKET'
-),
-position_summary AS (
+) AS o
+CROSS JOIN (
   SELECT 
     COUNT(*) AS "持仓记录数",  -- 🔥 关键：应该是1，如果是2说明没合并
     SUM(shares) AS "持仓总份额",
@@ -74,16 +83,7 @@ position_summary AS (
     AND "marketId" = 'b7c46788-1aec-4b79-93eb-b08eb185c0ea'  -- ✅ 纯字符串
     AND outcome = 'YES'
     AND status = 'OPEN'
-)
-SELECT 
-  o."实际投入金额",
-  o."订单总份额",
-  p."持仓记录数",  -- 🔥 关键指标：应该是1
-  p."持仓总份额",
-  p."持仓成本（shares * avgPrice）",
-  (o."实际投入金额" - p."持仓成本（shares * avgPrice）") AS "差异金额",
-  (o."订单总份额" - p."持仓总份额") AS "差异份额"
-FROM order_summary o, position_summary p;
+) AS p;
 
 -- ============================================
 -- 步骤4：查询个人中心统计（验证预测次数）
