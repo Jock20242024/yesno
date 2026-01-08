@@ -361,8 +361,22 @@ export async function POST(request: Request) {
             netAmount
           );
           
-          calculatedShares = cpmmResult.shares;
-          executionPrice = cpmmResult.executionPrice;
+          // 🔥 核心保护：平均成本价绝对不能超过 1.0
+          // 如果计算出的 shares < netAmount（即单价 > 1），调整 shares = netAmount
+          // 这样可以防止用户买入"必亏"的资产
+          const avgCostPrice = cpmmResult.shares > 0 ? netAmount / cpmmResult.shares : Infinity;
+          
+          if (avgCostPrice > 1.0) {
+            console.warn(`⚠️ [Orders API] 检测到平均成本价超过1.0: ${avgCostPrice.toFixed(4)}, 自动调整 shares`);
+            // 🔥 自动调整 shares = netAmount（单价变为1.0）
+            calculatedShares = netAmount;
+            executionPrice = 1.0; // 单价强制为1.0
+            
+            console.log(`✅ [Orders API] 已调整 shares: ${calculatedShares.toFixed(4)}, 平均成本价=${executionPrice.toFixed(4)}`);
+          } else {
+            calculatedShares = cpmmResult.shares;
+            executionPrice = cpmmResult.executionPrice;
+          }
           
           // 3. 更新Market（使用CPMM计算后的新值）
           const marketInternalVolumeCents = Math.round(((market as any).internalVolume || 0) * PRECISION_MULTIPLIER);

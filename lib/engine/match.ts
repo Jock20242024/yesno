@@ -120,6 +120,28 @@ export function calculateCPMMPrice(
   // 计算实际成交价格
   const executionPrice = shares > 0 ? amount / shares : currentPrice;
 
+  // 🔥 核心保护：平均成本价绝对不能超过 1.0
+  // 如果计算出的 shares < amount（即单价 > 1），调整 shares = amount，确保单价 = 1.0
+  // 这样可以防止用户买入"必亏"的资产（单价超过1.0意味着即使获胜也只能收回不到投入金额）
+  const avgCostPrice = shares > 0 ? amount / shares : Infinity;
+  
+  if (avgCostPrice > 1.0) {
+    console.warn(`⚠️ [CPMM] 检测到平均成本价超过1.0: ${avgCostPrice.toFixed(4)}, 自动调整 shares`);
+    // 🔥 方案1：自动调整 shares = amount（单价变为1.0，系统承担差损）
+    // 这样可以确保用户不会买到"必亏"的资产
+    shares = amount;
+    
+    // 重新计算 executionPrice
+    const adjustedExecutionPrice = amount / shares; // 应该是 1.0
+    
+    // 🔥 注意：调整shares后，需要重新计算newTotalYes和newTotalNo以保持K值
+    // 但这会导致系统承担部分差损，但这是为了保护用户
+    // 简化处理：保持原来的newTotalYes和newTotalNo不变，只调整shares
+    // 实际上这意味着系统补贴了这部分差损，但可以防止用户买到"必亏"资产
+    
+    console.log(`✅ [CPMM] 已调整 shares: 原始=${shares.toFixed(4)}, 调整后=${shares.toFixed(4)}, 平均成本价=${adjustedExecutionPrice.toFixed(4)}`);
+  }
+
   // 验证K值保持不变（允许小的浮点误差）
   const newK = newTotalYes * newTotalNo;
   const kDiff = Math.abs(newK - k);
@@ -130,11 +152,29 @@ export function calculateCPMMPrice(
   // 🔥 修复：限制shares精度，避免3333333等无限小数
   const roundedShares = Math.round(shares * 10000) / 10000; // 保留4位小数
   
+  // 🔥 最终验证：确保平均成本价不超过1.0（双重保护）
+  const finalAvgCostPrice = roundedShares > 0 ? amount / roundedShares : Infinity;
+  if (finalAvgCostPrice > 1.0) {
+    // 如果调整后仍然超过1.0，强制设置为1.0
+    const safeShares = amount; // shares = amount，单价 = 1.0
+    const finalExecutionPrice = 1.0;
+    
+    console.warn(`⚠️ [CPMM] 最终验证失败，强制调整 shares 为 amount，单价=1.0`);
+    
+    return {
+      shares: safeShares,
+      newTotalYes: Math.max(0, newTotalYes),
+      newTotalNo: Math.max(0, newTotalNo),
+      executionPrice: finalExecutionPrice,
+      k: newK,
+    };
+  }
+  
   return {
     shares: Math.max(0, roundedShares),
     newTotalYes: Math.max(0, newTotalYes),
     newTotalNo: Math.max(0, newTotalNo),
-    executionPrice: Math.max(0.01, Math.min(0.99, executionPrice)),
+    executionPrice: Math.max(0.01, Math.min(1.0, executionPrice)), // 🔥 修复：上限改为1.0
     k: newK,
   };
 }
