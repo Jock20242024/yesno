@@ -29,6 +29,21 @@ export default function LiveAvailableBalance({ className = "" }: LiveAvailableBa
   // 🔥 新增：Tooltip 显示状态
   const [showTooltip, setShowTooltip] = useState(false);
   
+  // 🔥 修复：当语言切换时，如果 tooltip 是打开的，强制重新渲染
+  // 通过将 language 添加到依赖项，确保 tooltip 内容在语言切换时更新
+  useEffect(() => {
+    // 当语言切换时，如果 tooltip 是打开的，暂时关闭并重新打开以触发重新渲染
+    if (showTooltip) {
+      // 先关闭 tooltip
+      setShowTooltip(false);
+      // 使用 setTimeout 确保在下一个渲染周期重新打开
+      const timer = setTimeout(() => {
+        setShowTooltip(true);
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [language]); // 🔥 当 language 改变时触发
+  
   const sessionQuery = useSession();
   const session = sessionQuery?.data ?? null;
   const status = sessionQuery?.status ?? 'unauthenticated';

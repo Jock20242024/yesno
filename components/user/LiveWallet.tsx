@@ -44,10 +44,12 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   useEffect(() => {
     // 当语言切换时，如果 tooltip 是打开的，暂时关闭并重新打开以触发重新渲染
     if (showTooltip) {
+      // 先关闭 tooltip
+      setShowTooltip(false);
       // 使用 setTimeout 确保在下一个渲染周期重新打开
       const timer = setTimeout(() => {
         setShowTooltip(true);
-      }, 0);
+      }, 10);
       return () => clearTimeout(timer);
     }
   }, [language]); // 🔥 当 language 改变时触发
