@@ -717,17 +717,35 @@ export async function POST(request: Request) {
       // 🔥 修复：在事务成功后，记录做市盈亏（移到事务外，避免事务中止）
       if (validOrderType === 'MARKET' && updatedMarket && calculatedShares && executionPrice) {
         try {
-          const currentTotalYes = market.totalYes || 0;
-          const currentTotalNo = market.totalNo || 0;
-          const currentTotalVolume = currentTotalYes + currentTotalNo;
-          const ammCostPrice = currentTotalVolume > 0
+          // 🔥 修复点差计算：使用交易前后的市场状态计算真实点差
+          const beforeTotalYes = market.totalYes || 0;
+          const beforeTotalNo = market.totalNo || 0;
+          const beforeTotalVolume = beforeTotalYes + beforeTotalNo;
+          const beforePrice = beforeTotalVolume > 0
             ? (outcomeSelection === Outcome.YES 
-                ? currentTotalYes / currentTotalVolume
-                : currentTotalNo / currentTotalVolume)
+                ? beforeTotalYes / beforeTotalVolume
+                : beforeTotalNo / beforeTotalVolume)
             : 0.5;
           
-          // 使用从事务中返回的值
-          let spreadProfit = (executionPrice - ammCostPrice) * calculatedShares;
+          // 使用交易后的市场状态
+          const afterTotalYes = updatedMarket.totalYes || 0;
+          const afterTotalNo = updatedMarket.totalNo || 0;
+          const afterTotalVolume = afterTotalYes + afterTotalNo;
+          const afterPrice = afterTotalVolume > 0
+            ? (outcomeSelection === Outcome.YES 
+                ? afterTotalYes / afterTotalVolume
+                : afterTotalNo / afterTotalVolume)
+            : 0.5;
+          
+          // 🔥 点差计算：使用平均成交价格与交易前价格的差异
+          // 平均成交价格 = 用户投入金额 / 获得的份额（这是用户实际支付的价格）
+          const avgExecutionPrice = calculatedShares > 0 ? netAmount / calculatedShares : beforePrice;
+          // 但是executionPrice已经是百分比价格，所以需要转换
+          // 如果executionPrice是百分比价格（0-1），则不需要转换
+          // 点差 = (交易前价格 - 执行价格) * 份额
+          // 注意：这里应该用"用户支付的价格"与"市场当前价格"的差异
+          const priceDifference = beforePrice - executionPrice; // 交易前价格 - 执行价格
+          let spreadProfit = priceDifference * calculatedShares; // 点差收益 = 价格差 * 份额
           
           // 🔥 修复：添加点差上限，防止因流动性不足导致的异常点差
           // 点差上限：净投入金额的5%（正常做市利润），超过部分视为流动性不足导致的滑点损失
