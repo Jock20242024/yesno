@@ -242,21 +242,39 @@ export default function CategoryBar() {
             '突发': 'Breaking', // 🔥 修复：添加"突发"的英文fallback
           };
           
-          // 🔥 修复：优先使用数据库中的nameZh字段（如果存在且语言为中文）
-          if (language === 'zh' && (cat as any).nameZh) {
-            translatedLabel = (cat as any).nameZh;
-          } else if (cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门") {
+          // 🔥 修复：正确处理语言切换逻辑
+          if (cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门") {
             translatedLabel = getTranslation('home.categories.hot', 'Trending');
           } else {
-            const translationKey = `home.categories.${cat.slug}`;
-            const fallback = englishFallbacks[cat.slug] || cat.name || cat.slug.charAt(0).toUpperCase() + cat.slug.slice(1);
-            const translated = getTranslation(translationKey, fallback);
-            
-            if (translated && translated !== translationKey) {
-              translatedLabel = translated;
+            // 🔥 修复：优先使用数据库中的nameZh字段（如果存在且语言为中文）
+            // 如果数据库中的name是中文（如"突发"），nameZh可能是英文（如"Breaking"）
+            // 如果数据库中的name是英文（如"Breaking"），nameZh可能是中文（如"突发"）
+            if (language === 'zh') {
+              // 中文环境：优先使用nameZh（如果存在），否则使用name
+              if ((cat as any).nameZh) {
+                translatedLabel = (cat as any).nameZh;
+              } else {
+                // 如果name是中文，直接使用；如果是英文，尝试翻译
+                const translationKey = `home.categories.${cat.slug}`;
+                const fallback = cat.name || englishFallbacks[cat.slug] || cat.slug.charAt(0).toUpperCase() + cat.slug.slice(1);
+                const translated = getTranslation(translationKey, fallback);
+                translatedLabel = (translated && translated !== translationKey) ? translated : fallback;
+              }
             } else {
-              // 🔥 修复：如果语言为英文且没有翻译，使用数据库中的name字段（可能是英文）
-              translatedLabel = language === 'en' ? (cat.name || fallback) : fallback;
+              // 英文环境：优先使用name（如果name是英文），否则使用nameZh或翻译
+              if (cat.name && !/[\u4e00-\u9fa5]/.test(cat.name)) {
+                // name是英文，直接使用
+                translatedLabel = cat.name;
+              } else if ((cat as any).nameZh && !/[\u4e00-\u9fa5]/.test((cat as any).nameZh)) {
+                // nameZh是英文，使用nameZh
+                translatedLabel = (cat as any).nameZh;
+              } else {
+                // 尝试翻译
+                const translationKey = `home.categories.${cat.slug}`;
+                const fallback = englishFallbacks[cat.slug] || cat.slug.charAt(0).toUpperCase() + cat.slug.slice(1);
+                const translated = getTranslation(translationKey, fallback);
+                translatedLabel = (translated && translated !== translationKey) ? translated : fallback;
+              }
             }
           }
 
