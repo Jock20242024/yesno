@@ -632,12 +632,13 @@ export async function POST(request: Request) {
         // 🔥 在事务内保存 existingPosition 信息用于日志记录
         let existingPositionInfo = null;
         if (validOrderType === 'MARKET') {
+          // 🔥 修复：使用字符串'OPEN'确保与上面的查询一致
           const existingPos = await tx.positions.findFirst({
             where: {
               userId,
               marketId,
               outcome: outcomeSelection as Outcome,
-              status: PositionStatus.OPEN,
+              status: 'OPEN' as any, // 🔥 修复：使用字符串，确保一致性
             },
             select: {
               shares: true,
