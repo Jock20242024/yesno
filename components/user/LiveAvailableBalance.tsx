@@ -21,8 +21,9 @@ interface LiveAvailableBalanceProps {
 }
 
 export default function LiveAvailableBalance({ className = "" }: LiveAvailableBalanceProps) {
-  // 🔥 新增：使用统一的 useAssets Hook 获取完整资产数据（用于 Tooltip）
-  const { assets } = useAssets();
+  // 🔥 核心修复：使用统一的 useAssets Hook 获取完整资产数据
+  // 确保顶栏显示的"可用"金额与 Tooltip 内部的"可用余额"使用完全相同的变量
+  const { assets, isLoading: assetsLoading } = useAssets();
   
   // 🔥 新增：Tooltip 显示状态
   const [showTooltip, setShowTooltip] = useState(false);
@@ -30,73 +31,11 @@ export default function LiveAvailableBalance({ className = "" }: LiveAvailableBa
   const sessionQuery = useSession();
   const session = sessionQuery?.data ?? null;
   const status = sessionQuery?.status ?? 'unauthenticated';
-  const { isLoggedIn, isLoading: authLoading, handleApiGuestResponse } = useAuth();
+  const { isLoggedIn, isLoading: authLoading } = useAuth();
 
   const isAuthenticated = status === 'authenticated';
-  const shouldFetch = isAuthenticated && isLoggedIn && !authLoading;
 
-  const fetcher = async (url: string): Promise<number> => {
-    try {
-      const timestampedUrl = url + '?t=' + new Date().getTime();
-      const response = await fetch(timestampedUrl, {
-        method: 'GET',
-        credentials: 'include',
-        cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok && response.status === 401) {
-        if (handleApiGuestResponse(response)) {
-          return -1;
-        }
-        return 0;
-      }
-
-      if (!response.ok) {
-        return 0;
-      }
-
-      const result = await response.json();
-
-      if (handleApiGuestResponse(response, result)) {
-        return -1;
-      }
-      
-      // 🔥 关键修复：返回 availableBalance（可用余额），不是 totalBalance
-      // 🔥 强化数据安全性：添加防御性代码，确保不是 NaN
-      const rawAvailableBalance = result?.success && result?.data?.availableBalance 
-        ? result.data.availableBalance 
-        : 0;
-      
-      // 🔥 防御性代码：确保不是 NaN 或 Infinity
-      const availableBalance = Number(rawAvailableBalance || 0);
-      if (isNaN(availableBalance) || !isFinite(availableBalance)) {
-        console.warn('⚠️ [LiveAvailableBalance] 检测到无效的 availableBalance:', rawAvailableBalance);
-        return 0;
-      }
-
-      return availableBalance;
-    } catch (error) {
-      console.error('💰 [LiveAvailableBalance] Fetcher error:', error);
-      return 0;
-    }
-  };
-
-  const { data: availableBalance, isLoading } = useSWR<number>(
-    shouldFetch ? '/api/user/assets' : null,
-    fetcher,
-    {
-      refreshInterval: shouldFetch ? 5000 : 0,
-      revalidateOnFocus: shouldFetch,
-      dedupingInterval: 2000,
-      errorRetryCount: 3,
-      errorRetryInterval: 2000,
-      keepPreviousData: false,
-    }
-  );
-
+  // 🔥 认证状态检查
   if (status === 'loading' || authLoading) {
     return null;
   }
@@ -105,47 +44,43 @@ export default function LiveAvailableBalance({ className = "" }: LiveAvailableBa
     return null;
   }
 
-  if (availableBalance === undefined || isLoading) {
+  // 🔥 增加加载保护：在 assets 数据为 undefined 时，显示 --- 而不是错误的 $0.00
+  if (assets === undefined || assetsLoading) {
     return (
       <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className} animate-pulse`}>
-        <span className="opacity-50">...</span>
+        <span className="opacity-50">---</span>
       </span>
     );
   }
 
-  if (availableBalance === -1) {
-    return (
-      <span className={`text-xs font-medium text-yellow-400 leading-none ${className}`}>
-        需要重新登录
-      </span>
-    );
-  }
+  // 🔥 统一取值逻辑：使用 assets.availableBalance（与 Tooltip 内部完全相同的变量）
+  // 强化数据安全性：确保 availableBalance 是有效数字，防止 NaN
+  const rawAvailableBalance = assets.availableBalance || 0;
+  const availableBalance = Number(rawAvailableBalance);
+  const safeBalance = (isNaN(availableBalance) || !isFinite(availableBalance)) ? 0 : availableBalance;
 
-  // 🔥 强化数据安全性：确保 availableBalance 是有效数字
-  const safeBalance = Number(availableBalance || 0);
-  const finalBalance = (isNaN(safeBalance) || !isFinite(safeBalance)) ? 0 : safeBalance;
-
-  // 🔥 确保在 API 请求完成前显示 0.00 而不是 NaN
-  const formattedBalance = new Intl.NumberFormat('en-US', {
+  // 🔥 格式化余额显示：使用 Number 和 toLocaleString 确保格式一致
+  const formattedBalance = Number(safeBalance).toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(finalBalance);
+  });
 
   // 格式化拆解数据
   const formatCurrency = (amount: number) => {
     const safeAmount = Number(amount || 0);
     const finalAmount = (isNaN(safeAmount) || !isFinite(safeAmount)) ? 0 : safeAmount;
-    return new Intl.NumberFormat('en-US', {
+    return Number(finalAmount).toLocaleString('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(finalAmount);
+    });
   };
 
   // 🔥 新增：添加 Tooltip 显示资产拆解
+  // 🔥 统一取值逻辑：确保 Tooltip 内部的"可用余额"使用与顶栏完全相同的变量
   return (
     <div 
       className="relative inline-block"
@@ -163,24 +98,25 @@ export default function LiveAvailableBalance({ className = "" }: LiveAvailableBa
             资产拆解
           </div>
           
+          {/* 🔥 统一取值逻辑：使用与顶栏完全相同的变量 assets.availableBalance */}
           <div className="flex items-center justify-between">
             <span className="text-xs text-zinc-400">🟢 可用余额</span>
             <span className="text-xs font-bold text-white font-mono tabular-nums">
-              {formatCurrency(assets.availableBalance)}
+              {formatCurrency(Number(assets.availableBalance || 0))}
             </span>
           </div>
           
           <div className="flex items-center justify-between">
             <span className="text-xs text-zinc-400">🔵 持仓价值</span>
             <span className="text-xs font-bold text-emerald-400 font-mono tabular-nums">
-              {formatCurrency(assets.positionsValue)}
+              {formatCurrency(Number(assets.positionsValue || 0))}
             </span>
           </div>
           
           <div className="flex items-center justify-between">
             <span className="text-xs text-zinc-400">🔴 冻结资金</span>
             <span className="text-xs font-bold text-zinc-300 font-mono tabular-nums">
-              {formatCurrency(assets.frozenBalance)}
+              {formatCurrency(Number(assets.frozenBalance || 0))}
             </span>
           </div>
           
@@ -188,7 +124,7 @@ export default function LiveAvailableBalance({ className = "" }: LiveAvailableBa
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-zinc-400">总资产</span>
               <span className="text-xs font-black text-white font-mono tabular-nums">
-                {formatCurrency(assets.totalBalance)}
+                {formatCurrency(Number(assets.totalBalance || 0))}
               </span>
             </div>
           </div>

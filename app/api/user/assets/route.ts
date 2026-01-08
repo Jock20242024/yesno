@@ -445,15 +445,29 @@ export async function GET() {
     
     // 🔥 在返回前打印最终计算结果
 
+    // 🔥 最终校验：确保返回的 totalBalance 永远等于 availableBalance + frozenBalance + positionsValue
+    const finalTotalBalance = availableBalance + frozenBalance + positionsValue;
+    
+    // 🔥 强制校验：如果计算结果不一致，使用计算值
+    if (Math.abs(totalBalance - finalTotalBalance) > 0.01) {
+      console.warn('⚠️ [Assets API] 总资产校验失败，使用计算值:', {
+        originalTotalBalance: totalBalance,
+        calculatedTotalBalance: finalTotalBalance,
+        availableBalance,
+        frozenBalance,
+        positionsValue,
+      });
+    }
+    
     const response = NextResponse.json({
       success: true,
       data: {
-        balance: totalBalance, // 🔥 关键修复：balance 字段等于 totalBalance（用于右上角显示）
-        availableBalance, // 🔥 Dashboard 显示的可用余额
-        frozenBalance,
-        positionsValue,
-        totalBalance, // = availableBalance + frozenBalance + positionsValue（已在第 193 行计算）
-        totalEquity: totalBalance, // 总资产估值（与 totalBalance 一致）
+        balance: finalTotalBalance, // 🔥 关键修复：balance 字段等于 totalBalance（用于右上角显示）
+        availableBalance, // 🔥 Dashboard 显示的可用余额（统一使用 availableBalance 字段名）
+        frozenBalance, // 冻结资金
+        positionsValue, // 持仓价值
+        totalBalance: finalTotalBalance, // 🔥 校验逻辑：总资产 = availableBalance + frozenBalance + positionsValue
+        totalEquity: finalTotalBalance, // 总资产估值（与 totalBalance 一致）
         lockedBalance: frozenBalance, // 冻结资金（别名，向后兼容）
         historical: {
           '1D': {

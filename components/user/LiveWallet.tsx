@@ -66,12 +66,12 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
     return null;
   }
 
-  // 🔥 架构修复：只有当 isLoggedIn 且 assets 不为 undefined 时才渲染数值
+  // 🔥 增加加载保护：在 assets 数据为 undefined 时，显示 --- 或加载动画，而不是错误的 $0.00
   if (assets === undefined || assetsLoading) {
-    // 数据加载中：显示 Loading
+    // 数据加载中：显示 --- 而不是 $0.00
     return (
       <span className={`text-sm font-black text-white leading-none font-mono tracking-tight tabular-nums ${className} animate-pulse`}>
-        <span className="opacity-50">...</span>
+        <span className="opacity-50">---</span>
       </span>
     );
   }
@@ -83,23 +83,25 @@ export default function LiveWallet({ className = "" }: LiveWalletProps) {
   const displayBalance = Number(rawTotalBalance);
   const safeDisplayBalance = (isNaN(displayBalance) || !isFinite(displayBalance)) ? 0 : displayBalance;
   
-  // 🔥 确保在 API 请求完成前显示 0.00 而不是 NaN
+  // 🔥 统一取值逻辑：使用 Number 和 toLocaleString 确保格式一致
   // 格式化余额显示
-  const formattedBalance = new Intl.NumberFormat('en-US', {
+  const formattedBalance = Number(safeDisplayBalance).toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(safeDisplayBalance);
+  });
   
   // 格式化拆解数据
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    const safeAmount = Number(amount || 0);
+    const finalAmount = (isNaN(safeAmount) || !isFinite(safeAmount)) ? 0 : safeAmount;
+    return Number(finalAmount).toLocaleString('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(amount);
+    });
   };
 
   // 显示状态：格式化后的余额（强制显示，即使是 0 也要显示）
