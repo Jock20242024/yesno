@@ -4,6 +4,8 @@
  * 确保右上角和交易区使用同一个数据源，避免数据不一致
  */
 
+'use client'; // 🔥 修复 React 错误 #482：客户端 Hook 必须标记为 'use client'
+
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { useAuth } from '@/components/providers/AuthProvider';
