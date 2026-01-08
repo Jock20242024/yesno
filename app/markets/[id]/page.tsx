@@ -483,8 +483,28 @@ export default function MarketDetailPage() {
               </div>
             )}
 
-            {/* 详情 Tabs */}
-            <div className="mt-16">
+            {/* 🔥 移动端适配：在移动端先显示交易区，桌面端保持原顺序 */}
+            {/* 移动端：交易区在订单簿之前 */}
+            <div className="block lg:hidden mb-6">
+              <TradeSidebar
+                ref={tradeSidebarRef}
+                yesPercent={displayYesPercent}
+                noPercent={displayNoPercent}
+                marketId={marketData.id}
+                userPosition={(marketData as any)?.userPosition || null}
+                marketTitle={marketData.title}
+                marketStatus={marketData.status as "OPEN" | "RESOLVED"}
+                winningOutcome={marketData.winningOutcome}
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+                amount={amount}
+                onAmountChange={handleAmountChange}
+                feeRate={(marketData as any).feeRate || 0.02}
+              />
+            </div>
+
+            {/* 详情 Tabs（订单簿） */}
+            <div className="mt-16 lg:mt-16">
               <OrderBook
                 activeTab={detailTab}
                 onTabChange={handleDetailTabChange}
@@ -502,8 +522,8 @@ export default function MarketDetailPage() {
             </div>
           </div>
 
-          {/* 右侧交易区：粘性固定 */}
-          <div className="sticky top-4 h-fit z-10 w-full lg:w-auto">
+          {/* 右侧交易区：粘性固定（仅桌面端显示） */}
+          <div className="hidden lg:block sticky top-4 h-fit z-10 w-full lg:w-auto">
             <TradeSidebar
               ref={tradeSidebarRef}
               yesPercent={displayYesPercent}
