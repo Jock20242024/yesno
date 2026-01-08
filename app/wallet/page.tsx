@@ -498,6 +498,9 @@ export default function WalletPage() {
                         : 'border-zinc-700 text-zinc-400'
                   }`}>
                     {item.action}
+                    {item.orderType === 'LIMIT' && item.shares === 0 && (
+                      <span className="ml-1 text-zinc-500">(未成交)</span>
+                    )}
                   </span>
                 </td>
                 <td className="px-4 py-4 text-right font-mono">
