@@ -170,11 +170,14 @@ export async function GET() {
     }
 
     // ========== 修复：计算冻结资金（待结算订单的总金额）==========
-    // 冻结资金 = 所有未结算订单的金额总和
-    // 注意：当前系统是即时成交，没有挂单，所以lockedBalance通常为0
-    // 如果未来支持挂单，需要添加Order.status字段来区分PENDING和COMPLETED
+    // 冻结资金 = 所有PENDING状态的订单金额总和（LIMIT订单且未成交）
+    // 注意：MARKET订单是即时成交的，不会冻结资金
+    // 只有LIMIT订单且status=PENDING时，才会冻结资金
     const frozenBalance = orders
-      .filter(order => !order.payout && order.payout === null) // 未结算的订单
+      .filter(order => {
+        // 只统计LIMIT订单且状态为PENDING的订单
+        return (order as any).orderType === 'LIMIT' && order.status === 'PENDING';
+      })
       .reduce((sum, order) => sum + (order.amount || 0), 0);
 
     // ========== 修复：从Position表计算持仓价值，不再从Order数组计算 ==========

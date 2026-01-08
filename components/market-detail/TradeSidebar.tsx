@@ -862,8 +862,12 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           // 1. 刷新市场数据（解决假死状态：持仓数据立即更新）
           mutate(`/api/markets/${marketIdStr}`);
           
-          // 2. 刷新用户资产（解决导航栏余额延迟）
+          // 2. 刷新用户资产（解决导航栏余额延迟）- 🔥 修复：使用useAssets Hook的mutate方法
           mutate('/api/user/assets');
+          // 🔥 修复：使用useAssets Hook的mutate方法，确保交易区和右上角同步
+          if (mutateAssets) {
+            mutateAssets();
+          }
           
           // 3. 刷新用户详情数据（解决个人中心不同步）
           if (currentUser?.id) {
@@ -967,8 +971,12 @@ const TradeSidebar = forwardRef<TradeSidebarRef, TradeSidebarProps>(({
           // 1. 刷新市场数据（解决假死状态：持仓数据立即更新）
           mutate(`/api/markets/${marketIdStr}`);
           
-          // 2. 刷新用户资产（解决导航栏余额延迟）
+          // 2. 刷新用户资产（解决导航栏余额延迟）- 🔥 修复：使用useAssets Hook的mutate方法
           mutate('/api/user/assets');
+          // 🔥 修复：使用useAssets Hook的mutate方法，确保交易区和右上角同步
+          if (mutateAssets) {
+            mutateAssets();
+          }
           
           // 3. 刷新用户详情数据（解决个人中心不同步）
           if (currentUser?.id) {
