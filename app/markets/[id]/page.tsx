@@ -436,7 +436,7 @@ export default function MarketDetailPage() {
           {/* 左侧区域 */}
           <div className="flex-1 lg:flex-[2] space-y-4 w-full">
             {/* K线图 */}
-            <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative mb-8 z-0">
+            <div className="w-full h-[320px] bg-[#0a0b0d] rounded-xl border border-gray-800 relative mb-4 lg:mb-8 z-0">
               <PriceChart
                 yesPercent={displayYesPercent}
                 noPercent={displayNoPercent}
@@ -490,7 +490,7 @@ export default function MarketDetailPage() {
             {/* 🔥 移动端适配：移除内嵌交易区，改用底部悬浮按钮 + 抽屉方案 */}
 
             {/* 详情 Tabs（订单簿） */}
-            <div className="mt-16 lg:mt-16">
+            <div className="mt-8 lg:mt-16 mb-20 lg:mb-0">
               <OrderBook
                 activeTab={detailTab}
                 onTabChange={handleDetailTabChange}

@@ -92,7 +92,9 @@ export async function GET(
     const formattedMarket = {
       id: market.id,
       title: market.title,
+      titleZh: (market as any).titleZh || null, // 🔥 修复：添加中文标题字段
       description: market.description,
+      descriptionZh: (market as any).descriptionZh || null, // 🔥 修复：添加中文描述字段
       closingDate: (() => {
         try {
           if (!market.closingDate) {

@@ -239,19 +239,24 @@ export default function CategoryBar() {
             'finance': 'Finance',
             'technology': 'Technology',
             'tech': 'Tech',
+            '突发': 'Breaking', // 🔥 修复：添加"突发"的英文fallback
           };
           
-          if (cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门") {
+          // 🔥 修复：优先使用数据库中的nameZh字段（如果存在且语言为中文）
+          if (language === 'zh' && (cat as any).nameZh) {
+            translatedLabel = (cat as any).nameZh;
+          } else if (cat.slug === "hot" || cat.slug === "-1" || cat.name === "热门") {
             translatedLabel = getTranslation('home.categories.hot', 'Trending');
           } else {
             const translationKey = `home.categories.${cat.slug}`;
-            const fallback = englishFallbacks[cat.slug] || cat.slug.charAt(0).toUpperCase() + cat.slug.slice(1);
+            const fallback = englishFallbacks[cat.slug] || cat.name || cat.slug.charAt(0).toUpperCase() + cat.slug.slice(1);
             const translated = getTranslation(translationKey, fallback);
             
             if (translated && translated !== translationKey) {
               translatedLabel = translated;
             } else {
-              translatedLabel = fallback;
+              // 🔥 修复：如果语言为英文且没有翻译，使用数据库中的name字段（可能是英文）
+              translatedLabel = language === 'en' ? (cat.name || fallback) : fallback;
             }
           }
 
