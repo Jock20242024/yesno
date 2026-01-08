@@ -6,17 +6,27 @@
  * 🔥 关键修复：与交易区使用相同的数据源
  * - 使用 /api/user/assets 的 availableBalance
  * - 与交易区显示一致，确保数据同步
+ * 
+ * 🔥 新增：Tooltip 拆解显示资产明细
  */
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useAssets, AssetsData } from '@/hooks/useAssets';
 
 interface LiveAvailableBalanceProps {
   className?: string;
 }
 
 export default function LiveAvailableBalance({ className = "" }: LiveAvailableBalanceProps) {
+  // 🔥 新增：使用统一的 useAssets Hook 获取完整资产数据（用于 Tooltip）
+  const { assets } = useAssets();
+  
+  // 🔥 新增：Tooltip 显示状态
+  const [showTooltip, setShowTooltip] = useState(false);
+  
   const sessionQuery = useSession();
   const session = sessionQuery?.data ?? null;
   const status = sessionQuery?.status ?? 'unauthenticated';
